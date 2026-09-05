@@ -1,0 +1,70 @@
+name: Build and release
+
+# Every push to main builds HexShift.exe (kept as a workflow artifact) and
+# publishes the web version to GitHub Pages. Pushing a tag like v1.2.0 also
+# creates a GitHub Release with HexShift.exe and HexShift.zip attached.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  windows-app:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build HexShift.exe
+        run: dotnet build app/HexShift.csproj -c Release
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory dist | Out-Null
+          Copy-Item app/bin/Release/net48/HexShift.exe dist/
+          Copy-Item HexShift.html, README.md, LICENSE dist/
+          Compress-Archive -Path dist/* -DestinationPath HexShift.zip
+          Get-ChildItem dist, HexShift.zip | Format-Table Name, Length
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HexShift
+          path: dist
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          notes=$'**HexShift.exe** is the Windows app: one file, nothing to install, Windows 10 or 11.\n\n**HexShift.zip** holds the same EXE plus the plain HexShift.html, which opens in any browser on any system.\n\nWindows SmartScreen may warn the first time because the file is not code-signed. Choose "More info", then "Run anyway".'
+          gh release create "$tag" dist/HexShift.exe HexShift.zip --title "Hex Shift $tag" --notes "$notes" \
+            || gh release upload "$tag" dist/HexShift.exe HexShift.zip --clobber
+
+  web:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble the site
+        run: |
+          mkdir site
+          cp HexShift.html site/index.html
+          cp manifest.webmanifest sw.js site/
+          cp -r icons site/icons
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
