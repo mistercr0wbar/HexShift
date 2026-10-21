@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="__CSP__" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="theme-color" content="#6756d6" />
+    <title>Hex Shift — colour, with character</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="__ICON__" />
+    <style>
+      __CSS__
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="header">
+        <div class="brand">
+          <span class="brand-icon" aria-hidden="true">↗</span>
+          <div>
+            <h1>Hex Shift<span class="version"> / 02</span></h1>
+            <p>New colour. Same character.</p>
+          </div>
+        </div>
+        <div class="file-info">
+          <span id="fileName">Loading sample…</span><span id="fileDims"></span>
+        </div>
+        <div class="header-actions">
+          <button id="open" class="button">
+            Open image<span class="key"> ⌘/Ctrl O</span>
+          </button>
+          <div class="history-buttons">
+            <button
+              id="undo"
+              class="icon-button"
+              aria-label="Undo"
+              title="Undo (Ctrl/Cmd Z)"
+              disabled
+            >
+              ↶</button
+            ><button
+              id="redo"
+              class="icon-button"
+              aria-label="Redo"
+              title="Redo (Ctrl/Cmd Shift Z)"
+              disabled
+            >
+              ↷
+            </button>
+          </div>
+          <label class="sr-only" for="theme">Theme</label
+          ><select id="theme">
+            <option value="system">System theme</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+          <button id="export" class="button primary" disabled>
+            Export PNG ↗
+          </button>
+        </div>
+        <input
+          id="fileInput"
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+          hidden
+        />
+      </header>
+      <main>
+        <aside class="inspector" aria-label="Editing controls">
+          <section class="colour-section">
+            <div class="section-heading">
+              <h2><span>01</span> Colour</h2>
+              <span id="editState" class="badge">No pending edit</span>
+            </div>
+            <label for="mode">Treatment</label
+            ><select id="mode">
+              <option value="shift">Shift colour · keep shading</option>
+              <option value="flat">Flat colour · exact hex</option>
+              <option value="transparent">Make transparent</option>
+            </select>
+            <div id="targetControls">
+              <label for="targetHex">Target colour</label>
+              <div class="target-row">
+                <input
+                  type="color"
+                  id="targetColour"
+                  value="#00d9ff"
+                  aria-label="Target colour picker"
+                /><input
+                  id="targetHex"
+                  class="hex"
+                  value="#00D9FF"
+                  maxlength="7"
+                  spellcheck="false"
+                  aria-describedby="targetResult"
+                />
+              </div>
+            </div>
+            <p id="targetResult" class="readout">
+              Pick a source colour to begin.
+            </p>
+            <p id="capWarning" class="notice" hidden>
+              Shading protection limits this target. The achieved colour is
+              shown above.
+            </p>
+            <label class="check" id="protectLabel"
+              ><input type="checkbox" id="protect" checked /> Protect highlights
+              and shadows</label
+            >
+            <details open id="fine">
+              <summary>Fine adjustment</summary>
+              <div id="fineControls"></div>
+            </details>
+            <details class="presets">
+              <summary>Discord button colours</summary>
+              <div id="presets" class="swatches named"></div>
+            </details>
+            <div id="recentGroup" hidden>
+              <p class="small-label">Recent targets</p>
+              <div id="recent" class="swatches"></div>
+            </div>
+            <button id="apply" class="button full" disabled>
+              Apply & select next colour →
+            </button>
+          </section>
+          <section>
+            <div class="section-heading">
+              <h2><span>02</span> Select</h2>
+              <button class="text-button" id="clear">Clear</button>
+            </div>
+            <div class="segmented">
+              <button id="replaceSample" aria-pressed="true">
+                Replace sample</button
+              ><button id="addSample" aria-pressed="false">Add sample</button>
+            </div>
+            <div id="seeds" class="seed-list">
+              <span class="muted">Nothing picked yet</span>
+            </div>
+            <p class="small-label">Colours in your image</p>
+            <div id="palette" class="swatches"></div>
+            <div id="selectionSliders"></div>
+            <label class="check"
+              ><input type="checkbox" id="connected" /> Only connected
+              regions</label
+            >
+            <label for="overlay">Selection preview</label
+            ><select id="overlay">
+              <option value="overlay">Selection overlay</option>
+              <option value="only">Selection only</option>
+              <option value="normal" selected>Normal image</option>
+            </select>
+            <details id="brushPanel">
+              <summary>Refine with a brush</summary>
+              <div class="segmented">
+                <button id="brushAdd" aria-pressed="false">+ Add</button
+                ><button id="brushSubtract" aria-pressed="false">
+                  − Subtract
+                </button>
+              </div>
+              <label for="brushSize"
+                >Brush diameter <span id="brushSizeValue">16 px</span></label
+              ><input
+                id="brushSize"
+                type="range"
+                min="1"
+                max="128"
+                value="16"
+              />
+              <p class="help">
+                Brush overrides stay in place when you change tolerances. Select
+                a picking tool to finish brushing.
+              </p>
+            </details>
+            <p id="coverage" class="readout">
+              Click a colour on the image, or choose a swatch.
+            </p>
+          </section>
+          <section>
+            <div class="section-heading">
+              <h2><span>03</span> Finish</h2>
+              <button id="reset" class="text-button">Reset original</button>
+            </div>
+            <label for="format">Export format</label
+            ><select id="format">
+              <option value="png">PNG · lossless, transparent</option>
+              <option value="webp">WebP · lossless, transparent</option>
+            </select>
+            <button id="copy" class="button full" disabled>
+              Copy PNG to clipboard
+            </button>
+            <p class="help">
+              Export includes your current preview. Apply is only needed before
+              selecting the next colour.
+            </p>
+          </section>
+          <div class="privacy">
+            <span aria-hidden="true">◈</span> Images stay on your device.<br /><span
+              >PNG, JPEG, WebP, GIF, static SVG.<br />Up to 4 megapixels.
+              Animated files open as stills.</span
+            >
+          </div>
+        </aside>
+        <div class="workspace">
+          <div class="workspace-toolbar">
+            <div class="view-tools">
+              <label class="sr-only" for="view">Comparison view</label
+              ><select id="view">
+                <option value="side">Side by side</option>
+                <option value="result">Result</option>
+                <option value="wipe">Wipe comparison</option></select
+              ><label class="sr-only" for="compare">Compare with</label
+              ><select id="compare">
+                <option value="working">Before current edit</option>
+                <option value="original">Original</option>
+              </select>
+            </div>
+            <div class="canvas-tools">
+              <button
+                id="pan"
+                class="icon-button"
+                aria-label="Pan tool"
+                aria-pressed="false"
+                title="Pan tool (Space to pan temporarily)"
+              >
+                ✥</button
+              ><button id="zoomOut" class="icon-button" aria-label="Zoom out">
+                −</button
+              ><button id="fit" class="text-button">Fit</button
+              ><button id="actual" class="text-button">100%</button
+              ><button id="zoomIn" class="icon-button" aria-label="Zoom in">
+                +</button
+              ><span id="zoomReadout">100%</span>
+            </div>
+          </div>
+          <div class="first-use" id="firstUse">
+            <span class="tip-number">1</span>
+            <p>
+              <strong>Pick a colour. Make it yours.</strong> Click the image,
+              set a target hex, then export.
+            </p>
+            <button
+              id="dismissTip"
+              class="icon-button"
+              aria-label="Dismiss getting started tip"
+            >
+              ×
+            </button>
+          </div>
+          <div id="viewport" class="viewport checker" data-view="side">
+            <div class="pane before">
+              <div class="canvas-label" id="beforeLabel">
+                Before current edit
+              </div>
+              <div class="canvas-space">
+                <canvas
+                  id="beforeCanvas"
+                  aria-label="Source image; use the image palette for keyboard colour selection"
+                ></canvas>
+              </div>
+            </div>
+            <div class="pane after">
+              <div class="canvas-label">
+                Result <span id="resultNote"></span>
+              </div>
+              <div class="canvas-space">
+                <canvas
+                  id="resultCanvas"
+                  aria-label="Recoloured image preview"
+                ></canvas
+                ><canvas id="wipeCanvas" aria-hidden="true"></canvas>
+                <div id="brushCursor" hidden></div>
+              </div>
+            </div>
+            <canvas
+              id="loupe"
+              width="132"
+              height="164"
+              hidden
+              aria-hidden="true"
+            ></canvas>
+          </div>
+          <label id="wipeControl" class="wipe-control" hidden
+            >Compare
+            <input id="wipe" type="range" min="0" max="100" value="50" />
+            <span>Original / result</span></label
+          >
+          <div class="canvas-footer">
+            <span id="pixelReadout" class="mono"
+              >Hover to inspect a pixel · scroll to zoom · Space-drag to
+              pan</span
+            >
+            <div>
+              <label class="sr-only" for="background">Preview background</label
+              ><select id="background">
+                <option value="checker">Checkerboard</option>
+                <option value="white">White</option>
+                <option value="dark">Dark</option>
+                <option value="custom">Custom</option></select
+              ><input
+                type="color"
+                id="backgroundColour"
+                value="#b8b3ca"
+                aria-label="Custom preview background"
+                hidden
+              />
+            </div>
+          </div>
+          <div class="statusbar">
+            <p id="status" role="status" aria-live="polite">Loading sample…</p>
+            <button id="cancel" class="text-button" hidden>Cancel</button
+            ><span class="local-label">LOCAL / OFFLINE READY</span>
+          </div>
+          <div id="update" class="notice" hidden>
+            A new version is ready. Export your work, then close and reopen Hex
+            Shift to update.
+          </div>
+          <details class="workspace-help">
+            <summary>Shortcuts & file support</summary>
+            <p>
+              Ctrl/Cmd O opens an image. Ctrl/Cmd Z undoes; Ctrl/Cmd Shift Z
+              redoes. Shift-click adds a sample. Escape clears the selection.
+              Space-drag pans. + / − zoom; F fits. Native text-field shortcuts
+              remain available.
+            </p>
+            <p>
+              Static SVG supports shapes, paths, text, gradients, clips, and
+              masks. Active content, external resources, filters, reuse
+              elements, and embedded images are rejected. All exports are still
+              images. Preview backgrounds never change exported transparency.
+            </p>
+          </details>
+        </div>
+      </main>
+    </div>
+    <div id="dropOverlay" hidden>Drop an image to open it</div>
+    <dialog id="replaceDialog">
+      <form method="dialog">
+        <h2>Open another image?</h2>
+        <p>
+          Your current image has edits. Export it first if you want to keep
+          them.
+        </p>
+        <div class="dialog-actions">
+          <button class="button" value="cancel">Keep editing</button
+          ><button class="button primary" value="replace">
+            Open new image
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <script>
+      __SCRIPT__;
+    </script>
+    <template id="licence-notices"><pre>__NOTICES__</pre></template>
+  </body>
+</html>

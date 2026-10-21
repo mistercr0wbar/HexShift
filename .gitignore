@@ -5,3 +5,10 @@ dist/
 *.zip
 .vs/
 icons/favicon-32.b64
+node_modules/
+test-results/
+playwright-report/
+.audit-tools/
+tests/native/bin/
+tests/native/obj/
+SHA256SUMS.txt

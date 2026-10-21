@@ -1,0 +1,68 @@
+# HexShift 2 security and verification report
+
+Review date: 21 October 2026. Baseline: repository commit `e96e174`. This is a source review and regression-test record, not a penetration-test certification or a guarantee against future vulnerabilities.
+
+## Threat model
+
+Protect a person opening an untrusted image from avoidable script execution, unintended network requests, arbitrary native navigation/protocol launching, accidental overwrites, cache interference, and excessive application allocations. Images are deliberately decoded by the browser/WebView2 sandbox. A browser/OS decoder vulnerability, a compromised repository/release account, malicious browser extensions, or an already-compromised user account remains outside the application's enforceable boundary.
+
+The original SVG path used an image-decoding context, not live DOM insertion. No working SVG script-execution or remote-code-execution exploit was established. The following findings describe observable gaps and their mitigations; potential impact is not evidence of exploitability.
+
+## Findings and fixes
+
+| Finding                                                        | Risk and implemented mitigation                                                                                                                                                                                                                                                                                        | Evidence                                                                                                                                          |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unbounded image dimensions and retained full-image undo copies | Resource exhaustion. Raster inputs now have byte/axis/pixel limits, signature-based preflight, post-decode checks, and 30-entry/96MiB patch history.                                                                                                                                                                   | Header/parameter/history tests; 2048×2048 cancellation/resumption in all engines.                                                                 |
+| Main-thread processing and overlapping asynchronous loads      | UI stalls and stale edits. Cancellable chunked worker processing, a chunked fallback, image/edit identifiers and transactional replacement prevent obsolete results from replacing newer work.                                                                                                                         | Fallback, rapid edits/export, replacement confirmation, cancellation tests.                                                                       |
+| Incomplete exception and URL cleanup handling                  | Failed imports could lose state or retain resources. Decode, canvas, worker, and export failures are handled; temporary image bitmaps/URLs are released; prior documents survive rejection.                                                                                                                            | Malformed/type-mismatch/oversize import tests, replacement cancellation.                                                                          |
+| SVG accepted without a restricted static profile               | Defence gap, including active/external content and resource-heavy features. Inputs now pass inert XML validation, bounded element/depth limits, a strict tag/attribute/style/reference policy, cycle checks and pinned DOMPurify; only then are they decoded as images.                                                | Scripts/events, image embeds, external CSS/URLs, DTD/entities, cycles, filters, deep/large trees rejected. Shapes, gradients and styles accepted. |
+| External font requests and no CSP                              | Unnecessary third-party requests and weaker injection containment. Fonts are system fonts; scripts, styles, worker and sanitizer are bundled. Hash-based CSP restricts executable content, connections, objects, frames, forms and base URLs.                                                                          | Hash/line-ending regression, browser injection and network checks, portable-file tests.                                                           |
+| HTML-string rendering                                          | Maintenance risk if future user data reached markup sinks. Application UI now uses DOM construction, textContent and validated colour values.                                                                                                                                                                          | Malicious filename remains literal text; no source-app innerHTML rendering. DOMPurify uses its own audited parsing internals.                     |
+| Cross-application cache deletion and broad HTML fallback       | Could delete unrelated origin caches or respond to resource requests with HTML. Worker cleanup is confined to HexShift names; fetch handling uses an exact scoped shell list and the current cache only.                                                                                                               | Other-app cache survives; offline navigation works; missing asset never receives HTML.                                                            |
+| Windows generic URL shell launching and permissive navigation  | Defence gaps around native protocol handlers/remote content. Only known app documents are allowed; frames/popups/remote requests are blocked. Shell launches are restricted to fixed repository/Microsoft HTTPS constants.                                                                                             | Native policy tests reject wrong origins, suffix hosts, userinfo, ports, queries, paths and protocols; handler source inspection.                 |
+| Unnecessary WebView capabilities                               | Host objects, messages, autofill, password saving, generic dialogs and unnecessary permission requests are disabled. No native file-access bridge was added. Downloads require the trusted app document, local blob origin, image MIME, enforced extension and Save As.                                                | Native build and source review. Actual Save As/clipboard permission interactions remain a manual check below.                                     |
+| Existing extracted loader trusted without verification         | Same-user file tampering could substitute a native DLL. Loader bytes are checked against embedded resources every startup; replacement is atomic, path ancestors are checked for reparse points, the final file is locked during verification/loading, and loading uses an absolute path with restricted search flags. | Native hash tests and end-to-end replacement of a tampered test loader. Fully compromised same-user processes are not defeated by these measures. |
+| Broad workflow token permissions and mutable action tags       | Supply-chain defence gaps. Official action commits were verified and pinned, token grants are per-job, restores use lockfiles, PR checks precede publishing, and release steps create checksums/provenance.                                                                                                            | Workflow source review, successful locked restore, dependency audits. Live GitHub workflow/provenance publishing has not been exercised locally.  |
+| Unsigned Windows executable                                    | Publisher identity remains unverified by Authenticode. Documentation no longer gives blanket SmartScreen-bypass instructions. Checksums and GitHub provenance are prepared, but code signing requires a future publisher identity.                                                                                     | README, release notes, workflow. No signing identity was purchased or created.                                                                    |
+
+## Verification
+
+Run from the repository root after building:
+
+```text
+npm run build
+npm test
+npm run test:browser
+npm audit --audit-level=low
+dotnet restore tests/native/HostTests.csproj --locked-mode
+dotnet build tests/native/HostTests.csproj -c Release --no-restore
+tests/native/bin/Release/net48/HostTests.exe
+dotnet list app/HexShift.csproj package --vulnerable --include-transitive
+```
+
+Local evidence:
+
+- Final full run: **17 unit tests, 50 browser tests, and 29 native assertions passed**. Four browser cases are intentional engine-specific skips (PWA lifecycle and backing-storage measurements run in Chromium). Subsequent visual refinements are covered by targeted editor, responsive and accessibility checks.
+
+- Unit tests cover conversion/wraparound, neutral separation, exact flat replacement, shading caps, transparency, feathering, brush overrides, history budgets, preflight/invalid parameters, safe filenames, complete PNG/WebP RGBA preservation using an independent reference decoder, cache isolation and CSP hashes.
+- Browser suites run in Chromium, Firefox and WebKit. Tests cover the editor, portable HTML, both themes, 200% zoom, 360×800/768×1024/1280×720/1920×1080 layouts, keyboard palette/text controls, comparison, hostile input fixtures, rapid edits, transactional replacement and maximum-pixel cancellation/resumption.
+- Automated WCAG 2 A/AA and WCAG 2.1 AA checks run using axe in both themes. These checks do not replace screen-reader or real-device usability testing.
+- The Chromium PWA test checks manifest, controlling service worker, cache isolation and editing after offline reload. Duplicate lifecycle cases are intentionally skipped in Firefox/WebKit; cache branch tests are engine-independent.
+- Windows host builds with zero warnings/errors. Twenty-nine policy/integrity assertions pass, including extraction and atomic repair of a tampered native loader.
+- npm and transitive NuGet audits reported no known vulnerable packages at review time. This is time-sensitive and CI/Dependabot must continue checking it.
+- Firefox initially crashed before page creation inside the execution sandbox; the suite runs successfully outside that harness restriction without changing Firefox's own sandbox or application protections.
+
+## Residual limitations and release checks
+
+No unresolved high/critical application finding was established by this review. **A public release was not performed.** Remaining verification gaps must not be described as passed:
+
+- Desktop automation approval timed out when attempting to launch the Windows executable. Verify actual Windows startup, Open/drop/paste, copy, PNG/WebP Save As, cancellation, closing with pending work, and the missing-runtime path before a public Windows release. Compilation and isolated native policy tests do not substitute for this smoke test.
+- Actual OS-installed PWA behaviour, screen readers, real mobile touch devices, ARM64/x86 loader execution, and the missing-runtime prompt need manual verification. Browser emulation and source inspection are the current evidence.
+- Browser tests verify processing responsiveness/cancellation at the pixel limit. They do not prove a universal memory ceiling or absence of all browser/GPU leaks. A Chromium backing-storage regression also checks repeated fallback imports. The original, current/result, worker arrays, canvases and temporary export buffers exist in addition to the history budget. Complex permitted SVG paths can still take time to render.
+- The uncompressed literal VP8L encoder prioritizes exact bytes and small implementation size; WebP output can be larger than PNG. Export encoders yield between chunks; there is no export-cancel control. PNG requires CompressionStream in a current browser.
+- Uploaded metadata is not copied into exports: only computed RGBA pixels and dimensions are encoded. Browser colour/orientation normalization happens on import; text SVG may differ with locally available fonts.
+- Static GitHub Pages hosting cannot enforce all response-header policies (notably CSP frame-ancestors) through HTML meta tags. The native host adds frame-ancestors as a response header. A custom web host should set that header too. Never claim clickjacking protection is enforced by the meta policy.
+- File format preflight does not replace browser decoder isolation/updates. Dependency audits cannot detect every malicious package or unknown vulnerability. Local DLL integrity checks do not establish whole-device trust.
+- GitHub branch protection and deployment/release environment approvals require repository-administrator configuration. CI gates the workflow, but no account settings were modified. Release provenance requires the repository's GitHub feature availability and a real workflow run; no successful attestation is claimed yet.
+
+Sources: [Microsoft WebView2 security guidance](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/security), [MDN SVG image restrictions](https://developer.mozilla.org/en-US/docs/Web/SVG/Guides/SVG_as_an_image), [DOMPurify](https://github.com/cure53/DOMPurify), [GitHub Actions secure use](https://docs.github.com/en/actions/reference/security/secure-use).

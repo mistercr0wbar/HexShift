@@ -14,7 +14,7 @@ namespace HexShift
     {
         // The page is served from this made-up origin so it runs as a normal https page
         // (clipboard, downloads and file drops all behave) without touching the network.
-        const string Origin = "https://hexshift.app";
+        internal const string Origin = "https://hexshift.invalid";
         const string RuntimeDownload = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
 
         readonly string dataDir;
@@ -75,7 +75,9 @@ namespace HexShift
         {
             try
             {
-                CoreWebView2Environment env = await CoreWebView2Environment.CreateAsync(null, Path.Combine(dataDir, "WebView2"), null);
+                string profile = Path.Combine(dataDir, "WebView2-v2");
+                Program.RejectRedirects(profile);
+                CoreWebView2Environment env = await CoreWebView2Environment.CreateAsync(null, profile, null);
                 await web.EnsureCoreWebView2Async(env);
             }
             catch (Exception ex)
@@ -95,37 +97,85 @@ namespace HexShift
             core.Settings.AreDevToolsEnabled = false;
             core.Settings.IsZoomControlEnabled = true;
             core.Settings.AreBrowserAcceleratorKeysEnabled = true;
+            core.Settings.AreHostObjectsAllowed = false;
+            core.Settings.IsWebMessageEnabled = false;
+            core.Settings.IsGeneralAutofillEnabled = false;
+            core.Settings.IsPasswordAutosaveEnabled = false;
+            core.Settings.AreDefaultScriptDialogsEnabled = false;
+            core.Settings.IsBuiltInErrorPageEnabled = false;
 
-            core.AddWebResourceRequestedFilter(Origin + "/*", CoreWebView2WebResourceContext.All);
+            core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All, CoreWebView2WebResourceRequestSourceKinds.All);
             core.WebResourceRequested += ServePage;
             core.DownloadStarting += OnDownloadStarting;
             core.NewWindowRequested += OnNewWindow;
+            core.LaunchingExternalUriScheme += delegate(object s, CoreWebView2LaunchingExternalUriSchemeEventArgs args) { args.Cancel = true; };
+            core.NavigationStarting += delegate(object s, CoreWebView2NavigationStartingEventArgs args) { args.Cancel = !IsAppDocument(args.Uri); };
+            core.FrameNavigationStarting += delegate(object s, CoreWebView2NavigationStartingEventArgs args) { args.Cancel = true; };
+            core.PermissionRequested += delegate(object s, CoreWebView2PermissionRequestedEventArgs args)
+            {
+                // Reading the clipboard requires the normal explicit paste gesture.
+                // Async clipboard write does not require ClipboardRead permission.
+                args.State = CoreWebView2PermissionState.Deny;
+                args.SavesInProfile = false;
+                args.Handled = true;
+            };
             core.Navigate(Origin + "/");
+        }
+
+        internal static bool IsAppDocument(string value)
+        {
+            Uri uri;
+            return Uri.TryCreate(value, UriKind.Absolute, out uri) && uri.Scheme == "https" && uri.Host == "hexshift.invalid" && uri.IsDefaultPort && string.IsNullOrEmpty(uri.UserInfo) && string.IsNullOrEmpty(uri.Query)
+                && (uri.AbsolutePath == "/" || uri.AbsolutePath == "/index.html" || uri.AbsolutePath == "/HexShift.html");
+        }
+
+        internal static bool IsImageDownload(string document, string url, string mime)
+        {
+            return IsAppDocument(document) && IsAppBlob(url) && (mime == "image/png" || mime == "image/webp");
+        }
+
+        internal static bool IsAppBlob(string url)
+        {
+            const string prefix = "blob:" + Origin + "/";
+            Guid identifier;
+            return url != null && url.StartsWith(prefix, StringComparison.Ordinal) && Guid.TryParse(url.Substring(prefix.Length), out identifier);
+        }
+
+        internal static bool HasImageExtension(string path, string extension)
+        {
+            try { return (extension == ".png" || extension == ".webp") && string.Equals(Path.GetExtension(path), extension, StringComparison.OrdinalIgnoreCase); }
+            catch (ArgumentException) { return false; }
         }
 
         void ServePage(object sender, CoreWebView2WebResourceRequestedEventArgs e)
         {
-            string path;
-            try { path = new Uri(e.Request.Uri).AbsolutePath; } catch (Exception) { path = ""; }
+            // Some runtime versions surface local blob/data loads here too. Let
+            // the browser resolve its own image/worker bytes, never the network.
+            if (IsAppBlob(e.Request.Uri) || (e.ResourceContext == CoreWebView2WebResourceContext.Image && e.Request.Uri.StartsWith("data:image/png;base64,", StringComparison.Ordinal))) return;
             CoreWebView2Environment env = web.CoreWebView2.Environment;
-            if (path == "/" || path == "/index.html" || path == "/HexShift.html")
+            if (e.Request.Method == "GET" && IsAppDocument(e.Request.Uri))
             {
                 Stream s = typeof(MainForm).Assembly.GetManifestResourceStream("HexShift.html");
-                e.Response = env.CreateWebResourceResponse(s, 200, "OK", "Content-Type: text/html; charset=utf-8");
+                e.Response = env.CreateWebResourceResponse(s, 200, "OK", "Content-Type: text/html; charset=utf-8\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: frame-ancestors 'none'\r\nReferrer-Policy: no-referrer\r\nCache-Control: no-store");
             }
             else
             {
-                e.Response = env.CreateWebResourceResponse(null, 404, "Not Found", "");
+                e.Response = env.CreateWebResourceResponse(null, 403, "Blocked", "Cache-Control: no-store");
             }
         }
 
         // The page's Download button becomes a normal Save As dialog.
         void OnDownloadStarting(object sender, CoreWebView2DownloadStartingEventArgs e)
         {
+            string mime = e.DownloadOperation.MimeType;
+            bool png = mime == "image/png", webp = mime == "image/webp";
+            if (!IsImageDownload(web.CoreWebView2.Source, e.DownloadOperation.Uri, mime))
+            { e.Cancel = true; e.Handled = true; return; }
+            string extension = webp ? ".webp" : ".png";
             CoreWebView2Deferral deferral = e.GetDeferral();
             e.Handled = true;
             string suggested = "";
-            try { suggested = Path.GetFileName(e.ResultFilePath); } catch (Exception) { }
+            try { suggested = Path.GetFileNameWithoutExtension(e.ResultFilePath) + extension; } catch (Exception) { }
             BeginInvoke(new Action(delegate
             {
                 try
@@ -133,13 +183,26 @@ namespace HexShift
                     using (SaveFileDialog dlg = new SaveFileDialog())
                     {
                         dlg.Title = "Save the shifted image";
-                        dlg.FileName = string.IsNullOrEmpty(suggested) ? "emoji-shifted.png" : suggested;
-                        dlg.Filter = "PNG image (*.png)|*.png|All files (*.*)|*.*";
+                        dlg.FileName = string.IsNullOrEmpty(suggested) ? "emoji-shifted" + extension : suggested;
+                        dlg.Filter = webp ? "WebP image (*.webp)|*.webp" : "PNG image (*.png)|*.png";
+                        dlg.DefaultExt = extension.Substring(1);
+                        dlg.AddExtension = true;
                         dlg.OverwritePrompt = true;
+                        // Validate before accepting: changing the extension after Save As
+                        // would bypass its overwrite prompt for the actual destination.
+                        dlg.FileOk += delegate(object s, System.ComponentModel.CancelEventArgs args)
+                        {
+                            if (!HasImageExtension(dlg.FileName, extension))
+                            {
+                                args.Cancel = true;
+                                MessageBox.Show(this, "Choose a filename ending in " + extension + ".", "Hex Shift", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            }
+                        };
                         if (dlg.ShowDialog(this) == DialogResult.OK) e.ResultFilePath = dlg.FileName;
                         else e.Cancel = true;
                     }
                 }
+                catch (Exception) { e.Cancel = true; }
                 finally { deferral.Complete(); }
             }));
         }
@@ -147,11 +210,12 @@ namespace HexShift
         void OnNewWindow(object sender, CoreWebView2NewWindowRequestedEventArgs e)
         {
             e.Handled = true;
-            OpenExternal(e.Uri);
         }
 
         static void OpenExternal(string url)
         {
+            // No webpage-supplied URL or external protocol is ever shell-executed.
+            if (url != RuntimeDownload && url != "https://github.com/mistercr0wbar/HexShift") return;
             try
             {
                 ProcessStartInfo psi = new ProcessStartInfo(url);

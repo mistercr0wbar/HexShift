@@ -1,25 +1,74 @@
-// Keeps Hex Shift working offline once it has been opened online.
-// Network first, so a fresh version is picked up whenever there is one.
-const CACHE = 'hexshift-v1';
-const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
-
-self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+// This origin can host other projects: never touch their requests or caches.
+const PREFIX = "hexshift-shell-",
+  CACHE = PREFIX + "c0e250b2548ffc07",
+  LEGACY = "hexshift-v1";
+const ROOT = new URL("./", self.location.href),
+  SHELL = [
+    "./",
+    "./index.html",
+    "./manifest.webmanifest",
+    "./icons/icon-192.png",
+    "./icons/icon-512.png",
+    "./icons/icon-512-maskable.png",
+    "./icons/apple-touch-icon.png",
+  ].map((p) => new URL(p, ROOT).href);
+self.addEventListener("install", (e) => {
+  e.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)));
 });
-self.addEventListener('activate', (e) => {
-  e.waitUntil(caches.keys()
-    .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
-    .then(() => self.clients.claim()));
+// Do not skip waiting: a session keeps its version until all its tabs close.
+self.addEventListener("activate", (e) => {
+  e.waitUntil(
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter(
+              (key) =>
+                (key.startsWith(PREFIX) || key === LEGACY) && key !== CACHE,
+            )
+            .map((key) => caches.delete(key)),
+        ),
+      )
+      .then(() => self.clients.claim()),
+  );
 });
-self.addEventListener('fetch', (e) => {
-  if (e.request.method !== 'GET') return;
+self.addEventListener("fetch", (e) => {
+  if (e.request.method !== "GET") return;
   const url = new URL(e.request.url);
-  if (url.origin !== self.location.origin) return;   // fonts and the like go straight to the network
+  url.hash = "";
+  if (url.origin !== ROOT.origin || url.search || !SHELL.includes(url.href))
+    return;
   e.respondWith(
-    fetch(e.request).then((res) => {
-      const copy = res.clone();
-      caches.open(CACHE).then((c) => c.put(e.request, copy));
-      return res;
-    }).catch(() => caches.match(e.request, { ignoreSearch: true }).then((hit) => hit || caches.match('./index.html')))
+    (async () => {
+      const cache = await caches.open(CACHE),
+        hit = await cache.match(e.request);
+      // An immutable version of the HTML must stay paired with its controlling worker.
+      if (hit) return hit;
+      try {
+        const response = await fetch(e.request);
+        const expected = url.pathname.endsWith(".js")
+          ? "javascript"
+          : url.pathname.endsWith(".png")
+            ? "image/png"
+            : url.pathname.endsWith(".webmanifest")
+              ? "manifest+json"
+              : "text/html";
+        if (
+          response.ok &&
+          response.type === "basic" &&
+          !response.redirected &&
+          (response.headers.get("content-type") || "").includes(expected)
+        )
+          await cache.put(e.request, response.clone());
+        return response;
+      } catch {
+        if (e.request.mode === "navigate") {
+          const fallback = await cache.match(new URL("index.html", ROOT));
+          if (fallback) return fallback;
+        }
+        return Response.error();
+      }
+    })(),
   );
 });
