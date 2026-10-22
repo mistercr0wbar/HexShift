@@ -15,7 +15,7 @@
     <RootNamespace>HexShift</RootNamespace>
     <ApplicationIcon>icon.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>2.0.0</Version>
+    <Version>2.1.0</Version>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <NuGetAudit>true</NuGetAudit>
     <NuGetAuditMode>all</NuGetAuditMode>
@@ -37,10 +37,16 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="[1.0.4258.31]" GeneratePathProperty="true" ExcludeAssets="build;native;contentFiles;runtime" />
     <!-- lets the net48 build run on any machine with the .NET SDK, including the GitHub runner -->
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="[1.0.3]" PrivateAssets="all" />
+    <!-- Ed25519 checks for update feeds and installers. No dependencies; embedded below like WebView2. -->
+    <PackageReference Include="NetSparkleUpdater.Chaos.NaCl" Version="[0.9.4]" GeneratePathProperty="true" ExcludeAssets="runtime" />
+    <!-- JavaScriptSerializer reads the update feed. Part of the framework, so nothing extra ships. -->
+    <Reference Include="System.Web.Extensions" />
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="..\HexShift.html" LogicalName="HexShift.html" />
+    <EmbeddedResource Include="$(PkgNetSparkleUpdater_Chaos_NaCl)\lib\net462\Chaos.NaCl.dll" LogicalName="Chaos.NaCl.dll" />
+    <EmbeddedResource Include="update-public-key.txt" LogicalName="UpdatePublicKey.txt" />
     <EmbeddedResource Include="$(PkgMicrosoft_Web_WebView2)\lib\net462\Microsoft.Web.WebView2.Core.dll" LogicalName="Microsoft.Web.WebView2.Core.dll" />
     <EmbeddedResource Include="$(PkgMicrosoft_Web_WebView2)\lib\net462\Microsoft.Web.WebView2.WinForms.dll" LogicalName="Microsoft.Web.WebView2.WinForms.dll" />
     <EmbeddedResource Include="$(PkgMicrosoft_Web_WebView2)\runtimes\win-x64\native\WebView2Loader.dll" LogicalName="WebView2Loader.x64.dll" />

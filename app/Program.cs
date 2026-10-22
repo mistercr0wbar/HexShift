@@ -18,7 +18,7 @@ namespace HexShift
 {
     static class Program
     {
-        public const string Version = "2.0.0";
+        public const string Version = "2.1.0";
 
         [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Unicode)]
         static extern IntPtr LoadLibraryExW(string path, IntPtr reserved, uint flags);
@@ -54,7 +54,7 @@ namespace HexShift
         static Assembly ResolveEmbedded(object sender, ResolveEventArgs args)
         {
             string name = new AssemblyName(args.Name).Name;
-            if (name != "Microsoft.Web.WebView2.Core" && name != "Microsoft.Web.WebView2.WinForms") return null;
+            if (name != "Microsoft.Web.WebView2.Core" && name != "Microsoft.Web.WebView2.WinForms" && name != "Chaos.NaCl") return null;
             using (Stream s = typeof(Program).Assembly.GetManifestResourceStream(name + ".dll"))
             {
                 if (s == null) return null;

@@ -7,15 +7,17 @@ class HostTests
     static Assembly app;
     static object Call(string type, string method, params object[] args) { return app.GetType("HexShift." + type).GetMethod(method, BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public).Invoke(null, args); }
     static void Check(bool value, string label) { if (!value) throw new Exception(label); checks++; }
-    static void Main()
+    static void Main(string[] argv)
     {
         app = Assembly.LoadFrom(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "HexShift.exe"));
         AppDomain.CurrentDomain.AssemblyResolve += delegate(object sender, ResolveEventArgs args)
         {
             string name = new AssemblyName(args.Name).Name;
-            if (name != "Microsoft.Web.WebView2.Core" && name != "Microsoft.Web.WebView2.WinForms") return null;
+            if (name != "Microsoft.Web.WebView2.Core" && name != "Microsoft.Web.WebView2.WinForms" && name != "Chaos.NaCl") return null;
             using (Stream s = app.GetManifestResourceStream(name + ".dll")) using (MemoryStream b = new MemoryStream()) { s.CopyTo(b); return Assembly.Load(b.ToArray()); }
         };
+        // Release gate: HostTests.exe verify-release --feed F --signature S --key K --installer I --tag vX.Y.Z
+        if (argv.Length > 0 && argv[0] == "verify-release") { Environment.Exit(ReleaseCheck.Run(argv)); return; }
         foreach (string uri in new[] { "https://hexshift.invalid/", "https://hexshift.invalid/index.html", "https://hexshift.invalid/HexShift.html#colour" }) Check((bool)Call("MainForm", "IsAppDocument", uri), "Allowed document " + uri);
         foreach (string uri in new[] { "https://hexshift.invalid.evil/", "https://evil/", "http://hexshift.invalid/", "file:///C:/Windows/win.ini", "javascript:alert(1)", "ms-settings:test", "https://hexshift.invalid:444/", "https://user@hexshift.invalid/", "https://hexshift.invalid/other", "https://hexshift.invalid/?remote=1" }) Check(!(bool)Call("MainForm", "IsAppDocument", uri), "Blocked document " + uri);
         string blob = "blob:https://hexshift.invalid/12345678-1234-4234-8234-123456789012";
@@ -43,5 +45,6 @@ class HostTests
         }
         finally { Directory.Delete(dir, true); }
         Console.WriteLine(checks + " native host policy/integrity checks passed.");
+        Console.WriteLine(UpdateTests.Run() + " update policy, feed, download and install checks passed.");
     }
 }

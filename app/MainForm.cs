@@ -20,6 +20,7 @@ namespace HexShift
         readonly string dataDir;
         readonly WebView2 web;
         readonly bool dark;
+        readonly UpdateController updates;
 
         [DllImport("dwmapi.dll")]
         static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
@@ -41,6 +42,10 @@ namespace HexShift
             web.Dock = DockStyle.Fill;
             web.DefaultBackgroundColor = ground;
             Controls.Add(web);
+            // The update notice docks above the page; it is added after the page so Fill still gets the rest.
+            updates = new UpdateController(this, dataDir, dark);
+            Controls.Add(updates.Bar);
+            FormClosing += delegate { updates.Cancel(); };
             Load += OnLoad;
         }
 
@@ -62,6 +67,7 @@ namespace HexShift
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
+            updates.AttachSystemMenu(Handle);
             if (!dark) return;
             int on = 1;
             try
@@ -69,6 +75,13 @@ namespace HexShift
                 if (DwmSetWindowAttribute(Handle, 20, ref on, 4) != 0) DwmSetWindowAttribute(Handle, 19, ref on, 4);
             }
             catch (Exception) { }
+        }
+
+        // The "Check for updates" commands live in the window's system menu.
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == 0x112 && updates != null && updates.HandleSysCommand(m.WParam)) return;
+            base.WndProc(ref m);
         }
 
         async void OnLoad(object sender, EventArgs e)
@@ -120,6 +133,7 @@ namespace HexShift
                 args.Handled = true;
             };
             core.Navigate(Origin + "/");
+            updates.StartAutomaticCheck();
         }
 
         internal static bool IsAppDocument(string value)
@@ -212,10 +226,10 @@ namespace HexShift
             e.Handled = true;
         }
 
-        static void OpenExternal(string url)
+        internal static void OpenExternal(string url)
         {
             // No webpage-supplied URL or external protocol is ever shell-executed.
-            if (url != RuntimeDownload && url != "https://github.com/mistercr0wbar/HexShift") return;
+            if (url != RuntimeDownload && url != "https://github.com/mistercr0wbar/HexShift" && url != UpdatePolicy.ReleasesUrl) return;
             try
             {
                 ProcessStartInfo psi = new ProcessStartInfo(url);
