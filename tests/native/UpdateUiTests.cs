@@ -46,9 +46,42 @@ static partial class UpdateTests
         return string.Join("|", texts.ToArray());
     }
 
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+    // The real main window, built but never shown, so the page and WebView2 are not started: the
+    // constructor wiring, the dock order, and the path a system-menu command takes through WndProc.
+    static void MainFormChecks(string work)
+    {
+        string data = Path.Combine(work, "data-mainform");
+        Directory.CreateDirectory(data);
+        using (MainForm main = new MainForm(data))
+        {
+            IntPtr handle = main.Handle;
+            main.PerformLayout();
+            UpdateBar bar = null;
+            Control page = null;
+            foreach (Control c in main.Controls)
+            {
+                if (c is UpdateBar) bar = (UpdateBar)c; else page = c;
+            }
+            Is(true, bar != null && page != null && main.Controls.Count == 2, "the main window holds the page and the notice bar");
+            Is(true, bar != null && bar.Dock == DockStyle.Top, "the notice bar is docked to the top");
+            Is(true, page != null && page.Dock == DockStyle.Fill, "the page fills the window");
+            Is(true, bar != null && page != null && main.Controls.IndexOf(bar) > main.Controls.IndexOf(page), "the bar was added after the page, so the page gets what is left");
+
+            bool before = UpdateSettings.Load(data).AutoCheck;
+            SendMessage(handle, 0x112, (IntPtr)0x1010, IntPtr.Zero);
+            Is(true, UpdateSettings.Load(data).AutoCheck != before, "a system-menu command sent to the real window toggles the preference");
+            SendMessage(handle, 0x112, (IntPtr)0x1010, IntPtr.Zero);
+            Is(true, UpdateSettings.Load(data).AutoCheck == before, "...and toggles it back");
+        }
+    }
+
     static void UiChecks(string work)
     {
         if (!Environment.UserInteractive) return;
+        MainFormChecks(work);
         using (Form form = new Form())
         {
             form.FormBorderStyle = FormBorderStyle.None;
