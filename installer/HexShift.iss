@@ -57,3 +57,22 @@ Name: "{userdesktop}\HexShift"; Filename: "{app}\HexShift.exe"; WorkingDir: "{ap
 
 [Run]
 Filename: "{app}\HexShift.exe"; Description: "Launch HexShift"; Flags: nowait postinstall skipifsilent
+
+[Code]
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ResultCode: Integer;
+begin
+  { ssDone is reached only when installation has completed successfully. }
+  if (CurStep = ssDone) and WizardSilent then
+  begin
+    if MsgBox('HexShift was updated. Open it now?', mbConfirmation,
+      MB_YESNO or MB_DEFBUTTON2) = IDYES then
+    begin
+      if not ExecAsOriginalUser(ExpandConstant('{app}\HexShift.exe'), '',
+        ExpandConstant('{app}'), SW_SHOWNORMAL, ewNoWait, ResultCode) then
+        MsgBox('HexShift could not be opened. Please use its Start menu shortcut.',
+          mbError, MB_OK);
+    end;
+  end;
+end;

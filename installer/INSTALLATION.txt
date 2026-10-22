@@ -21,6 +21,8 @@ images, the older portable copy, and HexShift's local application data.
 Starting with version 2.1.0, HexShift can check for updates and notify you when
 one is available. It downloads and installs an update only after you agree.
 Export your image before agreeing to close HexShift and install an update.
+After a successful update, Setup asks "HexShift was updated. Open it now?".
+Choose Yes to reopen it or No to leave it closed.
 Version 2.0.0 needs a manual installation of 2.1.0 to gain this update feature.
 Later installers use the same application identity to upgrade in place.
 This installer and executable are unsigned; no publisher signing identity has
