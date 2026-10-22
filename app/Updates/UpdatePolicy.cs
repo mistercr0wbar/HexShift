@@ -29,12 +29,21 @@ namespace HexShift
         internal const string FeedUrl = "https://" + FeedHost + FeedPath;
         internal const string ReleasesUrl = "https://github.com/mistercr0wbar/HexShift/releases";
 
-        // Ceilings enforced while reading, never taken from the feed. The site to GitHub
-        // to CDN path is two redirects; one is spare.
+        // Ceilings enforced while reading, never taken from the feed.
         internal const int MaxFeedBytes = 256 * 1024;
         internal const int MaxSignatureBytes = 4 * 1024;
         internal const long MaxInstallerBytes = 64L * 1024 * 1024;
-        internal const int MaxRedirects = 3;
+
+        // Redirect budgets. The feed's real path is three redirects (the site to GitHub's "latest"
+        // address, to the release's own file, to the CDN) and the installer's is one (the release's
+        // file to the CDN); each gets one spare.
+        internal const int MaxFeedRedirects = 4;
+        internal const int MaxInstallerRedirects = 2;
+
+        // Overall deadlines for a whole request, headers and body together. The per-read timeout alone
+        // lets a server that sends a byte every few seconds hold a check open for days.
+        internal static readonly TimeSpan FeedDeadline = TimeSpan.FromSeconds(60);
+        internal static readonly TimeSpan InstallerDeadline = TimeSpan.FromMinutes(30);
 
         // The only switches the updater ever passes to an installed copy's installer. Fixed here,
         // never read from the feed. SILENT (not VERYSILENT) keeps Setup's progress window up after
@@ -72,14 +81,22 @@ namespace HexShift
                 && tag == version && IsInstallerFileName(file, version);
         }
 
-        // Every later hop. A redirect may only land on one of this project's release files or on
-        // GitHub's asset CDN; anywhere else the download is abandoned.
+        // Every later hop of a FEED request. A redirect may only land on one of this project's
+        // release files or on GitHub's asset CDN; anywhere else the request is abandoned.
         internal static bool IsAllowedRedirect(string url)
         {
             Uri uri;
             if (!TryHttps(url, out uri)) return false;
             if (uri.Host == ReleaseHost) return IsReleaseFile(uri) || IsLatestFeedFile(uri);
             return Array.IndexOf(CdnHosts, uri.Host) >= 0;
+        }
+
+        // Every later hop of an INSTALLER request: GitHub's asset CDN and nothing else. The first
+        // address already names the exact release file, so the only redirect expected is to the CDN.
+        internal static bool IsInstallerRedirect(string url)
+        {
+            Uri uri;
+            return TryHttps(url, out uri) && Array.IndexOf(CdnHosts, uri.Host) >= 0;
         }
 
         // /mistercr0wbar/HexShift/releases/download/v2.1.0/<file>

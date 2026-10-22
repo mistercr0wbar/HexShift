@@ -57,6 +57,7 @@ namespace HexShift
 
             buttons.Dock = DockStyle.Right;
             buttons.AutoSize = true;
+            buttons.AutoSizeMode = AutoSizeMode.GrowAndShrink; // shrink again after a three-button state
             buttons.WrapContents = false;
             buttons.FlowDirection = FlowDirection.RightToLeft;
 
@@ -125,6 +126,8 @@ namespace HexShift
         System.Windows.Forms.Timer startupTimer;
         IntPtr systemMenu = IntPtr.Zero;
         bool busy;
+        bool downloading;
+        bool manualRequested;
         UpdateOffer offer;
         string stagedPath;
 
@@ -166,7 +169,7 @@ namespace HexShift
                 if (systemMenu == IntPtr.Zero) return;
                 AppendMenuW(systemMenu, MfSeparator, UIntPtr.Zero, null);
                 AppendMenuW(systemMenu, MfString, (UIntPtr)CmdCheck, "Check for &updates...");
-                AppendMenuW(systemMenu, MfString | (service.AutoCheck ? MfChecked : MfUnchecked), (UIntPtr)CmdAuto, "Check for updates a&utomatically");
+                AppendMenuW(systemMenu, MfString | (service.AutoCheck ? MfChecked : MfUnchecked), (UIntPtr)CmdAuto, "Check for updates &automatically");
             }
             catch (Exception) { systemMenu = IntPtr.Zero; }
         }
@@ -199,7 +202,8 @@ namespace HexShift
             startupTimer.Tick += delegate
             {
                 startupTimer.Stop();
-                BeginCheck(false);
+                // The person may have switched automatic checks off during the wait.
+                if (service.IsCheckDue()) BeginCheck(false);
             };
             startupTimer.Start();
         }
@@ -217,7 +221,17 @@ namespace HexShift
                 Info("Updates are not available in this build of HexShift.");
                 return;
             }
-            if (busy) return;
+            if (busy)
+            {
+                // A check is already running (probably the automatic one): say so, and make sure the
+                // person who asked gets the answer when it arrives.
+                if (!downloading)
+                {
+                    manualRequested = true;
+                    bar.Display("Checking for updates...", -1);
+                }
+                return;
+            }
             if (offer != null && stagedPath != null) ShowReady();
             else if (offer != null) ShowAvailable();
             else BeginCheck(true);
@@ -234,7 +248,7 @@ namespace HexShift
             {
                 CheckOutcome outcome;
                 try { outcome = service.Check(token); }
-                catch (OperationCanceledException) { return; }
+                catch (OperationCanceledException) { Post(delegate { busy = false; manualRequested = false; }); return; }
                 catch (Exception ex) { outcome = CheckOutcome.Of(CheckKind.Failed, "Something unexpected went wrong (" + ex.GetType().Name + ")."); }
                 Post(delegate { Checked(outcome, manual); });
             });
@@ -243,6 +257,8 @@ namespace HexShift
         void Checked(CheckOutcome outcome, bool manual)
         {
             busy = false;
+            manual = manual || manualRequested;
+            manualRequested = false;
             switch (outcome.Kind)
             {
                 case CheckKind.Available:
@@ -286,6 +302,7 @@ namespace HexShift
         {
             if (busy) return;
             busy = true;
+            downloading = true;
             UpdateOffer target = offer;
             string label = "Downloading HexShift " + target.Version + "...";
             bar.Display(label, 0, new BarButton("Cancel", delegate { if (cancel != null) cancel.Cancel(); }));
@@ -315,6 +332,7 @@ namespace HexShift
         void Downloaded(string path, string failure)
         {
             busy = false;
+            downloading = false;
             if (path != null)
             {
                 stagedPath = path;
@@ -399,6 +417,9 @@ namespace HexShift
             catch (UpdateException ex) { Info("The update was not installed.\n\n" + ex.Message); return; }
             catch (Win32Exception ex) { Info("Windows would not start the installer (" + ex.Message + ")."); return; }
             catch (IOException ex) { Info("The installer could not be opened (" + ex.Message + ")."); return; }
+            // Anything else (a locked-down folder, no memory to check the file) is reported the same
+            // plain way, never left to the unhandled-exception dialog.
+            catch (Exception ex) { Info("The update was not installed (" + ex.GetType().Name + ")."); return; }
             if (installedCopy) owner.Close();
             else bar.Dismiss();
         }

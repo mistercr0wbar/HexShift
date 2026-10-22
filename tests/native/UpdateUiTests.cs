@@ -80,7 +80,11 @@ static partial class UpdateTests
 
     static void UiChecks(string work)
     {
-        if (!Environment.UserInteractive) return;
+        if (!Environment.UserInteractive)
+        {
+            Console.WriteLine("(window checks skipped: this session is not interactive)");
+            return;
+        }
         MainFormChecks(work);
         using (Form form = new Form())
         {
@@ -151,9 +155,9 @@ static partial class UpdateTests
                 Is(false, UpdateSettings.Load(data).AutoCheck, "...and switches it off, saved");
                 Is(true, controller.HandleSysCommand((IntPtr)0x1013), "the low four bits Windows adds are ignored");
                 Is(true, UpdateSettings.Load(data).AutoCheck, "...and switches it back on, saved");
+                // With no real key in this build nothing is due, so these start nothing; they must simply not throw.
                 controller.StartAutomaticCheck();
                 controller.Cancel();
-                passed++;
             }
             finally { form.Close(); }
         }

@@ -147,6 +147,26 @@ static partial class UpdateTests
             });
         }
 
+        // Sends one byte every intervalMs, chunked, for up to totalBytes: never fast, never finished soon.
+        internal void Drip(string path, int intervalMs, int totalBytes)
+        {
+            Route(path, delegate(HttpListenerContext c)
+            {
+                c.Response.StatusCode = 200;
+                c.Response.SendChunked = true;
+                try
+                {
+                    for (int sent = 0; sent < totalBytes; sent++)
+                    {
+                        c.Response.OutputStream.WriteByte(65);
+                        c.Response.OutputStream.Flush();
+                        Thread.Sleep(intervalMs);
+                    }
+                    c.Response.Close();
+                }
+                catch (Exception) { try { c.Response.Abort(); } catch (Exception) { } }
+            });
+        }
         // Sends a little, then stalls for a while.
         internal void Slow(string path)
         {
@@ -166,22 +186,27 @@ static partial class UpdateTests
         }
     }
 
-    // The service pointed at a server instead of the real sites, with the same shape of rules.
+    // The service pointed at a server instead of the real sites, with the same shape of rules,
+    // the same redirect budgets and the same installer-versus-feed split as the release build.
     static UpdateEndpoints Local(string baseUrl)
     {
         UpdateEndpoints e = new UpdateEndpoints();
         e.FeedUrl = baseUrl + "/updates/appcast.json";
         e.IsFeed = delegate(string u) { return u == baseUrl + "/updates/appcast.json" || u == baseUrl + "/updates/appcast.json.signature"; };
         e.IsInstaller = delegate(string u, string v) { return UpdatePolicy.IsVersion(v) && u == baseUrl + "/dl/HexShift-" + v + "-Setup.exe"; };
-        e.IsRedirect = delegate(string u) { return u.StartsWith(baseUrl + "/cdn/", StringComparison.Ordinal); };
+        e.IsFeedRedirect = delegate(string u) { return u.StartsWith(baseUrl + "/cdn/", StringComparison.Ordinal) || u.StartsWith(baseUrl + "/latest/", StringComparison.Ordinal); };
+        e.IsInstallerRedirect = delegate(string u) { return u.StartsWith(baseUrl + "/cdn/", StringComparison.Ordinal); };
+        e.MaxFeedRedirects = UpdatePolicy.MaxFeedRedirects;
+        e.MaxInstallerRedirects = UpdatePolicy.MaxInstallerRedirects;
+        e.FeedDeadline = TimeSpan.FromSeconds(20);
+        e.InstallerDeadline = TimeSpan.FromSeconds(30);
         return e;
     }
 
     static UpdateTransport LocalTransport(UpdateEndpoints e)
     {
-        return new UpdateTransport(e.IsRedirect, UpdatePolicy.MaxRedirects, "HexShiftTest");
+        return new UpdateTransport("HexShiftTest");
     }
-
     static void NetworkChecks(string work)
     {
         TransportChecks(work);
@@ -210,86 +235,106 @@ static partial class UpdateTests
         {
             UpdateEndpoints e = Local(s.Base);
             UpdateTransport t = LocalTransport(e);
+            UpdateRoute route = e.ForFeed();
             CancellationToken none = CancellationToken.None;
             string feed = s.Base + "/updates/appcast.json";
             byte[] hello = Encoding.ASCII.GetBytes("hello");
 
             s.Body("/updates/appcast.json", hello, false);
-            Same("hello", Encoding.ASCII.GetString(t.GetBytes(feed, e.IsFeed, 1000, none)), "fetches a small response");
+            Same("hello", Encoding.ASCII.GetString(t.GetBytes(feed, route, 1000, none)), "fetches a small response");
 
             // size ceilings, whether or not the server announces a length
             s.Body("/updates/appcast.json", new byte[2000], false);
-            Raises<UpdateException>(delegate { t.GetBytes(feed, e.IsFeed, 1000, none); }, "announced length over the ceiling");
+            Raises<UpdateException>(delegate { t.GetBytes(feed, route, 1000, none); }, "announced length over the ceiling");
             s.Body("/updates/appcast.json", new byte[2000], true);
-            Raises<UpdateException>(delegate { t.GetBytes(feed, e.IsFeed, 1000, none); }, "chunked body over the ceiling");
+            Raises<UpdateException>(delegate { t.GetBytes(feed, route, 1000, none); }, "chunked body over the ceiling");
             s.Body("/updates/appcast.json", new byte[1000], true);
-            Is(true, t.GetBytes(feed, e.IsFeed, 1000, none).Length == 1000, "a body exactly at the ceiling is fine");
+            Is(true, t.GetBytes(feed, route, 1000, none).Length == 1000, "a body exactly at the ceiling is fine");
 
             // a stream that never ends is cut off almost at once, not read to the end
             s.Endless("/updates/appcast.json", 40L * 1024 * 1024);
-            Raises<UpdateException>(delegate { t.GetBytes(feed, e.IsFeed, 1000, none); }, "an endless stream over the in-memory ceiling");
+            Raises<UpdateException>(delegate { t.GetBytes(feed, route, 1000, none); }, "an endless stream over the in-memory ceiling");
             Is(true, Settled(s) < 8L * 1024 * 1024, "the server was cut off long before 40 MB (in memory)");
 
             s.Status("/updates/appcast.json", 500);
-            Raises<UpdateException>(delegate { t.GetBytes(feed, e.IsFeed, 1000, none); }, "server error");
+            Raises<UpdateException>(delegate { t.GetBytes(feed, route, 1000, none); }, "server error");
             s.Status("/updates/appcast.json", 404);
-            Raises<UpdateException>(delegate { t.GetBytes(feed, e.IsFeed, 1000, none); }, "not found");
+            Raises<UpdateException>(delegate { t.GetBytes(feed, route, 1000, none); }, "not found");
             s.Status("/updates/appcast.json", 204);
-            Raises<UpdateException>(delegate { t.GetBytes(feed, e.IsFeed, 1000, none); }, "a success status other than 200");
+            Raises<UpdateException>(delegate { t.GetBytes(feed, route, 1000, none); }, "a success status other than 200");
 
             // the first address must pass the caller's rule before any request is made
             int before = s.Requests;
-            Raises<UpdateException>(delegate { t.GetBytes(s.Base + "/other", e.IsFeed, 1000, none); }, "first address not allowed");
-            Raises<UpdateException>(delegate { t.GetBytes(null, e.IsFeed, 1000, none); }, "null address");
+            Raises<UpdateException>(delegate { t.GetBytes(s.Base + "/other", route, 1000, none); }, "first address not allowed");
+            Raises<UpdateException>(delegate { t.GetBytes(null, route, 1000, none); }, "null address");
             Is(true, s.Requests == before, "refused addresses are never contacted");
 
             // redirects
             s.Redirect("/updates/appcast.json", "/cdn/a", 302);
             s.Redirect("/cdn/a", "/cdn/b", 301);
             s.Body("/cdn/b", hello, false);
-            Same("hello", Encoding.ASCII.GetString(t.GetBytes(feed, e.IsFeed, 1000, none)), "follows allowed redirects (relative addresses)");
+            Same("hello", Encoding.ASCII.GetString(t.GetBytes(feed, route, 1000, none)), "follows allowed redirects (relative addresses)");
             s.Redirect("/cdn/a", s.Base + "/cdn/b", 307);
-            Same("hello", Encoding.ASCII.GetString(t.GetBytes(feed, e.IsFeed, 1000, none)), "follows allowed redirects (absolute addresses)");
+            Same("hello", Encoding.ASCII.GetString(t.GetBytes(feed, route, 1000, none)), "follows allowed redirects (absolute addresses)");
 
             s.Redirect("/cdn/a", "/evil/x", 302);
             s.Body("/evil/x", hello, false);
-            Raises<UpdateException>(delegate { t.GetBytes(feed, e.IsFeed, 1000, none); }, "redirect to an address the rule does not allow");
+            Raises<UpdateException>(delegate { t.GetBytes(feed, route, 1000, none); }, "redirect to an address the rule does not allow");
             Is(true, s.Hits("/evil/x") == 0, "a refused redirect is never followed");
             s.Redirect("/cdn/a", "file:///C:/Windows/win.ini", 302);
-            Raises<UpdateException>(delegate { t.GetBytes(feed, e.IsFeed, 1000, none); }, "redirect to a file address");
+            Raises<UpdateException>(delegate { t.GetBytes(feed, route, 1000, none); }, "redirect to a file address");
             s.Redirect("/cdn/a", "http://example.invalid/cdn/b", 302);
-            Raises<UpdateException>(delegate { t.GetBytes(feed, e.IsFeed, 1000, none); }, "redirect to another host");
+            Raises<UpdateException>(delegate { t.GetBytes(feed, route, 1000, none); }, "redirect to another host");
             s.Route("/cdn/a", delegate(HttpListenerContext c) { c.Response.StatusCode = 302; c.Response.Close(); });
-            Raises<UpdateException>(delegate { t.GetBytes(feed, e.IsFeed, 1000, none); }, "redirect with no destination");
+            Raises<UpdateException>(delegate { t.GetBytes(feed, route, 1000, none); }, "redirect with no destination");
 
+            // exactly the budget works and one more does not (the feed's real chain is three hops; the budget is four)
+            int budget = UpdatePolicy.MaxFeedRedirects;
             s.Redirect("/updates/appcast.json", "/cdn/1", 302);
-            s.Redirect("/cdn/1", "/cdn/2", 302);
-            s.Redirect("/cdn/2", "/cdn/3", 302);
-            s.Body("/cdn/3", hello, false);
-            Same("hello", Encoding.ASCII.GetString(t.GetBytes(feed, e.IsFeed, 1000, none)), "three redirects are allowed");
-            s.Redirect("/cdn/3", "/cdn/4", 302);
-            s.Body("/cdn/4", hello, false);
-            Raises<UpdateException>(delegate { t.GetBytes(feed, e.IsFeed, 1000, none); }, "four redirects are too many");
+            for (int hopNo = 1; hopNo < budget; hopNo++) s.Redirect("/cdn/" + hopNo, "/cdn/" + (hopNo + 1), 302);
+            s.Body("/cdn/" + budget, hello, false);
+            Same("hello", Encoding.ASCII.GetString(t.GetBytes(feed, route, 1000, none)), budget + " redirects are allowed");
+            s.Redirect("/cdn/" + budget, "/cdn/" + (budget + 1), 302);
+            s.Body("/cdn/" + (budget + 1), hello, false);
+            Raises<UpdateException>(delegate { t.GetBytes(feed, route, 1000, none); }, (budget + 1) + " redirects are too many");
             s.Redirect("/cdn/1", "/cdn/1", 302);
-            Raises<UpdateException>(delegate { t.GetBytes(feed, e.IsFeed, 1000, none); }, "a redirect loop ends");
+            Raises<UpdateException>(delegate { t.GetBytes(feed, route, 1000, none); }, "a redirect loop ends");
+
+            // the feed may go through "latest"; an installer may only go to the CDN
+            s.Body("/latest/x", hello, false);
+            s.Redirect("/updates/appcast.json", "/latest/x", 302);
+            Same("hello", Encoding.ASCII.GetString(t.GetBytes(feed, route, 1000, none)), "a feed request may be redirected through the latest address");
+
+            // a slow drip is cut off by the overall deadline, not left to run for days
+            s.Drip("/updates/appcast.json", 150, 400);
+            UpdateRoute quick = e.ForFeed();
+            quick.Deadline = TimeSpan.FromSeconds(1);
+            DateTime dripStart = DateTime.UtcNow;
+            Raises<UpdateException>(delegate { t.GetBytes(feed, quick, 100000, none); }, "a server dripping one byte at a time hits the deadline");
+            Is(true, DateTime.UtcNow - dripStart < TimeSpan.FromSeconds(5), "the deadline ends the request promptly");
+            try { t.GetBytes(feed, quick, 100000, none); } catch (UpdateException ex) { Is(true, ex.Message.IndexOf("too long", StringComparison.Ordinal) >= 0, "the deadline says so in plain words"); }
 
             // cancelling stops a stalled download promptly
             s.Slow("/updates/appcast.json");
             CancellationTokenSource cts = new CancellationTokenSource();
             cts.CancelAfter(400);
             DateTime started = DateTime.UtcNow;
-            Raises<OperationCanceledException>(delegate { t.GetBytes(feed, e.IsFeed, 1000, cts.Token); }, "cancelling a stalled download");
+            Raises<OperationCanceledException>(delegate { t.GetBytes(feed, route, 1000, cts.Token); }, "cancelling a stalled download");
             Is(true, DateTime.UtcNow - started < TimeSpan.FromSeconds(4), "cancellation does not wait for the server");
             CancellationTokenSource already = new CancellationTokenSource();
             already.Cancel();
-            Raises<OperationCanceledException>(delegate { t.GetBytes(feed, e.IsFeed, 1000, already.Token); }, "already cancelled");
+            Raises<OperationCanceledException>(delegate { t.GetBytes(feed, route, 1000, already.Token); }, "already cancelled");
 
             // downloads to a file: exact length, deleted when anything is wrong
             byte[] payload = new byte[300000];
             new Random(7).NextBytes(payload);
             string dest = Path.Combine(work, "download.bin");
             string url = s.Base + "/dl/file";
-            Func<string, bool> allowFile = delegate(string u) { return u == url; };
+            UpdateRoute allowFile = new UpdateRoute();
+            allowFile.First = delegate(string u) { return u == url; };
+            allowFile.Redirect = e.IsInstallerRedirect;
+            allowFile.MaxRedirects = UpdatePolicy.MaxInstallerRedirects;
+            allowFile.Deadline = TimeSpan.FromSeconds(30);
 
             s.Body("/dl/file", payload, false);
             List<long> seen = new List<long>();
@@ -330,6 +375,31 @@ static partial class UpdateTests
             s.Body("/dl/file", payload, false);
             Raises<IOException>(delegate { t.GetToFile(url, allowFile, dest, payload.Length, 1000000, null, none); }, "refuses to overwrite an existing file");
             Same("keep me", File.ReadAllText(dest), "an existing file is never deleted by a failed download");
+            // installer requests: the CDN only, and only two hops
+            File.Delete(dest);
+            s.Redirect("/dl/file", "/cdn/a", 302);
+            s.Redirect("/cdn/a", "/cdn/b", 302);
+            s.Body("/cdn/b", payload, false);
+            t.GetToFile(url, allowFile, dest, payload.Length, 1000000, null, none);
+            Is(true, File.Exists(dest) && new FileInfo(dest).Length == payload.Length, "an installer may take two redirects through the CDN");
+            File.Delete(dest);
+            s.Redirect("/cdn/b", "/cdn/c", 302);
+            s.Body("/cdn/c", payload, false);
+            Raises<UpdateException>(delegate { t.GetToFile(url, allowFile, dest, payload.Length, 1000000, null, none); }, "three installer redirects are too many");
+            Is(false, File.Exists(dest), "nothing left after too many installer redirects");
+            s.Redirect("/dl/file", "/latest/x", 302);
+            Raises<UpdateException>(delegate { t.GetToFile(url, allowFile, dest, payload.Length, 1000000, null, none); }, "an installer may not be redirected through a feed-only address");
+            Is(false, File.Exists(dest), "nothing left after a refused installer redirect");
+
+            // a slow drip into a file hits the deadline and leaves nothing behind
+            s.Drip("/dl/file", 150, 400);
+            UpdateRoute quickFile = new UpdateRoute();
+            quickFile.First = allowFile.First;
+            quickFile.Redirect = allowFile.Redirect;
+            quickFile.MaxRedirects = 2;
+            quickFile.Deadline = TimeSpan.FromSeconds(1);
+            Raises<UpdateException>(delegate { t.GetToFile(url, quickFile, dest, 400, 1000000, null, none); }, "a slow installer download hits its deadline");
+            Is(false, File.Exists(dest), "nothing left after a download deadline");
         }
     }
 
@@ -426,6 +496,12 @@ static partial class UpdateTests
             Same(UpdatePolicy.InstallerArguments.Replace(' ', '|'), WaitForMarker(marker), "installed copy runs the installer with the fixed switches");
             ClearMarker(marker);
 
+            // anything else sitting in the staging folder is cleared before a download
+            string planted = Path.Combine(staging, "planted.dll");
+            File.WriteAllText(planted, "x");
+            staged = svc.Download(found.Offer, null, none);
+            Is(false, File.Exists(planted), "a file planted beside the installer is removed before the next download");
+
             // portable copy: plain wizard, no switches
             staged = svc.Download(found.Offer, null, none);
             svc.Install(found.Offer, staged, false);
@@ -483,9 +559,11 @@ static partial class UpdateTests
             UpdateService off = new UpdateService(Path.Combine(work, "data-off"), null, "2.1.0", e, LocalTransport(e));
             Is(false, off.Enabled, "service without a key is disabled");
             Is(false, off.IsCheckDue(), "a disabled service never wants a check");
+            int quiet = s.Requests;
             Is(true, off.Check(none).Kind == CheckKind.Disabled, "a disabled service reports that, without contacting anyone");
             Raises<UpdateException>(delegate { off.Download(found.Offer, null, none); }, "a disabled service downloads nothing");
             Raises<UpdateException>(delegate { off.Install(found.Offer, staged, true); }, "a disabled service installs nothing");
+            Is(true, s.Requests == quiet, "a disabled service never contacts the server");
         }
 
         // the server is gone: a failed check is an answer, not a crash

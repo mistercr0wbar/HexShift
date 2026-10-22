@@ -20,7 +20,12 @@ namespace HexShift
         internal string FeedUrl;
         internal Func<string, bool> IsFeed;
         internal Func<string, string, bool> IsInstaller;
-        internal Func<string, bool> IsRedirect;
+        internal Func<string, bool> IsFeedRedirect;
+        internal Func<string, bool> IsInstallerRedirect;
+        internal int MaxFeedRedirects;
+        internal int MaxInstallerRedirects;
+        internal TimeSpan FeedDeadline;
+        internal TimeSpan InstallerDeadline;
 
         internal static UpdateEndpoints Release()
         {
@@ -28,8 +33,36 @@ namespace HexShift
             endpoints.FeedUrl = UpdatePolicy.FeedUrl;
             endpoints.IsFeed = UpdatePolicy.IsFeedAddress;
             endpoints.IsInstaller = UpdatePolicy.IsInstallerAddress;
-            endpoints.IsRedirect = UpdatePolicy.IsAllowedRedirect;
+            endpoints.IsFeedRedirect = UpdatePolicy.IsAllowedRedirect;
+            endpoints.IsInstallerRedirect = UpdatePolicy.IsInstallerRedirect;
+            endpoints.MaxFeedRedirects = UpdatePolicy.MaxFeedRedirects;
+            endpoints.MaxInstallerRedirects = UpdatePolicy.MaxInstallerRedirects;
+            endpoints.FeedDeadline = UpdatePolicy.FeedDeadline;
+            endpoints.InstallerDeadline = UpdatePolicy.InstallerDeadline;
             return endpoints;
+        }
+
+        // The feed and its signature share one route: same first address rule, same redirects.
+        internal UpdateRoute ForFeed()
+        {
+            UpdateRoute route = new UpdateRoute();
+            route.First = IsFeed;
+            route.Redirect = IsFeedRedirect;
+            route.MaxRedirects = MaxFeedRedirects;
+            route.Deadline = FeedDeadline;
+            return route;
+        }
+
+        // An installer request starts only at that exact version's release file and may only be
+        // redirected to the CDN.
+        internal UpdateRoute ForInstaller(string version)
+        {
+            UpdateRoute route = new UpdateRoute();
+            route.First = delegate(string url) { return IsInstaller(url, version); };
+            route.Redirect = IsInstallerRedirect;
+            route.MaxRedirects = MaxInstallerRedirects;
+            route.Deadline = InstallerDeadline;
+            return route;
         }
     }
 
@@ -111,8 +144,9 @@ namespace HexShift
             if (!Enabled) return CheckOutcome.Of(CheckKind.Disabled, "This build of HexShift has no update key, so it cannot check for updates.");
             try
             {
-                byte[] feed = transport.GetBytes(endpoints.FeedUrl, endpoints.IsFeed, UpdatePolicy.MaxFeedBytes, token);
-                byte[] signature = transport.GetBytes(endpoints.FeedUrl + ".signature", endpoints.IsFeed, UpdatePolicy.MaxSignatureBytes, token);
+                UpdateRoute route = endpoints.ForFeed();
+                byte[] feed = transport.GetBytes(endpoints.FeedUrl, route, UpdatePolicy.MaxFeedBytes, token);
+                byte[] signature = transport.GetBytes(endpoints.FeedUrl + ".signature", route, UpdatePolicy.MaxSignatureBytes, token);
                 FeedResult result = UpdateFeed.Evaluate(feed, Encoding.ASCII.GetString(signature), publicKey, currentVersion, endpoints.IsInstaller);
                 if (result.Status == FeedStatus.Rejected) return CheckOutcome.Of(CheckKind.Failed, result.Reason);
 

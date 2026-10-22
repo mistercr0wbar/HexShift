@@ -63,9 +63,16 @@ static partial class UpdateTests
             FeedChecks();
             SettingsChecks(work);
             NetworkChecks(work);
+            HardeningChecks(work);
             UiChecks(work);
         }
-        finally { Directory.Delete(work, true); }
+        finally
+        {
+            // Best effort: cleaning up must never hide what the checks found.
+            try { Directory.Delete(work, true); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
 
         if (failures.Count > 0) throw new Exception(failures.Count + " update check(s) failed:\n  " + string.Join("\n  ", failures.ToArray()));
         return passed;

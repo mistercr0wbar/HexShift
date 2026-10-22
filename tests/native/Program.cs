@@ -16,7 +16,7 @@ class HostTests
             if (name != "Microsoft.Web.WebView2.Core" && name != "Microsoft.Web.WebView2.WinForms" && name != "Chaos.NaCl") return null;
             using (Stream s = app.GetManifestResourceStream(name + ".dll")) using (MemoryStream b = new MemoryStream()) { s.CopyTo(b); return Assembly.Load(b.ToArray()); }
         };
-        // Release gate: HostTests.exe verify-release --feed F --signature S --key K --installer I --tag vX.Y.Z
+        // Release gate: HostTests.exe verify-release --feed F --signature S --key K --exe E --installer I --tag vX.Y.Z
         if (argv.Length > 0 && argv[0] == "verify-release") { Environment.Exit(ReleaseCheck.Run(argv)); return; }
         // The host's own resolver must hand out the embedded Ed25519 assembly and nothing else.
         object ed25519 = Call("Program", "ResolveEmbedded", null, new ResolveEventArgs("Chaos.NaCl, Version=0.9.4.0, Culture=neutral, PublicKeyToken=null"));

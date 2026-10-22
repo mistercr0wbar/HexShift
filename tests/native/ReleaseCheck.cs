@@ -2,7 +2,8 @@
 // update code that ships in HexShift.exe, before anything goes public.
 //
 //   HostTests.exe verify-release --feed appcast.json --signature appcast.json.signature
-//                 --key app/update-public-key.txt --installer HexShift-2.1.1-Setup.exe --tag v2.1.1
+//                 --key app/update-public-key.txt --exe dist/HexShift.exe
+//                 --installer HexShift-2.1.1-Setup.exe --tag v2.1.1
 //
 // Exit code 0 only if a copy of HexShift older than this release would be offered it, the
 // feed and installer signatures verify against the key built into the app, and the tag, the
@@ -15,8 +16,23 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Text;
 using HexShift;
+
+// Runs inside the throwaway app domain used by ReleaseCheck.EmbeddedKeyText.
+public sealed class KeyProbe : MarshalByRefObject
+{
+    public string Read(string exePath)
+    {
+        Assembly assembly = Assembly.ReflectionOnlyLoadFrom(exePath);
+        using (Stream stream = assembly.GetManifestResourceStream("UpdatePublicKey.txt"))
+        {
+            if (stream == null) return null;
+            using (StreamReader reader = new StreamReader(stream, Encoding.ASCII)) return reader.ReadToEnd();
+        }
+    }
+}
 
 static class ReleaseCheck
 {
@@ -30,9 +46,10 @@ static class ReleaseCheck
 
     internal static int Run(string[] argv)
     {
+        failed = 0;
         Dictionary<string, string> options = new Dictionary<string, string>();
         for (int i = 1; i + 1 < argv.Length; i += 2) options[argv[i]] = argv[i + 1];
-        string[] required = new[] { "--feed", "--signature", "--key", "--installer", "--tag" };
+        string[] required = new[] { "--feed", "--signature", "--key", "--installer", "--tag", "--exe" };
         foreach (string name in required)
         {
             if (!options.ContainsKey(name)) { Console.WriteLine("FAIL  missing " + name); return 2; }
@@ -51,6 +68,13 @@ static class ReleaseCheck
         byte[] key = UpdateFeed.ParsePublicKey(File.ReadAllText(options["--key"]));
         Is(key != null, "the public key in " + options["--key"] + " is a real 32-byte key (not the NOT-SET placeholder)");
         if (key == null) return Finish();
+
+        // The key that matters is the one built INTO the EXE users will run, not the text file next to it.
+        string exe = Path.GetFullPath(options["--exe"]);
+        string embeddedKey = EmbeddedKeyText(exe);
+        Is(embeddedKey != null && embeddedKey.Trim() == File.ReadAllText(options["--key"]).Trim(), "the public key built into " + options["--exe"] + " equals " + options["--key"]);
+        string exeProduct = (FileVersionInfo.GetVersionInfo(exe).ProductVersion ?? "").Split('+')[0].Trim();
+        Is(exeProduct == version, "the shipped EXE's version equals the tag: " + exeProduct);
 
         byte[] feed = File.ReadAllBytes(options["--feed"]);
         string signature = File.ReadAllText(options["--signature"]);
@@ -75,6 +99,25 @@ static class ReleaseCheck
         // A copy already on this release must see nothing newer, so the feed holds no later entry by mistake.
         Is(UpdateFeed.Evaluate(feed, signature, key, version, UpdatePolicy.IsInstallerAddress).Status == FeedStatus.UpToDate, "a copy already on " + version + " sees no update");
         return Finish();
+    }
+
+    // The UpdatePublicKey.txt resource of an EXE, read without running it. The EXE is opened
+    // reflection-only inside a throwaway app domain that is unloaded straight after, so the file
+    // is released again (an assembly cannot be unloaded from the main domain).
+    static string EmbeddedKeyText(string exePath)
+    {
+        AppDomain domain = null;
+        try
+        {
+            domain = AppDomain.CreateDomain("hexshift-key-probe");
+            KeyProbe probe = (KeyProbe)domain.CreateInstanceAndUnwrap(typeof(KeyProbe).Assembly.FullName, typeof(KeyProbe).FullName);
+            return probe.Read(exePath);
+        }
+        catch (Exception) { return null; }
+        finally
+        {
+            if (domain != null) { try { AppDomain.Unload(domain); } catch (Exception) { } }
+        }
     }
 
     static int Finish()
