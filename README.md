@@ -24,6 +24,10 @@ Keyboard: Ctrl/Cmd O opens, Ctrl/Cmd Z undoes, Ctrl/Cmd Shift Z redoes, F fits, 
 
 The Windows app uses an isolated, locally served WebView2 origin and denies remote content. Keep Windows, your browser and the Evergreen WebView2 runtime current. Read [the security review](docs/security-review.md) for evidence and limitations; no application can guarantee immunity to platform vulnerabilities or a compromised device.
 
+## Windows installer and updates
+
+From version 2.1.0 each release also has a per-user installer (`HexShift-{version}-Setup.exe`, no administrator needed). The installed or portable app can check for updates: at most once a day it reads a signed feed, shows a notice with release notes, and only downloads after you click **Download update** and only installs after a second confirmation. Switch the automatic check off, or check by hand, from the window's system menu. Every feed and installer is verified with an Ed25519 signature against a public key built into the app, which is separate from Windows publisher signing (not yet provisioned). A portable copy opens the installer instead of replacing itself. Read [how updates work and how a release is signed](docs/updates.md).
+
 ## Development
 
 Use Node.js 24 and the .NET 8 SDK (for Windows builds). Dependencies are pinned in npm/NuGet lockfiles.
