@@ -32,15 +32,43 @@ Everything else is untrusted input.
    signature, a size of at most 64 MiB and a download address of exactly
    `https://github.com/mistercr0wbar/HexShift/releases/download/v{version}/HexShift-{version}-Setup.exe`
    are offered. The tag, the file name and the entry's version must all agree.
-3. Downloads may be redirected only to this project's release files or GitHub's
-   asset hosts (`release-assets.githubusercontent.com`, `objects.githubusercontent.com`),
-   at most three times, always over HTTPS. Feed 256 KiB, signature 4 KiB, installer
-   64 MiB: counted while reading, never taken from a header.
+3. Each request has its own rules. The feed and its signature may be redirected only to
+   this project's release files (including GitHub's "latest" address) or GitHub's asset
+   hosts (`release-assets.githubusercontent.com`, `objects.githubusercontent.com`), at most
+   four times (the real chain is three: the site, GitHub's latest address, the release's
+   file, the CDN). An installer request starts at that exact version's release file and
+   may be redirected only to the CDN, at most twice. Always HTTPS. Feed 256 KiB,
+   signature 4 KiB, installer 64 MiB: counted while reading, never taken from a header.
+   Every request also has an overall deadline (feed 60 seconds, installer 30 minutes), so a
+   server that sends one byte at a time cannot hold a check open.
 4. The installer must match its signature (over the installer's exact bytes) and the
    size in the signed feed. It is verified again, while held open and locked against
    changes, in the instant before it is started. It is started with fixed switches
    only; nothing in the feed can add arguments.
 5. Anything else fails closed: the app says it could not check, or does nothing.
+6. The app carries three assemblies inside itself (the two WebView2 ones and the Ed25519
+   one). Windows looks for same-named files beside the EXE before it asks the app for the
+   embedded copy, and these assemblies would run inside the app (the signature check
+   included), so HexShift refuses to start if any of them, or a `HexShift.exe.config`, sits
+   next to `HexShift.exe`. A normal install and a normal portable copy contain none of them.
+
+## What this does not defend against
+
+- **Someone already running as you.** A process with your account's rights can change
+  HexShift's own files or run anything without help from the updater. The updater narrows
+  the window anyway (the staging folder is emptied before each download, the file is
+  checked to be where it was put, then held locked and re-verified just before it starts),
+  but `Process.Start` opens the installer by path, so a perfectly timed swap by such a
+  process cannot be ruled out. Setup itself then re-reads its own file. This is not an
+  escalation: the installer runs without administrator rights.
+- **Replay of an old signed feed.** The app never accepts an equal or older version, so a
+  replayed feed can only mean "no update", but it can hide a newer release until the feed
+  is current again. There is no expiry in the feed format.
+- **A stolen or lost signing key** (see the key section above) and **Windows publisher
+  signing**, which is separate and not set up: SmartScreen may still warn about the
+  unsigned installer.
+- The installer's signature is checked on the window's own thread. For the real installer
+  (a few megabytes) that is a fraction of a second.
 
 `app/Updates/UpdatePolicy.cs` is the one place these rules live; `tests/native/UpdateTests*.cs`
 checks each of them, including against a loopback server and a real stand-in installer.
@@ -105,14 +133,16 @@ dotnet tool install NetSparkleUpdater.Tools.AppCastGenerator --version 2.9.0 --t
    ```powershell
    tests\native\bin\Release\net48\HostTests.exe verify-release `
      --feed <out>\appcast.json --signature <out>\appcast.json.signature `
-     --key app\update-public-key.txt `
+     --key app\update-public-key.txt --exe dist\HexShift.exe `
      --installer dist\HexShift-<version>-Setup.exe --tag v<version>
    ```
 
    It confirms that the tag, the installer's file name and its embedded version agree;
-   that the public key is real (not `NOT-SET`); that the feed and installer signatures
-   verify against that key; and that an older copy would be offered exactly this release
-   from exactly this address at exactly this size.
+   that the public key is real (not `NOT-SET`) and is the very key built into the EXE that
+   will ship (read from that EXE's embedded resource, not just from the text file); that the
+   EXE's version equals the tag; that the feed and installer signatures verify against that
+   key; and that an older copy would be offered exactly this release from exactly this
+   address at exactly this size.
 6. Publish as a **draft**, upload `HexShift-<version>-Setup.exe`, `appcast.json`,
    `appcast.json.signature`, the portable files and `SHA256SUMS.txt`, check them, then
    publish. `https://thecr0wbar.xyz/updates/hexshift/appcast.json` and `.signature` are
@@ -121,9 +151,6 @@ dotnet tool install NetSparkleUpdater.Tools.AppCastGenerator --version 2.9.0 --t
    not match the feed makes the app reject it and try again later, which is safe.
 7. After publishing, fetch both stable addresses and check them against the release.
 
-## Not covered here
-
-Windows publisher signing (code signing). The Ed25519 signatures protect updates inside
-the app; they do not stop SmartScreen warning about an unsigned installer. Replayed old
-feeds can only ever mean "no update" (the app never accepts an equal or older version),
-but they can hide a newer release until the feed is current again.
+The Ed25519 signatures protect updates inside the app. They are separate from Windows
+publisher signing (code signing), which is not set up and which is what SmartScreen
+looks at.

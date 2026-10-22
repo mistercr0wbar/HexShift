@@ -122,7 +122,8 @@ jobs:
           $version = $env:RELEASE_TAG.Substring(1)
           ./tests/native/bin/Release/net48/HostTests.exe verify-release `
             --feed appcast.json --signature appcast.json.signature `
-            --key app/update-public-key.txt --installer "dist/HexShift-$version-Setup.exe" --tag $env:RELEASE_TAG
+            --key app/update-public-key.txt --exe dist/HexShift.exe `
+            --installer "dist/HexShift-$version-Setup.exe" --tag $env:RELEASE_TAG
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Append feed checksums
         run: |
@@ -154,17 +155,27 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $version = $env:RELEASE_TAG.Substring(1)
-          $expected = @("HexShift-$version-Setup.exe", 'appcast.json', 'appcast.json.signature',
-            'SHA256SUMS.txt', 'HexShift.exe', 'HexShift.html', 'HexShift.zip')
+          # release asset name -> the local file it was uploaded from
+          $local = [ordered]@{
+            "HexShift-$version-Setup.exe" = "dist/HexShift-$version-Setup.exe"
+            'appcast.json' = 'appcast.json'
+            'appcast.json.signature' = 'appcast.json.signature'
+            'SHA256SUMS.txt' = 'SHA256SUMS.txt'
+            'HexShift.exe' = 'dist/HexShift.exe'
+            'HexShift.html' = 'dist/HexShift.html'
+            'HexShift.zip' = 'HexShift.zip'
+          }
           $json = gh release view $env:RELEASE_TAG --json assets,isDraft
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $release = ($json -join "`n") | ConvertFrom-Json
           if (-not $release.isDraft) { throw 'Expected a draft release.' }
-          if (@($release.assets).Count -ne $expected.Count) { throw 'The draft must contain exactly seven assets.' }
-          foreach ($name in $expected) {
+          if (@($release.assets).Count -ne $local.Count) { throw 'The draft must contain exactly seven assets.' }
+          foreach ($name in $local.Keys) {
             $asset = @($release.assets | Where-Object { $_.name -ceq $name })
-            if ($asset.Count -ne 1 -or $asset[0].size -le 0) {
-              throw "Missing, duplicate or empty draft asset: $name"
+            if ($asset.Count -ne 1) { throw "Missing or duplicate draft asset: $name" }
+            $length = (Get-Item -LiteralPath $local[$name]).Length
+            if ($length -le 0 -or $asset[0].size -ne $length) {
+              throw "Draft asset $name is $($asset[0].size) bytes but the local file is $length bytes."
             }
           }
       - name: Publish verified draft
@@ -192,4 +203,25 @@ jobs:
             }
             if ($actual -cne $expected) { throw "Published latest $file SHA-256 mismatch: expected $expected, got $actual. The release is already public." }
             Write-Output "Published latest $file SHA-256 matches: $actual"
+          }
+      # Installed copies ask the website's addresses, not GitHub's. The website is deployed separately,
+      # so this reports a problem without failing a release that is already public and correct.
+      - name: Check the website's update addresses (informational)
+        continue-on-error: true
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $download = Join-Path $env:RUNNER_TEMP ('hexshift-site-' + [guid]::NewGuid())
+          New-Item -ItemType Directory -Path $download | Out-Null
+          foreach ($file in @('appcast.json', 'appcast.json.signature')) {
+            $remote = Join-Path $download $file
+            $expected = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash
+            $actual = ''
+            for ($attempt = 1; $attempt -le 6; $attempt++) {
+              try { Invoke-WebRequest -Uri "https://thecr0wbar.xyz/updates/hexshift/$file" -OutFile $remote; $actual = (Get-FileHash -LiteralPath $remote -Algorithm SHA256).Hash }
+              catch { $actual = "request failed: $($_.Exception.Message)" }
+              if ($actual -ceq $expected) { break }
+              if ($attempt -lt 6) { Start-Sleep -Seconds 10 }
+            }
+            if ($actual -cne $expected) { throw "https://thecr0wbar.xyz/updates/hexshift/$file does not return this release's file ($actual). Installed copies check that address: deploy the website, then re-check." }
+            Write-Output "Website address for $file matches the release: $actual"
           }
