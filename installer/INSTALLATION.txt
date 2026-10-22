@@ -1,0 +1,30 @@
+HexShift - Windows installation
+
+This installer installs HexShift for the current Windows user. Administrator
+access is not required. The default location is:
+  %LOCALAPPDATA%\Programs\HexShift
+
+Launch HexShift from the Start menu or desktop shortcut. It runs in its own
+window; the editor does not require a hosted website or an Internet connection.
+Microsoft .NET Framework 4.8 and the Microsoft Edge WebView2 runtime are required.
+If WebView2 is missing, the app offers to open Microsoft's runtime download page.
+
+Your older portable HexShift.exe and its files are preserved. Version 2 uses
+a separate WebView2-v2 profile under %LOCALAPPDATA%\HexShift. Theme preferences
+may need to be selected again. Export your image before closing HexShift;
+unfinished editing sessions are not saved automatically.
+
+Remove the installed app through Windows Settings > Apps > HexShift > Uninstall.
+Uninstall removes the installed program and its shortcuts, but preserves exported
+images, the older portable copy, and HexShift's local application data.
+
+Starting with version 2.1.0, HexShift can check for updates and notify you when
+one is available. It downloads and installs an update only after you agree.
+Export your image before agreeing to close HexShift and install an update.
+Version 2.0.0 needs a manual installation of 2.1.0 to gain this update feature.
+Later installers use the same application identity to upgrade in place.
+This installer and executable are unsigned; no publisher signing identity has
+been provisioned.
+
+Source and support: https://github.com/mistercr0wbar/HexShift
+Licence and bundled component notices are included beside the executable.
