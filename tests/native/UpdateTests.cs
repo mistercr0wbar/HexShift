@@ -63,6 +63,7 @@ static partial class UpdateTests
             FeedChecks();
             SettingsChecks(work);
             NetworkChecks(work);
+            UiChecks(work);
         }
         finally { Directory.Delete(work, true); }
 

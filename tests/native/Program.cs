@@ -18,6 +18,10 @@ class HostTests
         };
         // Release gate: HostTests.exe verify-release --feed F --signature S --key K --installer I --tag vX.Y.Z
         if (argv.Length > 0 && argv[0] == "verify-release") { Environment.Exit(ReleaseCheck.Run(argv)); return; }
+        // The host's own resolver must hand out the embedded Ed25519 assembly and nothing else.
+        object ed25519 = Call("Program", "ResolveEmbedded", null, new ResolveEventArgs("Chaos.NaCl, Version=0.9.4.0, Culture=neutral, PublicKeyToken=null"));
+        Check(ed25519 is Assembly && ((Assembly)ed25519).GetName().Name == "Chaos.NaCl", "Embedded Ed25519 assembly resolves");
+        Check(Call("Program", "ResolveEmbedded", null, new ResolveEventArgs("Evil.Plugin, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null")) == null, "Unknown assemblies are not resolved");
         foreach (string uri in new[] { "https://hexshift.invalid/", "https://hexshift.invalid/index.html", "https://hexshift.invalid/HexShift.html#colour" }) Check((bool)Call("MainForm", "IsAppDocument", uri), "Allowed document " + uri);
         foreach (string uri in new[] { "https://hexshift.invalid.evil/", "https://evil/", "http://hexshift.invalid/", "file:///C:/Windows/win.ini", "javascript:alert(1)", "ms-settings:test", "https://hexshift.invalid:444/", "https://user@hexshift.invalid/", "https://hexshift.invalid/other", "https://hexshift.invalid/?remote=1" }) Check(!(bool)Call("MainForm", "IsAppDocument", uri), "Blocked document " + uri);
         string blob = "blob:https://hexshift.invalid/12345678-1234-4234-8234-123456789012";
