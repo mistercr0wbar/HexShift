@@ -1,4 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net48</TargetFramework><LangVersion>5</LangVersion><RestorePackagesWithLockFile>true</RestorePackagesWithLockFile></PropertyGroup>
-  <ItemGroup><ProjectReference Include="../../app/HexShift.csproj"/><Reference Include="System.Windows.Forms"/><Reference Include="System.Drawing"/></ItemGroup>
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>5</LangVersion>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Use the same reference assemblies whether or not a targeting pack is installed. -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="[1.0.3]" PrivateAssets="all" />
+    <ProjectReference Include="../../app/HexShift.csproj" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+  </ItemGroup>
 </Project>

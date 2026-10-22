@@ -43,7 +43,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
-          dotnet-version: "8.0.x"
+          global-json-file: global.json
       - run: dotnet restore tests/native/HostTests.csproj --locked-mode -warnaserror:NU1901,NU1902,NU1903,NU1904
       - run: dotnet build tests/native/HostTests.csproj -c Release --no-restore
       - run: ./tests/native/bin/Release/net48/HostTests.exe
@@ -69,7 +69,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
-          dotnet-version: "8.0.x"
+          global-json-file: global.json
       - run: dotnet restore app/HexShift.csproj --locked-mode -warnaserror:NU1901,NU1902,NU1903,NU1904
       - run: dotnet build app/HexShift.csproj -c Release --no-restore
       - run: ./scripts/package.ps1
