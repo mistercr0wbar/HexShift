@@ -114,6 +114,17 @@ export function inspectRaster(bytes) {
     "Choose a PNG, JPEG, WebP, GIF, or supported static SVG. The file contents must match the format.",
   );
 }
+// Filter primitives, each with the attributes it adds. Attributes are admitted
+// for every element, like the rest of the allowlist. feImage is never listed:
+// it draws other content into the render.
+const filterPrimitives = {
+  feFlood: [],
+  feBlend: ["in2", "mode"],
+  feColorMatrix: ["type", "values"],
+  feOffset: ["dx", "dy"],
+  feGaussianBlur: ["stdDeviation", "edgeMode"],
+  feComposite: ["in2", "operator", "k1", "k2", "k3", "k4"],
+};
 const tags = [
   "svg",
   "g",
@@ -134,6 +145,8 @@ const tags = [
   "stop",
   "clipPath",
   "mask",
+  "filter",
+  ...Object.keys(filterPrimitives),
 ];
 const attrs = [
   "id",
@@ -193,6 +206,17 @@ const attrs = [
   "textLength",
   "lengthAdjust",
   "href",
+  "shape-rendering",
+  "mask-type",
+  "filter",
+  "filterUnits",
+  "primitiveUnits",
+  "color-interpolation-filters",
+  "flood-color",
+  "flood-opacity",
+  "in",
+  "result",
+  ...Object.values(filterPrimitives).flat(),
 ];
 const presentation = new Set([
   "fill",
@@ -218,6 +242,38 @@ const presentation = new Set([
   "font-style",
   "text-anchor",
   "dominant-baseline",
+  "shape-rendering",
+  "mask-type",
+  "filter",
+  "color-interpolation-filters",
+  "flood-color",
+  "flood-opacity",
+]);
+// SVG ignores these as attributes, so they stay in `style`, limited to keywords.
+const styleOnly = new Map([
+  [
+    "mix-blend-mode",
+    new Set([
+      "normal",
+      "multiply",
+      "screen",
+      "overlay",
+      "darken",
+      "lighten",
+      "color-dodge",
+      "color-burn",
+      "hard-light",
+      "soft-light",
+      "difference",
+      "exclusion",
+      "hue",
+      "saturation",
+      "color",
+      "luminosity",
+      "plus-lighter",
+    ]),
+  ],
+  ["isolation", new Set(["auto", "isolate"])],
 ]);
 export function guardSvg(text) {
   if (new TextEncoder().encode(text).length > 2 * 1024 * 1024)
@@ -269,8 +325,9 @@ export function guardSvg(text) {
       throw Error(
         "Unsupported SVG element: " +
           el.localName +
-          ". Use a static vector without filters or embedded images.",
+          ". Use a static vector without scripts or embedded images.",
       );
+    const kept = [];
     if (el.hasAttribute("style")) {
       const style = el.getAttribute("style");
       if (/@|\/\*|[\\\u0000-\u001f]/.test(style))
@@ -280,6 +337,12 @@ export function guardSvg(text) {
         const colon = declaration.indexOf(":"),
           key = declaration.slice(0, colon).trim().toLowerCase(),
           val = declaration.slice(colon + 1).trim();
+        if (colon >= 0 && styleOnly.has(key)) {
+          if (!styleOnly.get(key).has(val.toLowerCase()))
+            throw Error("Unsupported SVG style declaration.");
+          kept.push(key + ":" + val.toLowerCase());
+          continue;
+        }
         if (
           colon < 0 ||
           !presentation.has(key) ||
@@ -317,6 +380,8 @@ export function guardSvg(text) {
           : a.value.match(/^url\(\s*['"]?#([\w.-]+)['"]?\s*\)$/);
       if (ref) references.push({ el, id: ref[1] });
     }
+    // Written back after the attribute check so `style` itself is never admitted raw.
+    if (kept.length) el.setAttribute("style", kept.join(";"));
     if (el.id) {
       if (!/^[\w.-]+$/.test(el.id) || ids.has(el.id))
         throw Error("SVG IDs must be unique simple identifiers.");
@@ -364,7 +429,7 @@ export function guardSvg(text) {
     new XMLSerializer().serializeToString(root),
     {
       ALLOWED_TAGS: tags,
-      ALLOWED_ATTR: [...attrs, "xmlns", "xmlns:xlink"],
+      ALLOWED_ATTR: [...attrs, "xmlns", "xmlns:xlink", "style"],
       PARSER_MEDIA_TYPE: "application/xhtml+xml",
       ALLOW_DATA_ATTR: false,
       ALLOW_ARIA_ATTR: false,

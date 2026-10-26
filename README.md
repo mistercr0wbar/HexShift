@@ -18,7 +18,7 @@ Keyboard: Ctrl/Cmd O opens, Ctrl/Cmd Z undoes, Ctrl/Cmd Shift Z redoes, F fits, 
 ## File support and privacy
 
 - PNG, JPEG, WebP and GIF: at most **16 MiB**, **4,194,304 pixels**, **8,192 pixels per side**. Animated GIF/WebP open as stills using the first frame.
-- Static SVG: at most **2 MiB**, **5,000 elements**, **64 nesting levels**. Shapes, paths, text, gradients, clipping and masks are supported. Scripts, events, external resources, embedded images, filters, animation, reuse elements and document types/entities are rejected. ViewBox-only imports rasterize to a 512px longest edge, retaining aspect ratio.
+- Static SVG: at most **2 MiB**, **5,000 elements**, **64 nesting levels**. Shapes, paths, text, gradients, clipping, masks (including `mask-type`), blend modes and filter effects such as the inner shadows in Fluent Color emoji are supported. Scripts, events, external resources, embedded images (including `feImage`), animation, reuse elements and document types/entities are rejected. ViewBox-only imports rasterize to a 512px longest edge, retaining aspect ratio.
 - Images and editing history remain in memory. Only your theme preference is stored. There are no third-party scripts, fonts, analytics, image uploads, accounts or remote-processing services. The hosted version contacts GitHub Pages to load/check the application shell; normal browser and hosting request metadata still applies. The Windows app (2.1.0 and newer) makes network requests only to check for and download updates, from `thecr0wbar.xyz` and GitHub; you can switch the automatic check off, and your images are never sent.
 - Reloading loses the editing session. Close all Hex Shift tabs after exporting to activate a pending offline update.
 

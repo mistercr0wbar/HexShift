@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-UEBvhL8p1dx4Y0JET/j6dLK1woV//837ITBejNgWccE='; style-src 'sha256-rGQ4IVXGqCeu51Cxl9aCKuoVKOoN79zAyF/z6bHXrf4='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-jPti+wnNqKhodgovAlPRBkX8wR060TKCx+hTEZdFkGg='; style-src 'sha256-rGQ4IVXGqCeu51Cxl9aCKuoVKOoN79zAyF/z6bHXrf4='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta name="theme-color" content="#6756d6" />
     <title>Hex Shift — colour, with character</title>
@@ -3761,6 +3761,14 @@ dialog p {
       "Choose a PNG, JPEG, WebP, GIF, or supported static SVG. The file contents must match the format."
     );
   }
+  var filterPrimitives = {
+    feFlood: [],
+    feBlend: ["in2", "mode"],
+    feColorMatrix: ["type", "values"],
+    feOffset: ["dx", "dy"],
+    feGaussianBlur: ["stdDeviation", "edgeMode"],
+    feComposite: ["in2", "operator", "k1", "k2", "k3", "k4"]
+  };
   var tags = [
     "svg",
     "g",
@@ -3780,7 +3788,9 @@ dialog p {
     "radialGradient",
     "stop",
     "clipPath",
-    "mask"
+    "mask",
+    "filter",
+    ...Object.keys(filterPrimitives)
   ];
   var attrs = [
     "id",
@@ -3839,7 +3849,18 @@ dialog p {
     "rotate",
     "textLength",
     "lengthAdjust",
-    "href"
+    "href",
+    "shape-rendering",
+    "mask-type",
+    "filter",
+    "filterUnits",
+    "primitiveUnits",
+    "color-interpolation-filters",
+    "flood-color",
+    "flood-opacity",
+    "in",
+    "result",
+    ...Object.values(filterPrimitives).flat()
   ];
   var presentation = /* @__PURE__ */ new Set([
     "fill",
@@ -3864,7 +3885,38 @@ dialog p {
     "font-weight",
     "font-style",
     "text-anchor",
-    "dominant-baseline"
+    "dominant-baseline",
+    "shape-rendering",
+    "mask-type",
+    "filter",
+    "color-interpolation-filters",
+    "flood-color",
+    "flood-opacity"
+  ]);
+  var styleOnly = /* @__PURE__ */ new Map([
+    [
+      "mix-blend-mode",
+      /* @__PURE__ */ new Set([
+        "normal",
+        "multiply",
+        "screen",
+        "overlay",
+        "darken",
+        "lighten",
+        "color-dodge",
+        "color-burn",
+        "hard-light",
+        "soft-light",
+        "difference",
+        "exclusion",
+        "hue",
+        "saturation",
+        "color",
+        "luminosity",
+        "plus-lighter"
+      ])
+    ],
+    ["isolation", /* @__PURE__ */ new Set(["auto", "isolate"])]
   ]);
   function guardSvg(text2) {
     if (new TextEncoder().encode(text2).length > 2 * 1024 * 1024)
@@ -3896,8 +3948,9 @@ dialog p {
         if (++depth2 > 64) throw Error("SVG nesting exceeds 64 levels.");
       if (el.namespaceURI !== root.namespaceURI || !allowedTags.has(el.localName.toLowerCase()))
         throw Error(
-          "Unsupported SVG element: " + el.localName + ". Use a static vector without filters or embedded images."
+          "Unsupported SVG element: " + el.localName + ". Use a static vector without scripts or embedded images."
         );
+      const kept = [];
       if (el.hasAttribute("style")) {
         const style = el.getAttribute("style");
         if (/@|\/\*|[\\\u0000-\u001f]/.test(style))
@@ -3905,6 +3958,12 @@ dialog p {
         for (const declaration of style.split(";")) {
           if (!declaration.trim()) continue;
           const colon = declaration.indexOf(":"), key = declaration.slice(0, colon).trim().toLowerCase(), val = declaration.slice(colon + 1).trim();
+          if (colon >= 0 && styleOnly.has(key)) {
+            if (!styleOnly.get(key).has(val.toLowerCase()))
+              throw Error("Unsupported SVG style declaration.");
+            kept.push(key + ":" + val.toLowerCase());
+            continue;
+          }
           if (colon < 0 || !presentation.has(key) || !val || /!important/i.test(val))
             throw Error("Unsupported SVG style declaration.");
           el.setAttribute(key, val);
@@ -3928,6 +3987,7 @@ dialog p {
         const ref = a.localName === "href" ? a.value.match(/^#([\w.-]+)$/) : a.value.match(/^url\(\s*['"]?#([\w.-]+)['"]?\s*\)$/);
         if (ref) references.push({ el, id: ref[1] });
       }
+      if (kept.length) el.setAttribute("style", kept.join(";"));
       if (el.id) {
         if (!/^[\w.-]+$/.test(el.id) || ids.has(el.id))
           throw Error("SVG IDs must be unique simple identifiers.");
@@ -3965,7 +4025,7 @@ dialog p {
       new XMLSerializer().serializeToString(root),
       {
         ALLOWED_TAGS: tags,
-        ALLOWED_ATTR: [...attrs, "xmlns", "xmlns:xlink"],
+        ALLOWED_ATTR: [...attrs, "xmlns", "xmlns:xlink", "style"],
         PARSER_MEDIA_TYPE: "application/xhtml+xml",
         ALLOW_DATA_ATTR: false,
         ALLOW_ARIA_ATTR: false
@@ -5436,6 +5496,27 @@ DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
 THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-</pre></template>
+
+## NetSparkleUpdater.Chaos.NaCl 0.9.4
+
+The Windows executable embeds this package for the Ed25519 signature checks that protect update downloads. https://github.com/NetSparkleUpdater/Chaos.NaCl . MIT licence:
+
+The MIT License
+
+Copyright (c) 2024 Deadpikle
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+Ed25519Signer class based on work done by BouncyCastle (https://github.com/bcgit/bc-csharp). Their license is as follows:
+
+Copyright (c) 2000-2024 The Legion of the Bouncy Castle Inc. (https://www.bouncycastle.org). Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sub license, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+Original C# port and code by Christian Winnerlein (CodesInChaos), public domain, https://github.com/CodesInChaos/Chaos.NaCl . Poly1305 by Andrew M. (floodyberry), MIT or public domain. Curve25519, Ed25519, Salsa20 and HSalsa20 from SUPERCOP ref10 by Dan Bernstein, public domain (http://bench.cr.yp.to/supercop.html). SHA512 by Christian Winnerlein, public domain.</pre></template>
   </body>
 </html>
