@@ -60,7 +60,10 @@ test("valid static SVG preserves viewBox aspect ratio; malicious inputs preserve
     svg('<image href="https://example.com/private.png"/>'),
     svg('<rect style="fill:url(https://example.com/x)"/>'),
     svg('<g id="a" clip-path="url(#a)"/>'),
-    svg('<filter id="f"/>'),
+    svg('<filter id="f"><feImage href="https://example.com/x.png"/></filter>'),
+    svg('<filter id="f"><feImage href="#r"/></filter><rect id="r"/>'),
+    svg('<rect fill="red" style="mix-blend-mode:url(#x)"/>'),
+    svg('<rect fill="red" style="mix-blend-mode:hard-mix"/>'),
     svg('<rect fill="red"/>', 'xmlns:evil="https://example.com"'),
   ]) {
     await page.locator("#fileInput").setInputFiles(bad);
@@ -289,6 +292,22 @@ test("SVG geometry, styles, gradients and hostile XML limits", async ({
     await expect(page.locator("#status")).toContainText("Could not open");
     await expect(page.locator("#fileDims")).toContainText("512 × 256");
   }
+});
+test("Fluent Color SVG filters, mask types and blend modes", async ({
+  page,
+}) => {
+  await page
+    .locator("#fileInput")
+    .setInputFiles(resolve("tests/fixtures/1st_place_medal_color.svg"));
+  await expect(page.locator("#fileDims")).toContainText("32 × 32");
+  await ready(page);
+  const shadow = svg(
+    '<defs><filter id="s" x="0" y="0" width="10" height="5" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feFlood flood-opacity="0" result="bg"/><feBlend mode="normal" in="SourceGraphic" in2="bg" result="shape"/><feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hard"/><feOffset dx="-0.2" dy="0.2"/><feGaussianBlur stdDeviation="0.2"/><feComposite in2="hard" operator="arithmetic" k2="-1" k3="1"/><feBlend mode="normal" in2="shape"/></filter><mask id="m" mask-type="alpha"><rect width="10" height="5" fill="#000"/></mask></defs><g filter="url(#s)" mask="url(#m)"><rect width="10" height="5" fill="#f00"/><rect width="10" height="5" fill="#00f" style="mix-blend-mode:multiply"/></g>',
+  );
+  await page.locator("#fileInput").setInputFiles(shadow);
+  await expect(page.locator("#fileDims")).toContainText("512 × 256");
+  await ready(page);
+  await expect(page.locator("#status")).not.toContainText("Could not open");
 });
 test("touch-sized tools, wipe comparison, keyboard text shortcuts and zoom", async ({
   page,

@@ -1,3 +1,8 @@
+param(
+    [switch]$BuildInstaller,
+    [string]$AppVersion,
+    [string]$IsccPath
+)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -21,4 +26,7 @@ $checksums = foreach ($file in $files) {
     $hash.Hash.ToLowerInvariant() + '  ' + [IO.Path]::GetFileName($file)
 }
 $checksums | Set-Content -LiteralPath (Join-Path $repoRoot 'SHA256SUMS.txt') -Encoding utf8
+if ($BuildInstaller) {
+    & (Join-Path $PSScriptRoot 'installer.ps1') -AppVersion $AppVersion -IsccPath $IsccPath
+}
 Write-Output 'Prepared dist/, HexShift.zip and SHA256SUMS.txt. No release was published.'

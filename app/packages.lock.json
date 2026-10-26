@@ -17,6 +17,12 @@
         "resolved": "1.0.4258.31",
         "contentHash": "sHVZ2MQrHT1J3q5/6csn0fIP27rzpTO/RRC+wPQDrZheB7T4t2n+vVbY6SdCKr4WRV9s/gmBM3PPMWWJtoDzMg=="
       },
+      "NetSparkleUpdater.Chaos.NaCl": {
+        "type": "Direct",
+        "requested": "[0.9.4, 0.9.4]",
+        "resolved": "0.9.4",
+        "contentHash": "bGUdkGMW/CvKFm6AMsufYJB9XpoK0TlRfIJ5yANZKhFUTSJe2gf6EO32ZgF9rT+S4h2ETdWHN/33weOnVFjWDQ=="
+      },
       "Microsoft.NETFramework.ReferenceAssemblies.net48": {
         "type": "Transitive",
         "resolved": "1.0.3",

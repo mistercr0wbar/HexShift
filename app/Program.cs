@@ -18,7 +18,7 @@ namespace HexShift
 {
     static class Program
     {
-        public const string Version = "2.0.0";
+        public const string Version = "2.1.0";
 
         [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Unicode)]
         static extern IntPtr LoadLibraryExW(string path, IntPtr reserved, uint flags);
@@ -29,8 +29,28 @@ namespace HexShift
             AppDomain.CurrentDomain.AssemblyResolve += ResolveEmbedded;
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            try { Run(); }
+            try { RejectSideBySideAssemblies(typeof(Program).Assembly.Location); Run(); }
             catch (Exception ex) { MessageBox.Show("Hex Shift could not start safely.\n\n" + ex.Message, "Hex Shift", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        }
+
+        // The three managed assemblies HexShift carries inside itself. Windows looks for a file of
+        // the same name next to the EXE (and in a folder of that name) BEFORE the resolver below is
+        // asked, and none of them can be trusted to refuse an impostor, so a planted copy would run
+        // inside HexShift, including the update signature check. Refuse to start instead. A .config
+        // file beside the EXE can redirect assembly loading the same way, and HexShift ships none.
+        internal static readonly string[] EmbeddedAssemblies = { "Microsoft.Web.WebView2.Core", "Microsoft.Web.WebView2.WinForms", "Chaos.NaCl" };
+
+        internal static void RejectSideBySideAssemblies(string exePath)
+        {
+            string folder = Path.GetDirectoryName(Path.GetFullPath(exePath));
+            if (File.Exists(exePath + ".config"))
+                throw new IOException("A file named " + Path.GetFileName(exePath) + ".config sits next to HexShift.exe and could redirect which code it loads. Remove it, or move HexShift.exe to a folder of its own.");
+            foreach (string name in EmbeddedAssemblies)
+            {
+                foreach (string candidate in new[] { Path.Combine(folder, name + ".dll"), Path.Combine(folder, name + ".exe"), Path.Combine(folder, name, name + ".dll"), Path.Combine(folder, name, name + ".exe") })
+                    if (File.Exists(candidate))
+                        throw new IOException("A file named " + name + " sits next to HexShift.exe and would replace a part HexShift carries inside itself. Remove it, or move HexShift.exe to a folder of its own.");
+            }
         }
 
         // Kept separate from Main so no WebView2 type is touched before the resolver is wired up.
@@ -54,7 +74,7 @@ namespace HexShift
         static Assembly ResolveEmbedded(object sender, ResolveEventArgs args)
         {
             string name = new AssemblyName(args.Name).Name;
-            if (name != "Microsoft.Web.WebView2.Core" && name != "Microsoft.Web.WebView2.WinForms") return null;
+            if (Array.IndexOf(EmbeddedAssemblies, name) < 0) return null;
             using (Stream s = typeof(Program).Assembly.GetManifestResourceStream(name + ".dll"))
             {
                 if (s == null) return null;
