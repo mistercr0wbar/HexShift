@@ -407,9 +407,14 @@ export async function processImage(
           ? transform(ids[i], band[i])
           : transform(ids[i]);
       if (out) {
-        for (let c = 0; c < 3; c++)
-          pixels[o + c] = data[o + c] + (out[c] - data[o + c]) * weight;
-        pixels[o + 3] = Math.round(data[o + 3] * (1 - weight * (1 - out[3])));
+        // Blend premultiplied: a partly removed key colour keeps its colour
+        // at lower opacity instead of mixing towards the unmixed black.
+        const alpha = 1 - weight * (1 - out[3]);
+        if (alpha > 0)
+          for (let c = 0; c < 3; c++)
+            pixels[o + c] =
+              (data[o + c] * (1 - weight) + out[c] * out[3] * weight) / alpha;
+        pixels[o + 3] = Math.round(data[o + 3] * alpha);
       } else pixels[o + 3] = Math.round(data[o + 3] * (1 - weight));
       if (!pixels[o + 3]) pixels.fill(0, o, o + 4);
     } else {

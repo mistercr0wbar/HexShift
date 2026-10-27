@@ -8,7 +8,12 @@ import {
 import { History } from "./history.js";
 import { decodeBlob } from "./import.js";
 import { encode, outputName } from "./export.js";
-import { finish, resize, outlineRadius } from "./output.js";
+import {
+  finish,
+  resize,
+  outlineRadius,
+  shrinkSilhouette,
+} from "./output.js";
 import sample from "./sample.js";
 import { makePause } from "./yield.js";
 const $ = (id) => document.getElementById(id),
@@ -776,7 +781,14 @@ async function renderPreview() {
     bh = Math.max(1, Math.round(h * scale));
   let base;
   try {
-    base = await finish(resize(source, w, h, bw, bh), bw, bh, finishSettings());
+    base = await finish(
+      resize(source, w, h, bw, bh),
+      bw,
+      bh,
+      finishSettings(),
+      undefined,
+      scale < 1 ? shrinkSilhouette(source, w, h, bw, bh) : undefined,
+    );
   } catch {
     return;
   }

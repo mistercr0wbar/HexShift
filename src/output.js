@@ -52,10 +52,16 @@ export async function distanceField(inside, w, h, yieldFn = async () => {}) {
 // Outline radius in pixels for a width given as a percentage of the longest side.
 export const outlineRadius = (w, h, widthPct) =>
   (Math.max(w, h) * widthPct) / 100;
-// Paints an anti-aliased stroke of `rgb` around the silhouette (alpha >= 128),
-// under the artwork. The canvas grows only where the transparent margin is
-// narrower than the stroke.
-export async function outline(pixels, w, h, { widthPct, rgb }, yieldFn) {
+// Paints an anti-aliased stroke of `rgb` around the silhouette (alpha >= 128,
+// or a given `silhouette` mask of the same size), under the artwork. The
+// canvas grows only where the transparent margin is narrower than the stroke.
+export async function outline(
+  pixels,
+  w,
+  h,
+  { widthPct, rgb, silhouette },
+  yieldFn,
+) {
   const r = outlineRadius(w, h, widthPct);
   if (!(r > 0)) return { pixels, width: w, height: h };
   let minX = w,
@@ -76,9 +82,9 @@ export async function outline(pixels, w, h, { widthPct, rgb }, yieldFn) {
     top = Math.max(0, reach - minY),
     W = w + left + Math.max(0, reach - (w - 1 - maxX)),
     H = h + top + Math.max(0, reach - (h - 1 - maxY));
-  if (W * H > MAX_PIXELS)
+  if (W * H > MAX_PIXELS || W > 8192 || H > 8192)
     throw Error(
-      "The outline would make the image larger than 4,194,304 pixels. Use a thinner outline or a smaller image.",
+      "The outline would make the image larger than 4,194,304 pixels or 8,192 pixels on a side. Use a thinner outline or a smaller image.",
     );
   const art = new Uint8ClampedArray(W * H * 4),
     inside = new Uint8Array(W * H);
@@ -87,7 +93,11 @@ export async function outline(pixels, w, h, { widthPct, rgb }, yieldFn) {
       pixels.subarray(y * w * 4, (y + 1) * w * 4),
       ((y + top) * W + left) * 4,
     );
-  for (let i = 0; i < W * H; i++) inside[i] = art[i * 4 + 3] >= 128 ? 1 : 0;
+  if (silhouette)
+    for (let y = 0; y < h; y++)
+      inside.set(silhouette.subarray(y * w, (y + 1) * w), (y + top) * W + left);
+  else
+    for (let i = 0; i < W * H; i++) inside[i] = art[i * 4 + 3] >= 128 ? 1 : 0;
   const dist = await distanceField(inside, W, H, yieldFn),
     out = new Uint8ClampedArray(W * H * 4);
   for (let i = 0; i < W * H; i++) {
@@ -166,8 +176,22 @@ export function resize(pixels, w, h, ow, oh) {
     }
   return out;
 }
+// The silhouette (alpha >= 128) of a full-size image at a smaller size: an
+// output pixel is inside if any source pixel it covers is. Shrinking the image
+// first would fade thin lines below the threshold and drop their outline.
+export function shrinkSilhouette(pixels, w, h, ow, oh) {
+  const out = new Uint8Array(ow * oh);
+  for (let y = 0; y < h; y++) {
+    const oy = Math.min(oh - 1, Math.floor((y * oh) / h));
+    for (let x = 0; x < w; x++)
+      if (pixels[(y * w + x) * 4 + 3] >= 128)
+        out[oy * ow + Math.min(ow - 1, Math.floor((x * ow) / w))] = 1;
+  }
+  return out;
+}
 // The export pipeline: what is saved, copied and shown in the output preview.
-export async function finish(pixels, w, h, settings = {}, yieldFn) {
+// `silhouette` lets a reduced preview keep the full-size outline shape.
+export async function finish(pixels, w, h, settings = {}, yieldFn, silhouette) {
   let out = { pixels, width: w, height: h };
   const rgb = settings.outline && parseHex(settings.outline.colour);
   if (rgb && settings.outline.widthPct > 0)
@@ -175,7 +199,7 @@ export async function finish(pixels, w, h, settings = {}, yieldFn) {
       out.pixels,
       out.width,
       out.height,
-      { widthPct: settings.outline.widthPct, rgb },
+      { widthPct: settings.outline.widthPct, rgb, silhouette },
       yieldFn,
     );
   return out;

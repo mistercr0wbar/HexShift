@@ -198,6 +198,15 @@ test("clean edges remove a white background without a pale halo", async () => {
     new Int8Array(3),
   );
   assert.equal(plain.pixels[3], 0);
+  const feathered = await processImage(
+    im,
+    { ...p, feather: 1 },
+    [{ x: 0, y: 0 }],
+    new Int8Array(3),
+  );
+  // Partly removed white stays white (premultiplied blend), not grey.
+  assert.deepEqual([...feathered.pixels.slice(0, 3)], [255, 255, 255]);
+  assert.ok(feathered.pixels[3] > 0 && feathered.pixels[3] < 255);
   const brushOnly = await processImage(
     im,
     p,

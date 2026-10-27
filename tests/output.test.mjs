@@ -6,6 +6,7 @@ import {
   resize,
   finish,
   outlineRadius,
+  shrinkSilhouette,
 } from "../src/output.js";
 let seed = 11;
 const random = () =>
@@ -72,6 +73,39 @@ test("outline refuses to exceed the export pixel limit", async () => {
     outline(pixels, size, size, { widthPct: 5, rgb: [0, 0, 0] }),
     /4,194,304/,
   );
+});
+test("outline refuses to exceed the encoders' 8,192-pixel side limit", async () => {
+  const pixels = new Uint8ClampedArray(8192 * 4).fill(255);
+  await assert.rejects(
+    outline(pixels, 8192, 1, { widthPct: 0.5, rgb: [0, 0, 0] }),
+    /8,192 pixels on a side/,
+  );
+});
+test("reduced previews keep the outline of thin features", async () => {
+  // A one-pixel opaque line on 64x64 fades to alpha 64 when shrunk to 16x16.
+  const size = 64,
+    line = new Uint8ClampedArray(size * size * 4);
+  for (let x = 8; x < 56; x++) line.set([255, 0, 0, 255], (32 * size + x) * 4);
+  const small = resize(line, size, size, 16, 16),
+    plain = await finish(small, 16, 16, {
+      outline: { widthPct: 10, colour: "#FFFFFF" },
+    }),
+    kept = await finish(
+      small,
+      16,
+      16,
+      { outline: { widthPct: 10, colour: "#FFFFFF" } },
+      undefined,
+      shrinkSilhouette(line, size, size, 16, 16),
+    );
+  const white = (image) => {
+    let n = 0;
+    for (let i = 0; i < image.length; i += 4)
+      if (image[i] === 255 && image[i + 1] === 255 && image[i + 3] === 255) n++;
+    return n;
+  };
+  assert.equal(white(plain.pixels), 0);
+  assert.ok(white(kept.pixels) > 10);
 });
 test("resize averages premultiplied, so transparent neighbours don't darken", () => {
   const pair = new Uint8ClampedArray([255, 0, 0, 255, 0, 0, 0, 0]);
