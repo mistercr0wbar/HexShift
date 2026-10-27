@@ -352,8 +352,14 @@ test("colour names, rgb() and the screen picker set the target", async ({
     "true",
   );
   await page.addInitScript(() => {
+    let calls = 0;
     window.EyeDropper = class {
       async open() {
+        if (calls++)
+          throw new DOMException(
+            "The user canceled the selection.",
+            "AbortError",
+          );
         return { sRGBHex: "#248046" };
       }
     };
@@ -365,6 +371,8 @@ test("colour names, rgb() and the screen picker set the target", async ({
   await expect(page.locator("#targetResult")).toContainText(
     "Requested #248046",
   );
+  await page.locator("#eyeDropper").click();
+  await expect(page.locator("#status")).toHaveText("No colour was picked.");
   const context = await browser.newContext(),
     plain = await context.newPage();
   await plain.addInitScript(() => delete window.EyeDropper);
@@ -372,6 +380,53 @@ test("colour names, rgb() and the screen picker set the target", async ({
   await ready(plain);
   await expect(plain.locator("#eyeDropper")).toBeHidden();
   await context.close();
+});
+test("in the Windows app the screen picker asks the host and takes only its answer", async ({
+  page,
+}) => {
+  // Stands in for WebView2's chrome.webview and the host's replies.
+  await page.addInitScript(() => {
+    const listeners = [];
+    window.chrome = window.chrome || {};
+    window.chrome.webview = {
+      sent: [],
+      postMessage(message) {
+        this.sent.push(message);
+      },
+      addEventListener(type, listener) {
+        if (type === "message") listeners.push(listener);
+      },
+      reply(data) {
+        for (const listener of listeners) listener({ data });
+      },
+    };
+    // WebView2 has EyeDropper too, but the host's picker is the one used.
+    window.EyeDropper = class {
+      async open() {
+        throw new Error("EyeDropper was used");
+      }
+    };
+  });
+  await page.reload();
+  await ready(page);
+  await pick(page);
+  await page.locator("#eyeDropper").click();
+  expect(await page.evaluate(() => window.chrome.webview.sent)).toEqual([
+    "pick-colour",
+  ]);
+  const reply = (data) =>
+    page.evaluate((d) => window.chrome.webview.reply(d), data);
+  await reply({ type: "picked-colour", hex: "#248046" });
+  await expect(page.locator("#targetResult")).toContainText(
+    "Requested #248046",
+  );
+  await reply({ type: "picked-colour", hex: null });
+  await expect(page.locator("#status")).toHaveText("No colour was picked.");
+  await reply({ type: "something-else", hex: "#FF0000" });
+  await reply("#FF0000");
+  await expect(page.locator("#targetResult")).toContainText(
+    "Requested #248046",
+  );
 });
 test("palettes open from files and paste, and save as GIMP palettes", async ({
   page,

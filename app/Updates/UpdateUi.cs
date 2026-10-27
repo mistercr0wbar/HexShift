@@ -1,9 +1,9 @@
 // Hex Shift - the update notice.
 //
 // A slim bar across the top of the window, plain WinForms, never a modal window: it says
-// an update exists, shows progress, and asks before anything is installed. The page
-// itself cannot talk to the host (web messages are switched off on purpose), so none of
-// this goes through the page. "Check for updates" lives in the window's system menu
+// an update exists, shows progress, and asks before anything is installed. The only
+// thing the page can ask the host for is the screen colour picker (ScreenPicker.cs),
+// so none of this goes through the page. "Check for updates" lives in the window's system menu
 // (right-click the title bar, or Alt+Space).
 //
 // C# 5 on purpose, like the rest of the host.

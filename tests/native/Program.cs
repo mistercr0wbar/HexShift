@@ -57,6 +57,7 @@ class HostTests
         }
         finally { Directory.Delete(dir, true); }
         Console.WriteLine(checks + " native host policy/integrity checks passed.");
+        Console.WriteLine(PickerTests.Run() + " screen picker checks passed.");
         Console.WriteLine(UpdateTests.Run() + " update policy, feed, download and install checks passed.");
     }
 }
