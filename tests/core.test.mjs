@@ -17,6 +17,7 @@ import { History } from "../src/history.js";
 import { inspectRaster, dimensions } from "../src/import.js";
 import { outputName, losslessWebP, losslessPNG } from "../src/export.js";
 import sharp from "sharp";
+import sample from "../src/sample.js";
 const fixture = () =>
   new Uint8ClampedArray([
     255, 0, 0, 255, 0, 0, 255, 128, 255, 0, 0, 255, 120, 120, 120, 255,
@@ -129,6 +130,101 @@ test("near-white parts shift to one tint despite noisy hues", async () => {
       out = await processImage(im, p, [{ x: 0, y: 0 }], new Int8Array(3)),
       hues = [0, 1, 2].map((i) => rgbToHsl(...out.pixels.slice(i * 4, i * 4 + 3))[0]);
     for (const hue of hues) assert.ok(hueDistance(hue, hues[0]) < 4, model + hues);
+  }
+});
+test("the built-in heart becomes one even colour, with no rim of red along its outline", async () => {
+  const { data, info } = await sharp(
+      Buffer.from(sample.split(",")[1], "base64"),
+    )
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true }),
+    im = await prepare(info.width, info.height, new Uint8ClampedArray(data)),
+    seed = { x: im.palette[0].x, y: im.palette[0].y },
+    o = (seed.y * info.width + seed.x) * 4;
+  // The app's own flow: click the main colour, then type a target.
+  for (const target of ["#5865F2", "#248046", "#00D9FF"]) {
+    const p = {
+        ...defaults(),
+        target,
+        ...deltasFor([...data.subarray(o, o + 3)], parseHex(target), "oklch"),
+      },
+      out = await processImage(
+        im,
+        p,
+        [seed],
+        new Int8Array(info.width * info.height),
+      ),
+      hue = rgbToOklch(...parseHex(target))[2];
+    let off = 0;
+    for (let i = 0; i < out.pixels.length; i += 4) {
+      if (out.pixels[i + 3] < 64) continue;
+      const [, C, h] = rgbToOklch(...out.pixels.slice(i, i + 3));
+      if (C > 0.04 && hueDistance(h, hue) > 8) off++;
+    }
+    assert.equal(off, 0, target);
+  }
+});
+test("outline blends shift with the fill; other colours and soft fades are kept", async () => {
+  // Blue | red fill | dark red blend (out of shade tolerance) | black outline,
+  // then an orange that only soft hue tolerance partly selects.
+  const data = new Uint8ClampedArray([
+      0, 0, 255, 255, 255, 0, 0, 255, 40, 20, 20, 255, 0, 0, 0, 255, 255, 153,
+      0, 255,
+    ]),
+    im = await prepare(5, 1, data),
+    target = "#248046",
+    p = {
+      ...defaults(),
+      target,
+      ...deltasFor([255, 0, 0], parseHex(target), "oklch"),
+    },
+    out = await processImage(im, p, [{ x: 1, y: 0 }], new Int8Array(5)),
+    hue = rgbToOklch(...parseHex(target))[2],
+    px = (i) => [...out.pixels.slice(i * 4, i * 4 + 3)];
+  assert.deepEqual(px(0), [0, 0, 255]);
+  assert.equal(toHex(...px(1)), target);
+  assert.ok(hueDistance(rgbToOklch(...px(2))[2], hue) < 8, String(px(2)));
+  assert.deepEqual(px(3), [0, 0, 0]);
+  // A pixel partly selected for its hue (the orange), or for its shade away
+  // from any outline (a muted red fading from the fill inside the artwork),
+  // keeps its partial weight: partway between itself and fully shifted.
+  const fade = new Uint8ClampedArray([255, 0, 0, 255, 191, 64, 64, 255]),
+    cases = [
+      [im, data, out, 4, 1, 5],
+      [
+        await prepare(2, 1, fade),
+        fade,
+        await processImage(
+          await prepare(2, 1, fade),
+          p,
+          [{ x: 0, y: 0 }],
+          new Int8Array(2),
+        ),
+        1,
+        0,
+        2,
+      ],
+    ];
+  for (const [image, source, result, i, seed, n] of cases) {
+    const weight = result.mask[i],
+      full = await processImage(
+        image,
+        { ...p, hueTol: 180, shadeTol: 100, soft: 0 },
+        [{ x: seed, y: 0 }],
+        new Int8Array(n),
+      );
+    assert.ok(weight > 0 && weight < 1, String(weight));
+    for (let k = 0; k < 3; k++) {
+      const o = i * 4 + k;
+      assert.ok(
+        Math.abs(
+          result.pixels[o] -
+            (source[o] + (full.pixels[o] - source[o]) * weight),
+        ) <= 1,
+        String([...result.pixels.slice(i * 4, i * 4 + 3)]),
+      );
+    }
   }
 });
 test("OKLCH matches reference values, round-trips and maps out-of-gamut colours", () => {

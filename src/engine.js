@@ -13,6 +13,11 @@ import { mainDeltas, rampSamples, rampShift } from "./tones.js";
 export const MAX_PIXELS = 4194304;
 // Pixels whose HSL chroma is below this are treated as neutral (grey).
 const NEUTRAL = 0.06;
+// How far (pixels) a shift reaches past the selection into an anti-aliased edge.
+const EDGE_RINGS = 2;
+// HSL lightness below which a pixel counts as an outline, as near-neutral
+// pixels do.
+const OUTLINE_DARK = 0.2;
 export function validateImage(w, h, data) {
   if (
     !Number.isInteger(w) ||
@@ -294,6 +299,34 @@ export async function selectMask(image, p, seeds, overrides, check) {
   }
   return { mask, weight, nearest, source, count, opaque };
 }
+// Chessboard distance to the nearest pixel where `start(i)` holds: 1 on those
+// pixels, 2..EDGE_RINGS + 1 within EDGE_RINGS of one, 0 further away.
+async function rings(w, h, start, check) {
+  const n = w * h,
+    d = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    if ((i & 16383) === 0) await check();
+    if (start(i)) d[i] = 1;
+  }
+  for (let ring = 2; ring <= EDGE_RINGS + 1; ring++)
+    for (let i = 0; i < n; i++) {
+      if ((i & 16383) === 0) await check();
+      if (d[i]) continue;
+      const x = i % w,
+        y = (i - x) / w;
+      for (let dy = -1; dy <= 1 && !d[i]; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx,
+            yy = y + dy,
+            j = yy * w + xx;
+          if (xx >= 0 && xx < w && yy >= 0 && yy < h && d[j] && d[j] < ring) {
+            d[i] = ring;
+            break;
+          }
+        }
+    }
+  return d;
+}
 // The anchor is the last usable seed's colour; a brush-only selection uses the
 // mask-weighted mean colour instead.
 function anchorColour(image, sel) {
@@ -311,10 +344,12 @@ function anchorColour(image, sel) {
     }
   return total ? sum.map((v) => Math.round(v / total)) : null;
 }
-// Shift: hue rotates by dh. With shading protection the anchor's saturation
+// Shift: every shade takes the target hue (anchor + dh), so a red-to-pink
+// heart becomes one blue rather than violet-to-azure; shading lives in
+// saturation and lightness. With shading protection the anchor's saturation
 // and lightness land exactly on anchor + delta and other shades follow the
 // remap curves; without it, deltas are added (and may clip). A neutral anchor
-// has no meaningful hue, so hue and saturation are set rather than shifted.
+// has no meaningful saturation to keep, so it is set rather than shifted.
 function shifter(p, anchorRgb) {
   const [ah, as, al] = toModel(anchorRgb, p.model),
     neutral = rgbToHsl(...anchorRgb)[3] < NEUTRAL,
@@ -324,9 +359,9 @@ function shifter(p, anchorRgb) {
     tl = clamp(rawL, 0, 1),
     th = ah + p.dh;
   const shift = (rgb) => {
-    const [h, s, l] = toModel(rgb, p.model);
+    const [, s, l] = toModel(rgb, p.model);
     return fromModel(
-      neutral ? th : h + p.dh,
+      th,
       neutral
         ? ts
         : p.protect
@@ -456,11 +491,71 @@ export async function processImage(
           }
         }
     }
+  // A shift has the same problem along an outline: the blend from a bright
+  // fill into a dark outline is darker and greyer than the fill, so shade
+  // tolerance leaves it out or only partly in, and a rim of the old colour
+  // remains. Such a pixel is the same colour in another shade (its hue is
+  // within tolerance; its shade is what keeps it out), which the shading
+  // curves already handle, so it shifts fully when it lies within EDGE_RINGS
+  // pixels of both the selection and an outline (a near-neutral or dark
+  // pixel). Edges into transparency blend through alpha, not colour, and fades
+  // into other colours inside the artwork keep the soft blend, as does
+  // feathering.
+  const full = new Uint8Array(
+    anchor && p.mode === "shift" && sel.source.length && !p.feather ? n : 0,
+  );
+  if (full.length) {
+    const { hsl } = image,
+      shadeBound = new Uint8Array(hsl.length / 4),
+      toSelection = await rings(w, h, (i) => mask[i] > 0, check),
+      toOutline = await rings(
+        w,
+        h,
+        (i) =>
+          ids[i] >= 0 &&
+          (hsl[ids[i] * 4 + 3] < NEUTRAL || hsl[ids[i] * 4 + 2] < OUTLINE_DARK),
+        check,
+      );
+    for (let c = 0; c < shadeBound.length; c++) {
+      if ((c & 16383) === 0) await check();
+      const o = c * 4,
+        v = sel.source[sel.nearest[c]].v;
+      if (hsl[o + 3] < NEUTRAL || v[3] < NEUTRAL) continue;
+      const hd = hueDistance(hsl[o], v[0]),
+        shade = Math.max(
+          Math.abs(hsl[o + 1] - v[1]),
+          Math.abs(hsl[o + 2] - v[2]),
+        ),
+        byHue = p.hueTol ? hd / p.hueTol : hd < 0.5 ? 0 : Infinity,
+        byShade = p.shadeTol
+          ? shade / (p.shadeTol / 100)
+          : shade < 0.004
+            ? 0
+            : Infinity;
+      shadeBound[c] = byHue <= 1 && byShade >= byHue ? 1 : 0;
+    }
+    for (let i = 0; i < n; i++) {
+      if ((i & 16383) === 0) await check();
+      const c = ids[i];
+      // Pixels whose colour matched but were excluded (connected regions,
+      // subtract brush) stay as they are.
+      if (
+        c >= 0 &&
+        mask[i] < 1 &&
+        overrides[i] >= 0 &&
+        !(mask[i] <= 0 && sel.weight[c] > 0) &&
+        shadeBound[c] &&
+        toSelection[i] &&
+        toOutline[i]
+      )
+        full[i] = 1;
+    }
+  }
   let changed = 0;
   for (let i = 0; i < n; i++) {
     if ((i & 16383) === 0) await check();
     const edge = unmixing && band[i] >= 0,
-      weight = edge ? 1 : mask[i];
+      weight = edge || full[i] ? 1 : mask[i];
     if (weight <= 0) continue;
     const o = i * 4;
     if (p.mode === "transparent") {
