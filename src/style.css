@@ -314,6 +314,47 @@ label {
 #customSize[aria-invalid="true"] {
   outline: 2px solid var(--warn);
 }
+.palette-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 8px 0 4px;
+}
+.variants {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(66px, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+.variants.stale {
+  opacity: 0.45;
+}
+.variant {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 5px 3px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--subtle);
+  font-size: 10px;
+  line-height: 1.2;
+  min-width: 0;
+}
+.variant canvas {
+  width: 56px;
+  height: 56px;
+}
+.variant span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#makeVariants {
+  margin-top: 10px;
+}
 #sizeReadout p + p {
   margin-top: 2px;
 }

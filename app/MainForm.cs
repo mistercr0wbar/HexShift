@@ -150,6 +150,7 @@ namespace HexShift
             { "image/png", new[] { ".png", "PNG image (*.png)|*.png", "Save the shifted image" } },
             { "image/webp", new[] { ".webp", "WebP image (*.webp)|*.webp", "Save the shifted image" } },
             { "application/zip", new[] { ".zip", "ZIP archive (*.zip)|*.zip", "Save the emoji pack" } },
+            { "application/x-gimp-palette", new[] { ".gpl", "GIMP palette (*.gpl)|*.gpl", "Save the palette" } },
         };
 
         internal static bool IsExportDownload(string document, string url, string mime)

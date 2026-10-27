@@ -25,8 +25,8 @@ class HostTests
         foreach (string uri in new[] { "https://hexshift.invalid/", "https://hexshift.invalid/index.html", "https://hexshift.invalid/HexShift.html#colour" }) Check((bool)Call("MainForm", "IsAppDocument", uri), "Allowed document " + uri);
         foreach (string uri in new[] { "https://hexshift.invalid.evil/", "https://evil/", "http://hexshift.invalid/", "file:///C:/Windows/win.ini", "javascript:alert(1)", "ms-settings:test", "https://hexshift.invalid:444/", "https://user@hexshift.invalid/", "https://hexshift.invalid/other", "https://hexshift.invalid/?remote=1" }) Check(!(bool)Call("MainForm", "IsAppDocument", uri), "Blocked document " + uri);
         string blob = "blob:https://hexshift.invalid/12345678-1234-4234-8234-123456789012";
-        foreach (string mime in new[] { "image/png", "image/webp", "application/zip" }) Check((bool)Call("MainForm", "IsExportDownload", "https://hexshift.invalid/", blob, mime), "Allowed export download " + mime);
-        foreach (string mime in new[] { "application/octet-stream", "text/html", "image/svg+xml", "application/x-zip-compressed", "APPLICATION/ZIP", "" }) Check(!(bool)Call("MainForm", "IsExportDownload", "https://hexshift.invalid/", blob, mime), "Blocked download MIME " + mime);
+        foreach (string mime in new[] { "image/png", "image/webp", "application/zip", "application/x-gimp-palette" }) Check((bool)Call("MainForm", "IsExportDownload", "https://hexshift.invalid/", blob, mime), "Allowed export download " + mime);
+        foreach (string mime in new[] { "application/octet-stream", "text/html", "image/svg+xml", "application/x-zip-compressed", "APPLICATION/ZIP", "text/plain", "application/x-gimp-palette; charset=utf-8", "" }) Check(!(bool)Call("MainForm", "IsExportDownload", "https://hexshift.invalid/", blob, mime), "Blocked download MIME " + mime);
         Check(!(bool)Call("MainForm", "IsExportDownload", "https://hexshift.invalid/", blob, null), "Missing download MIME denied");
         Check(!(bool)Call("MainForm", "IsExportDownload", "https://evil/", blob, "image/png"), "Untrusted download document");
         Check(!(bool)Call("MainForm", "IsExportDownload", "https://hexshift.invalid/", "https://evil/a.png", "image/png"), "Remote download denied");
@@ -34,6 +34,8 @@ class HostTests
         Check((bool)Call("MainForm", "HasExportExtension", "image.PNG", ".png"), "PNG extension allowed");
         Check((bool)Call("MainForm", "HasExportExtension", "image.webp", ".webp"), "WebP extension allowed");
         Check((bool)Call("MainForm", "HasExportExtension", "pack.ZIP", ".zip"), "ZIP extension allowed");
+        Check((bool)Call("MainForm", "HasExportExtension", "skin tones.gpl", ".gpl"), "GIMP palette extension allowed");
+        Check(!(bool)Call("MainForm", "HasExportExtension", "palette.gpl.exe", ".gpl"), "Executable named like a palette denied");
         Check(!(bool)Call("MainForm", "HasExportExtension", "image.exe", ".png"), "Executable extension denied");
         Check(!(bool)Call("MainForm", "HasExportExtension", "image.webp", ".png"), "Mismatched export extension denied");
         Check(!(bool)Call("MainForm", "HasExportExtension", "pack.zip", ".png"), "ZIP name for a PNG denied");

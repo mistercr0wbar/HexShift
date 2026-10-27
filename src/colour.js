@@ -47,6 +47,44 @@ export function parseHex(value) {
     ? [0, 2, 4].map((i) => parseInt(s.slice(i, i + 2), 16))
     : null;
 }
+// Typed colours: hex (with or without #), rgb() and hsl() in comma or space
+// syntax. Only opaque colours; [r, g, b] or null. The page falls back to the
+// browser's own CSS parser for colour names and newer syntaxes.
+export function parseColour(value) {
+  const s = String(value).trim().toLowerCase();
+  const hex = parseHex(s);
+  if (hex) return hex;
+  const m = /^(rgba?|hsla?)\(\s*([^)]*?)\s*\)$/.exec(s);
+  if (!m) return null;
+  const parts = m[2].split(/\s*[,/]\s*|\s+/);
+  if (parts.length < 3 || parts.length > 4) return null;
+  // A number, a percentage of `scale`, or degrees.
+  const num = (t, scale) => {
+    const v = /^(-?(?:\d+\.?\d*|\.\d+))(%|deg)?$/.exec(t);
+    if (!v) return NaN;
+    return v[2] === "%" ? (Number(v[1]) * scale) / 100 : Number(v[1]);
+  };
+  if (parts.length === 4 && num(parts[3], 1) !== 1) return null;
+  if (m[1].startsWith("rgb")) {
+    const rgb = parts.slice(0, 3).map((t) => num(t, 255));
+    return rgb.every((v) => v >= 0 && v <= 255)
+      ? rgb.map((v) => Math.round(v))
+      : null;
+  }
+  const [hue, sat, light] = [
+    num(parts[0], 1),
+    num(parts[1], 1),
+    num(parts[2], 1),
+  ];
+  if (
+    !Number.isFinite(hue) ||
+    !/%$/.test(parts[1]) ||
+    !/%$/.test(parts[2]) ||
+    !(sat >= 0 && sat <= 1 && light >= 0 && light <= 1)
+  )
+    return null;
+  return hslToRgb(hue, sat, light);
+}
 export const toHex = (r, g, b) =>
   "#" +
   [r, g, b]
@@ -59,18 +97,25 @@ const toLinear = Float32Array.from({ length: 256 }, (_, i) => {
   return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
 });
 const fromLinear = (x) =>
-  255 * (x <= 0.0031308 ? 12.92 * x : 1.055 * Math.max(0, x) ** (1 / 2.4) - 0.055);
+  255 *
+  (x <= 0.0031308 ? 12.92 * x : 1.055 * Math.max(0, x) ** (1 / 2.4) - 0.055);
 export function rgbToOklch(r, g, b) {
   const lr = toLinear[r],
     lg = toLinear[g],
     lb = toLinear[b];
-  const l = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb),
+  const l = Math.cbrt(
+      0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb,
+    ),
     m = Math.cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb),
     s = Math.cbrt(0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb);
   const L = 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
     A = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
     B = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s;
-  return [L, Math.hypot(A, B), ((Math.atan2(B, A) * 180) / Math.PI + 360) % 360];
+  return [
+    L,
+    Math.hypot(A, B),
+    ((Math.atan2(B, A) * 180) / Math.PI + 360) % 360,
+  ];
 }
 function oklchToLinear(L, C, h) {
   const a = C * Math.cos((h * Math.PI) / 180),
@@ -144,6 +189,7 @@ export const defaults = () => ({
   protect: true,
   model: "oklch",
   cleanEdges: true,
+  ramp: null,
   mode: "shift",
   target: "#00D9FF",
 });

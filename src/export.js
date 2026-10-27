@@ -1,18 +1,24 @@
 import { makePause } from "./yield.js";
+// A file name stem with no path, control or bidi characters and no Windows
+// device name.
+export function safeStem(name) {
+  const stem =
+    String(name)
+      .replace(/\.[^.]*$/, "")
+      .replace(/[\x00-\x1f\x7f<>:"/\\|?*\u202a-\u202e\u2066-\u2069]/g, "_")
+      .replace(/[. ]+$/, "")
+      .slice(0, 80) || "image";
+  return /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(stem)
+    ? "image-" + stem
+    : stem;
+}
 export function outputName(
   name,
   format = "png",
   target = "shifted",
   suffix = "",
 ) {
-  let stem =
-    String(name)
-      .replace(/\.[^.]*$/, "")
-      .replace(/[\x00-\x1f\x7f<>:"/\\|?*\u202a-\u202e\u2066-\u2069]/g, "_")
-      .replace(/[. ]+$/, "")
-      .slice(0, 80) || "image";
-  if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(stem))
-    stem = "image-" + stem;
+  const stem = safeStem(name);
   const tag = /^#[\da-f]{6}$/i.test(target)
     ? target.slice(1).toLowerCase()
     : "shifted";

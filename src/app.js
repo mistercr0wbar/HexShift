@@ -1,4 +1,11 @@
-import { defaults, parseHex, toHex, clamp, deltasFor } from "./colour.js";
+import {
+  defaults,
+  parseHex,
+  parseColour,
+  toHex,
+  clamp,
+  deltasFor,
+} from "./colour.js";
 import {
   prepare,
   processImage,
@@ -7,7 +14,7 @@ import {
 } from "./engine.js";
 import { History } from "./history.js";
 import { decodeBlob } from "./import.js";
-import { canEncodeWebP, formatBytes, outputName } from "./export.js";
+import { canEncodeWebP, formatBytes, outputName, safeStem } from "./export.js";
 import { deliver } from "./deliver.js";
 import { finish, resize, outlineRadius, shrinkSilhouette } from "./output.js";
 import {
@@ -18,6 +25,13 @@ import {
   CUSTOM_MAX,
 } from "./presets.js";
 import { zip } from "./zip.js";
+import {
+  SETS,
+  MAX_PALETTE_BYTES,
+  isPaletteFile,
+  parsePalette,
+  writeGpl,
+} from "./palettes.js";
 import sample from "./sample.js";
 import { makePause } from "./yield.js";
 const $ = (id) => document.getElementById(id),
@@ -140,7 +154,10 @@ function makeSlider(parent, key, label, min, max, unit) {
     begin();
     params[key] = clamp(Number(value) || 0, min, max);
     range.value = number.value = params[key];
-    if (["dh", "ds", "dl"].includes(key)) params.manual = true;
+    if (["dh", "ds", "dl"].includes(key)) {
+      params.manual = true;
+      params.ramp = null;
+    }
     syncTarget();
     schedule();
   };
@@ -232,25 +249,90 @@ const DISCORD_BUTTONS = [
   ["Success", "#248046"],
   ["Danger", "#DA373C"],
 ];
-for (const [label, hex] of DISCORD_BUTTONS) {
-  const b = swatch(hex, label + " " + hex, () => setTarget(hex));
-  const text = document.createElement("span");
-  text.textContent = label;
-  b.append(text);
-  $("presets").append(b);
+// Palettes: the built-in sets plus any opened or pasted this session (kept in
+// memory only, like images).
+const paletteSets = SETS.map((set) => ({ ...set }));
+let userSets = 0;
+function addSetOption(set) {
+  const option = document.createElement("option");
+  option.value = set.id;
+  option.textContent = set.label;
+  $("paletteSet").append(option);
 }
-function targetDeltas() {
-  if (!seeds.length || params.manual) return;
+for (const set of paletteSets) addSetOption(set);
+const currentSet = () =>
+  paletteSets.find((set) => set.id === $("paletteSet").value) || paletteSets[0];
+function useEntry(entry) {
+  if (entry.ramp) setRamp(entry.ramp);
+  else setTarget(entry.hex);
+}
+function renderSet() {
+  const set = currentSet(),
+    named =
+      set.entries.length <= 8 && set.entries.some((e) => e.label !== e.hex),
+    box = $("presets");
+  box.className = "swatches" + (named ? " named" : "");
+  box.replaceChildren(
+    ...set.entries.map((entry) => {
+      const b = swatch(
+        entry.hex,
+        entry.label +
+          " " +
+          (entry.ramp
+            ? entry.ramp.join(" ")
+            : entry.label === entry.hex
+              ? ""
+              : entry.hex),
+        () => useEntry(entry),
+      );
+      if (entry.ramp)
+        b.style.background =
+          "linear-gradient(135deg, " + entry.ramp.join(", ") + ")";
+      if (named) {
+        const text = document.createElement("span");
+        text.textContent = entry.label;
+        b.append(text);
+      }
+      return b;
+    }),
+  );
+  clearVariants();
+}
+$("paletteSet").onchange = renderSet;
+// Typed colours: hex, rgb() and hsl() directly; colour names and newer CSS
+// syntax through the browser's own parser (opaque colours only).
+const probe = document
+  .createElement("canvas")
+  .getContext("2d", { willReadFrequently: true });
+function readColour(value) {
+  const direct = parseColour(value);
+  if (direct) return direct;
+  const text = String(value).trim();
+  if (
+    !text ||
+    text.length > 64 ||
+    /^(currentcolor|inherit|initial|unset|revert)/i.test(text) ||
+    !CSS.supports("color", text)
+  )
+    return null;
+  probe.clearRect(0, 0, 1, 1);
+  probe.fillStyle = "#000";
+  probe.fillStyle = text;
+  probe.fillRect(0, 0, 1, 1);
+  const [r, g, b, a] = probe.getImageData(0, 0, 1, 1).data;
+  return a === 255 ? [r, g, b] : null;
+}
+// Deltas that move the last sample onto `hex` in `model`, or null without one.
+function deltasTo(hex, model) {
+  if (!seeds.length) return null;
   const sd = seeds.at(-1),
     o = (sd.y * w + sd.x) * 4;
-  Object.assign(
-    params,
-    deltasFor(
-      [...pixels.subarray(o, o + 3)],
-      parseHex(params.target),
-      params.model,
-    ),
-  );
+  return deltasFor([...pixels.subarray(o, o + 3)], parseHex(hex), model);
+}
+function targetDeltas() {
+  if (params.manual) return;
+  const deltas = deltasTo(params.target, params.model);
+  if (deltas) Object.assign(params, deltas);
 }
 function syncTarget() {
   const transparent = params.mode === "transparent";
@@ -294,6 +376,17 @@ function setTarget(hex) {
   if (!rgb) return;
   action("Target colour", () => {
     params.target = toHex(...rgb);
+    params.ramp = null;
+    params.manual = false;
+    targetDeltas();
+  });
+  rememberTarget(params.target);
+}
+function setRamp(ramp) {
+  action("Skin tone", () => {
+    params.ramp = ramp.slice();
+    params.target = ramp[0];
+    params.mode = params.mode === "transparent" ? "shift" : params.mode;
     params.manual = false;
     targetDeltas();
   });
@@ -500,7 +593,9 @@ function receive(m) {
         ? "Selected pixels become transparent."
         : (params.manual && params.mode === "shift"
             ? "Manual shift"
-            : "Requested " + params.target) +
+            : params.ramp && params.mode === "shift"
+              ? "Tone " + params.ramp.join(" · ")
+              : "Requested " + params.target) +
           " · achieved " +
           toHex(...m.pixels.subarray(o, o + 3));
   } else $("targetResult").textContent = "Pick a source colour to begin.";
@@ -709,20 +804,8 @@ async function save(copy = false) {
         filename = pack
           ? outputName(name, "zip", params.target, settings.size)
           : named[0].name,
-        over = files.filter((f) => f.limit && f.blob.size > f.limit),
-        url = URL.createObjectURL(blob);
-      try {
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = filename;
-        document.body.append(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 30000);
-      } catch (e) {
-        URL.revokeObjectURL(url);
-        throw e;
-      }
+        over = files.filter((f) => f.limit && f.blob.size > f.limit);
+      download(blob, filename);
       status(
         "Prepared " +
           filename +
@@ -742,6 +825,22 @@ async function save(copy = false) {
   } finally {
     delete button.dataset.busy;
     buttons();
+  }
+}
+// Hands a file to the browser's download (Save As in the Windows app).
+function download(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  } catch (e) {
+    URL.revokeObjectURL(url);
+    throw e;
   }
 }
 function displayPixels(data, selection) {
@@ -790,6 +889,7 @@ function draw() {
     "inset(0 " + (100 - Number($("wipe").value)) + "% 0 0)";
   renderPreview();
   scheduleReadout();
+  markVariants();
 }
 // Export finishing settings. UI-only: not part of the edit history.
 function finishSettings() {
@@ -801,7 +901,7 @@ function finishSettings() {
   if ($("outline").checked)
     settings.outline = {
       widthPct: Number($("outlineWidth").value),
-      colour: $("outlineHex").value,
+      colour: toHex(...(readColour($("outlineHex").value) || [255, 255, 255])),
     };
   return settings;
 }
@@ -891,7 +991,7 @@ $("outlineColour").oninput = (e) => {
   outlineControls();
 };
 $("outlineHex").addEventListener("input", (e) => {
-  const rgb = parseHex(e.target.value);
+  const rgb = readColour(e.target.value);
   e.target.setAttribute("aria-invalid", String(!rgb));
   if (rgb) {
     $("outlineColour").value = toHex(...rgb).toLowerCase();
@@ -1035,6 +1135,237 @@ async function sizeReadout() {
   box.replaceChildren(...lines);
 }
 sizeControls();
+// `source` is a File or pasted text.
+async function openPalette(source, label) {
+  try {
+    if (typeof source !== "string" && source.size > MAX_PALETTE_BYTES)
+      throw Error("Palette files must be 256 KB or smaller.");
+    const entries = parsePalette(
+        typeof source === "string" ? source : await source.text(),
+      ),
+      set = {
+        id: "user-" + ++userSets,
+        label:
+          String(label || "Palette")
+            .replace(/\.[^.]*$/, "")
+            .slice(0, 60) || "Palette",
+        entries,
+      };
+    paletteSets.push(set);
+    addSetOption(set);
+    $("paletteSet").value = set.id;
+    $("palettePanel").open = true;
+    renderSet();
+    status(
+      "Opened " +
+        set.label +
+        " with " +
+        entries.length +
+        (entries.length === 1 ? " colour." : " colours."),
+    );
+  } catch (e) {
+    status("Could not open palette: " + e.message);
+  }
+}
+$("openPalette").onclick = () => $("paletteInput").click();
+$("paletteInput").onchange = (e) => {
+  const f = e.target.files[0];
+  if (f) openPalette(f, f.name);
+  e.target.value = "";
+};
+// Skin tones are saved with every colour of each tone.
+$("savePalette").onclick = () => {
+  const set = currentSet(),
+    entries = set.entries.flatMap((e) =>
+      e.ramp
+        ? e.ramp.map((hex, i) => ({
+            hex,
+            label: e.label + (i ? " shade " + i : ""),
+          }))
+        : [e],
+    ),
+    filename = safeStem(set.label.replace(/ · /g, " ")) + ".gpl";
+  download(
+    new Blob([writeGpl(set.label, entries)], {
+      type: "application/x-gimp-palette",
+    }),
+    filename,
+  );
+  status("Prepared " + filename + ". Choose where to save it.");
+};
+if ("EyeDropper" in window) {
+  $("eyeDropper").hidden = false;
+  $("eyeDropper").onclick = async () => {
+    try {
+      const { sRGBHex } = await new window.EyeDropper().open(),
+        rgb = readColour(sRGBHex);
+      if (rgb) setTarget(toHex(...rgb));
+    } catch (e) {
+      if (e.name !== "AbortError")
+        status("Could not pick from the screen: " + e.message);
+    }
+  };
+}
+// Variants: the current selection and treatment once per palette colour (a
+// tone's ramp for skin tones). Each uses the same steps as clicking that
+// colour, so a variant matches the edit it previews byte for byte.
+const MAX_VARIANTS = 64;
+let variantRun = 0,
+  variantsKey = null,
+  mainImage = null;
+function variantParams(entry) {
+  const p = structuredClone(params);
+  p.ramp = entry.ramp ? entry.ramp.slice() : null;
+  p.target = entry.ramp ? entry.ramp[0] : entry.hex;
+  p.manual = false;
+  Object.assign(p, deltasTo(p.target, p.model) || {});
+  return p;
+}
+// What a variant depends on, apart from its colour.
+function selectionKey() {
+  let sum = 0;
+  for (let i = 0; i < overrides.length; i++)
+    if (overrides[i]) sum = (sum * 31 + (i + 1) * overrides[i]) % 2147483647;
+  const { target, ramp, dh, ds, dl, manual, ...rest } = params;
+  return JSON.stringify([imageId, seeds, rest, sum]);
+}
+// A main-thread copy of the prepared image for variants (the worker keeps its own).
+async function variantImage() {
+  if (prepared && !worker) return prepared;
+  if (mainImage?.id !== imageId)
+    mainImage = { id: imageId, image: await prepare(w, h, pixels, pause) };
+  return mainImage.image;
+}
+function clearVariants() {
+  variantRun++;
+  variantsKey = null;
+  $("variants").hidden =
+    $("exportVariants").hidden =
+    $("variantsNote").hidden =
+      true;
+  $("variants").replaceChildren();
+}
+function markVariants() {
+  $("makeVariants").disabled = !pixels || params.mode === "transparent";
+  if (variantsKey === null) return;
+  const stale = selectionKey() !== variantsKey;
+  $("variants").classList.toggle("stale", stale);
+  $("variantsNote").hidden = !stale;
+  $("variantsNote").textContent =
+    "The selection or treatment changed. Make variants again to update the previews; export always uses the current selection.";
+}
+async function makeVariants() {
+  const run = ++variantRun,
+    entries = currentSet().entries.slice(0, MAX_VARIANTS);
+  commit("Adjust colour");
+  try {
+    const image = await variantImage(),
+      key = selectionKey(),
+      dpr = window.devicePixelRatio || 1,
+      box = Math.round(56 * dpr),
+      fit = box / Math.max(w, h),
+      tw = Math.max(1, Math.round(w * fit)),
+      th = Math.max(1, Math.round(h * fit));
+    if (run !== variantRun) return;
+    const tiles = entries.map((entry) => {
+      const tile = document.createElement("button"),
+        canvas = document.createElement("canvas"),
+        label = document.createElement("span");
+      tile.type = "button";
+      tile.className = "variant";
+      tile.title = "Use " + entry.label;
+      canvas.width = canvas.height = box;
+      canvas.setAttribute("aria-hidden", "true");
+      label.textContent = entry.label;
+      tile.append(canvas, label);
+      tile.onclick = () => useEntry(entry);
+      return { tile, canvas, entry };
+    });
+    $("variants").replaceChildren(...tiles.map((t) => t.tile));
+    $("variants").classList.remove("stale");
+    $("variants").hidden = false;
+    $("variantsNote").hidden = true;
+    variantsKey = key;
+    status("Making " + entries.length + " variants…");
+    for (const { canvas, entry } of tiles) {
+      const r = await processImage(
+        image,
+        variantParams(entry),
+        structuredClone(seeds),
+        overrides.slice(),
+        pause,
+        () => run !== variantRun,
+      );
+      if (run !== variantRun) return;
+      canvas
+        .getContext("2d")
+        .putImageData(
+          new ImageData(resize(r.pixels, w, h, tw, th), tw, th),
+          (box - tw) >> 1,
+          (box - th) >> 1,
+        );
+    }
+    $("exportVariants").hidden = false;
+    status(
+      "Made " +
+        entries.length +
+        " variants. Click one to use it, or export them all.",
+    );
+  } catch (e) {
+    if (run === variantRun) status("Could not make variants: " + e.message);
+  }
+}
+async function exportVariants() {
+  const button = $("exportVariants");
+  if (button.dataset.busy) return;
+  button.dataset.busy = "true";
+  try {
+    const set = currentSet(),
+      entries = set.entries.slice(0, MAX_VARIANTS),
+      image = await variantImage(),
+      settings = finishSettings(),
+      files = [];
+    for (const [i, entry] of entries.entries()) {
+      status("Exporting variant " + (i + 1) + " of " + entries.length + "…");
+      const p = variantParams(entry),
+        r = await processImage(
+          image,
+          p,
+          structuredClone(seeds),
+          overrides.slice(),
+          pause,
+        );
+      for (const f of await deliver(r.pixels, w, h, settings, pause))
+        files.push({
+          name: outputName(name, f.format, p.target, f.suffix),
+          blob: f.blob,
+        });
+    }
+    const blob = await zip(files),
+      filename =
+        safeStem(name) +
+        "-variants-" +
+        (set.id.startsWith("user-") ? "palette" : set.id) +
+        ".zip";
+    download(blob, filename);
+    status(
+      "Prepared " +
+        filename +
+        " (" +
+        formatBytes(blob.size) +
+        ", " +
+        files.length +
+        " files). Choose where to save it.",
+    );
+  } catch (e) {
+    status("Could not export variants: " + e.message);
+  } finally {
+    delete button.dataset.busy;
+  }
+}
+$("makeVariants").onclick = makeVariants;
+$("exportVariants").onclick = exportVariants;
+renderSet();
 function layout() {
   if (!w) return;
   const pane = after.parentElement;
@@ -1239,17 +1570,23 @@ for (const c of [before, after]) {
   });
 }
 $("open").onclick = () => $("fileInput").click();
+// Palette files (.gpl, .hex, .pal, .txt) open as palettes, anything else as an image.
+function openFile(f) {
+  if (isPaletteFile(f)) openPalette(f, f.name);
+  else openBlob(f, f.name);
+}
 $("fileInput").onchange = (e) => {
   const f = e.target.files[0];
-  if (f) openBlob(f, f.name);
+  if (f) openFile(f);
   e.target.value = "";
 };
 $("targetHex").addEventListener("input", (e) => {
   begin();
-  const rgb = parseHex(e.target.value);
+  const rgb = readColour(e.target.value);
   e.target.setAttribute("aria-invalid", String(!rgb));
   if (rgb) {
     params.target = toHex(...rgb);
+    params.ramp = null;
     params.manual = false;
     targetDeltas();
     syncTarget();
@@ -1258,14 +1595,18 @@ $("targetHex").addEventListener("input", (e) => {
 });
 $("targetHex").addEventListener("change", () => {
   commit("Target colour");
-  if (parseHex($("targetHex").value)) {
+  if (readColour($("targetHex").value)) {
     rememberTarget(params.target);
     sync();
-  } else status("Enter a 3- or 6-digit hex colour, such as #00D9FF.");
+  } else
+    status(
+      "Enter a colour such as #00D9FF, rgb(0 217 255), hsl(190 100% 50%) or a colour name.",
+    );
 });
 $("targetColour").oninput = (e) => {
   begin();
   params.target = e.target.value.toUpperCase();
+  params.ramp = null;
   params.manual = false;
   targetDeltas();
   $("targetHex").value = params.target;
@@ -1422,7 +1763,7 @@ document.addEventListener("drop", (e) => {
   depth = 0;
   $("dropOverlay").hidden = true;
   const f = e.dataTransfer?.files[0];
-  if (f) openBlob(f, f.name);
+  if (f) openFile(f);
 });
 document.addEventListener("paste", (e) => {
   for (const item of e.clipboardData?.items || [])
@@ -1432,8 +1773,22 @@ document.addEventListener("paste", (e) => {
         e.preventDefault();
         openBlob(f, "pasted.png");
       }
-      break;
+      return;
     }
+  // Text pasted outside a text field: one colour becomes the target, several
+  // become a palette.
+  const text = e.clipboardData?.getData("text/plain");
+  if (!text || e.target.closest?.("input, textarea, select, [contenteditable]"))
+    return;
+  let entries;
+  try {
+    entries = parsePalette(text);
+  } catch {
+    return;
+  }
+  e.preventDefault();
+  if (entries.length === 1) setTarget(entries[0].hex);
+  else openPalette(text, "Pasted palette");
 });
 window.addEventListener("resize", layout);
 new ResizeObserver(layout).observe($("viewport"));
