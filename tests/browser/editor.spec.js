@@ -492,6 +492,115 @@ test("variants preview each colour and export the same bytes as a single edit", 
   await expect(page.locator("#variantsNote")).toBeVisible();
   await expect(page.locator("#variants")).toHaveClass(/stale/);
 });
+const raw = async (bytes) =>
+  (await sharp(bytes).ensureAlpha().raw().toBuffer({ resolveWithObject: true }))
+    .data;
+test("the colour map changes several colours at once, with undo", async ({
+  page,
+}) => {
+  const rows = page.locator("#colourMap .map-select");
+  await pick(page);
+  await page.locator("#targetHex").fill("#248046");
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText("→ #248046");
+  await page.locator("#addRow").click();
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(1)).toHaveAttribute("aria-pressed", "true");
+  await expect(rows.nth(1)).toContainText("Pick a colour");
+  await page.getByRole("button", { name: "Pick #000000" }).click();
+  await expect(page.locator("#cancel")).toBeHidden();
+  await page.locator("#targetHex").fill("#FFFFFF");
+  await expect(rows.nth(1)).toContainText("#000000 → #FFFFFF");
+  await expect(page.locator("#cancel")).toBeHidden();
+  await expect(rows.nth(1)).toContainText(" px");
+  // One export carries both: a green heart with a white outline.
+  const both = await exportFile(page),
+    source = await raw(Buffer.from(sample.split(",")[1], "base64")),
+    out = await raw(both.bytes);
+  expect(both.name).toMatch(/-shifted\.png$/);
+  const centre = (64 * 128 + 64) * 4;
+  expect(out[centre + 1]).toBeGreaterThan(out[centre] + 40);
+  let outline = 0;
+  for (let i = 0; i < source.length; i += 4)
+    if (
+      source[i + 3] === 255 &&
+      source[i] + source[i + 1] + source[i + 2] === 0
+    ) {
+      expect(Math.min(out[i], out[i + 1], out[i + 2])).toBeGreaterThan(230);
+      outline++;
+    }
+  expect(outline).toBeGreaterThan(20);
+  // Each row keeps its own target; removing one is undoable.
+  await rows.first().click();
+  await expect(page.locator("#targetHex")).toHaveValue("#248046");
+  await page.getByRole("button", { name: "Remove colour 2" }).click();
+  await expect(rows).toHaveCount(1);
+  await page.locator("#undo").click();
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(1)).toContainText("#000000 → #FFFFFF");
+});
+test("map all colours, then save a recipe, apply it and batch it into a ZIP", async ({
+  page,
+}) => {
+  const rows = page.locator("#colourMap .map-select");
+  await page.locator("#mapAll").click();
+  await expect(rows).toHaveCount(2);
+  await expect(rows.first()).toContainText("unchanged");
+  await expect(page.locator("#editState")).toHaveText("No pending edit");
+  await page.locator("#targetHex").fill("#5865F2");
+  await expect(page.locator("#editState")).toHaveText("Pending edit");
+  await expect(page.locator("#cancel")).toBeHidden();
+  const edited = await raw((await exportFile(page)).bytes);
+  await page.locator("#recipePanel summary").click();
+  const saving = page.waitForEvent("download");
+  await page.locator("#saveRecipe").click();
+  const file = await saving;
+  expect(file.suggestedFilename()).toBe("red_heart-recipe.json");
+  const text = await readFile(await file.path(), "utf8"),
+    recipe = JSON.parse(text);
+  expect(recipe).toMatchObject({ format: "hexshift-recipe", version: 1 });
+  expect(recipe.steps).toHaveLength(1);
+  expect(recipe.steps[0].rows).toHaveLength(2);
+  // On a fresh page the recipe gives the same pixels.
+  await page.reload();
+  await ready(page);
+  await page.locator("#recipePanel summary").click();
+  await page.locator("#recipeInput").setInputFiles({
+    name: "heart.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(text),
+  });
+  await expect(page.locator("#status")).toContainText("Applied heart.json");
+  await expect(page.locator("#cancel")).toBeHidden();
+  const replayed = await raw((await exportFile(page)).bytes);
+  expect(Buffer.compare(replayed, edited)).toBe(0);
+  // A malformed recipe is refused without touching the image.
+  await page.locator("#recipeInput").setInputFiles({
+    name: "bad.json",
+    mimeType: "application/json",
+    buffer: Buffer.from('{"format":"hexshift-recipe","version":9,"steps":[]}'),
+  });
+  await expect(page.locator("#status")).toContainText("newer version");
+  // Batch: two images and one broken file, into one ZIP.
+  const heart = Buffer.from(sample.split(",")[1], "base64"),
+    batching = page.waitForEvent("download");
+  await page.locator("#batchInput").setInputFiles([
+    { name: "one.png", mimeType: "image/png", buffer: heart },
+    { name: "two.png", mimeType: "image/png", buffer: heart },
+    { name: "broken.png", mimeType: "image/png", buffer: Buffer.from("nope") },
+  ]);
+  const batch = await batching;
+  expect(batch.suggestedFilename()).toBe("hexshift-batch.zip");
+  const files = unzip(await readFile(await batch.path()));
+  expect(Object.keys(files).sort()).toEqual([
+    "errors.txt",
+    "one-shifted.png",
+    "two-shifted.png",
+  ]);
+  expect(files["errors.txt"].toString()).toContain("broken.png");
+  expect(Buffer.compare(await raw(files["one-shifted.png"]), edited)).toBe(0);
+  await expect(page.locator("#batchNote")).toContainText("Done: 2 of 3 images");
+});
 test("brush overrides, history and preview background do not alter export alpha", async ({
   page,
 }) => {

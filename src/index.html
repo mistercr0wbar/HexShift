@@ -73,6 +73,20 @@
               <h2><span>01</span> Colour</h2>
               <span id="editState" class="badge">No pending edit</span>
             </div>
+            <p class="small-label" id="colourMapLabel">Colour map</p>
+            <div
+              id="colourMap"
+              class="colour-map"
+              role="group"
+              aria-labelledby="colourMapLabel"
+            ></div>
+            <div class="palette-actions">
+              <button id="addRow" class="text-button" type="button">
+                + Add colour</button
+              ><button id="mapAll" class="text-button" type="button">
+                Map all colours
+              </button>
+            </div>
             <label for="mode">Treatment</label
             ><select id="mode">
               <option value="shift">Shift colour · keep shading</option>
@@ -155,12 +169,22 @@
                 (.gpl), Lospec (.hex), JASC (.pal) or Paint.NET (.txt) palettes,
                 or a list of hex colours.
               </p>
-              <button id="makeVariants" class="button full" type="button" disabled>
+              <button
+                id="makeVariants"
+                class="button full"
+                type="button"
+                disabled
+              >
                 Make a variant for each colour
               </button>
               <p id="variantsNote" class="readout" hidden></p>
               <div id="variants" class="variants" hidden></div>
-              <button id="exportVariants" class="button full" type="button" hidden>
+              <button
+                id="exportVariants"
+                class="button full"
+                type="button"
+                hidden
+              >
                 Export all variants (ZIP)
               </button>
             </details>
@@ -169,7 +193,7 @@
               <div id="recent" class="swatches"></div>
             </div>
             <button id="apply" class="button full" disabled>
-              Apply & select next colour →
+              Apply, then build on the result →
             </button>
           </section>
           <section>
@@ -238,7 +262,8 @@
                 <option value="2048">2048 px</option>
               </select>
             </div>
-            <label for="size">Size</label><select id="size"></select>
+            <label for="size">Size</label
+            ><select id="size"></select>
             <div id="customSizeGroup" hidden>
               <label for="customSize">Longest side in pixels</label
               ><input
@@ -300,9 +325,44 @@
               Copy PNG to clipboard
             </button>
             <p class="help">
-              Export includes your current preview, outline and size. Apply is
-              only needed before selecting the next colour.
+              Export includes every colour in your map, plus the outline and
+              size. Apply is only needed to build one change on another.
             </p>
+            <details id="recipePanel">
+              <summary>Recipes and batch</summary>
+              <p class="help">
+                A recipe repeats your colour changes on other images. It keeps
+                colours, not places, so brush strokes and connected-region
+                limits are left out.
+              </p>
+              <div class="palette-actions">
+                <button id="saveRecipe" class="text-button" type="button">
+                  Save recipe</button
+                ><button id="openRecipe" class="text-button" type="button">
+                  Apply a recipe…
+                </button>
+              </div>
+              <input
+                id="recipeInput"
+                type="file"
+                accept=".json,application/json"
+                hidden
+              />
+              <button id="batch" class="button full" type="button" disabled>
+                Apply to many images…
+              </button>
+              <input
+                id="batchInput"
+                type="file"
+                accept="image/*,.svg"
+                multiple
+                hidden
+              />
+              <p id="batchNote" class="readout" aria-live="polite"></p>
+              <button id="cancelBatch" class="button full" type="button" hidden>
+                Cancel batch
+              </button>
+            </details>
           </section>
           <div class="privacy">
             <span aria-hidden="true">◈</span> Images stay on your device.<br /><span
@@ -445,9 +505,9 @@
               are drawn at 512 px on their longest side; change it under SVG
               drawn at. All exports are still images. Sizes for Discord, Slack,
               Twitch, Telegram, WhatsApp and YouTube fit and centre the artwork
-              and show the file size against each limit. Preview backgrounds never change
-              exported transparency. For a background, Clean edges works best
-              with Only connected regions.
+              and show the file size against each limit. Preview backgrounds
+              never change exported transparency. For a background, Clean edges
+              works best with Only connected regions.
             </p>
           </details>
         </div>
