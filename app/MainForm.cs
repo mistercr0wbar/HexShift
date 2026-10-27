@@ -22,9 +22,13 @@ namespace HexShift
         readonly WebView2 web;
         readonly bool dark;
         readonly UpdateController updates;
+        readonly ScreenPicker picker = new ScreenPicker();
 
         [DllImport("dwmapi.dll")]
         static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+
+        [DllImport("user32.dll")]
+        static extern IntPtr GetForegroundWindow();
 
         public MainForm(string dataDir)
         {
@@ -112,7 +116,8 @@ namespace HexShift
             core.Settings.IsZoomControlEnabled = true;
             core.Settings.AreBrowserAcceleratorKeysEnabled = true;
             core.Settings.AreHostObjectsAllowed = false;
-            core.Settings.IsWebMessageEnabled = false;
+            // Only for the screen colour picker: the page may send "pick-colour" and nothing else.
+            core.Settings.IsWebMessageEnabled = true;
             core.Settings.IsGeneralAutofillEnabled = false;
             core.Settings.IsPasswordAutosaveEnabled = false;
             core.Settings.AreDefaultScriptDialogsEnabled = false;
@@ -122,6 +127,7 @@ namespace HexShift
             core.WebResourceRequested += ServePage;
             core.DownloadStarting += OnDownloadStarting;
             core.NewWindowRequested += OnNewWindow;
+            core.WebMessageReceived += OnWebMessage;
             core.LaunchingExternalUriScheme += delegate(object s, CoreWebView2LaunchingExternalUriSchemeEventArgs args) { args.Cancel = true; };
             core.NavigationStarting += delegate(object s, CoreWebView2NavigationStartingEventArgs args) { args.Cancel = !IsAppDocument(args.Uri); };
             core.FrameNavigationStarting += delegate(object s, CoreWebView2NavigationStartingEventArgs args) { args.Cancel = true; };
@@ -237,6 +243,28 @@ namespace HexShift
         void OnNewWindow(object sender, CoreWebView2NewWindowRequestedEventArgs e)
         {
             e.Handled = true;
+        }
+
+        // The page's screen-picker button. WebView2 will not open the browser's own screen picker, so
+        // the host shows one (ScreenPicker.cs) and sends back the colour, or null.
+        void OnWebMessage(object sender, CoreWebView2WebMessageReceivedEventArgs e)
+        {
+            string message = null;
+            try { message = e.TryGetWebMessageAsString(); } catch (ArgumentException) { }
+            if (!ScreenPick.IsRequest(e.Source, message) || picker.Busy) return;
+            // Only while someone is using Hex Shift: the page cannot cover the screen behind their back.
+            if (GetForegroundWindow() != Handle) { SendPick(null); return; }
+            picker.Start(delegate(string hex)
+            {
+                Activate();
+                web.Focus();
+                SendPick(hex);
+            });
+        }
+
+        void SendPick(string hex)
+        {
+            if (web.CoreWebView2 != null) web.CoreWebView2.PostWebMessageAsJson(ScreenPick.Reply(hex));
         }
 
         internal static void OpenExternal(string url)

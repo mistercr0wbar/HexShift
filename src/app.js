@@ -1381,16 +1381,29 @@ $("savePalette").onclick = () => {
   );
   status("Prepared " + filename + ". Choose where to save it.");
 };
-if ("EyeDropper" in window) {
+// Picking a colour from the screen. The Windows app shows its own picker, because
+// WebView2 cancels the browser's EyeDropper before it opens; elsewhere EyeDropper
+// does it. A cancel is reported too, so the button never seems to do nothing.
+function screenPicked(hex) {
+  const rgb = typeof hex === "string" ? readColour(hex) : null;
+  if (rgb) setTarget(toHex(...rgb));
+  else status("No colour was picked.");
+}
+const host = window.chrome?.webview;
+if (host) {
+  $("eyeDropper").hidden = false;
+  $("eyeDropper").onclick = () => host.postMessage("pick-colour");
+  host.addEventListener("message", (e) => {
+    if (e.data?.type === "picked-colour") screenPicked(e.data.hex);
+  });
+} else if ("EyeDropper" in window) {
   $("eyeDropper").hidden = false;
   $("eyeDropper").onclick = async () => {
     try {
-      const { sRGBHex } = await new window.EyeDropper().open(),
-        rgb = readColour(sRGBHex);
-      if (rgb) setTarget(toHex(...rgb));
+      screenPicked((await new window.EyeDropper().open()).sRGBHex);
     } catch (e) {
-      if (e.name !== "AbortError")
-        status("Could not pick from the screen: " + e.message);
+      if (e.name === "AbortError") screenPicked(null);
+      else status("Could not pick from the screen: " + e.message);
     }
   };
 }

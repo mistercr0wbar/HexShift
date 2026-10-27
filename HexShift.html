@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Issrex0mQdlCZfFVkQGByZqRCVX6ktRheDCsugTfeaE='; style-src 'sha256-67Lt0xzbsBbiGJeP3FtMivrwOtv79EckUL6MWb1LKV4='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-yqFD919e3p3XHySSQFaRlGNwNRdbW4ov9CL5DtEu05M='; style-src 'sha256-67Lt0xzbsBbiGJeP3FtMivrwOtv79EckUL6MWb1LKV4='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta name="theme-color" content="#6756d6" />
     <title>Hex Shift — colour, with character</title>
@@ -7123,15 +7123,26 @@ dialog p {
     );
     status("Prepared " + filename + ". Choose where to save it.");
   };
-  if ("EyeDropper" in window) {
+  function screenPicked(hex) {
+    const rgb = typeof hex === "string" ? readColour(hex) : null;
+    if (rgb) setTarget(toHex(...rgb));
+    else status("No colour was picked.");
+  }
+  var host = window.chrome?.webview;
+  if (host) {
+    $("eyeDropper").hidden = false;
+    $("eyeDropper").onclick = () => host.postMessage("pick-colour");
+    host.addEventListener("message", (e) => {
+      if (e.data?.type === "picked-colour") screenPicked(e.data.hex);
+    });
+  } else if ("EyeDropper" in window) {
     $("eyeDropper").hidden = false;
     $("eyeDropper").onclick = async () => {
       try {
-        const { sRGBHex } = await new window.EyeDropper().open(), rgb = readColour(sRGBHex);
-        if (rgb) setTarget(toHex(...rgb));
+        screenPicked((await new window.EyeDropper().open()).sRGBHex);
       } catch (e) {
-        if (e.name !== "AbortError")
-          status("Could not pick from the screen: " + e.message);
+        if (e.name === "AbortError") screenPicked(null);
+        else status("Could not pick from the screen: " + e.message);
       }
     };
   }
