@@ -333,6 +333,164 @@ test("SVGs draw at the chosen size and redraw only after confirmation", async ({
   await expect(page.locator("#fileDims")).toHaveText("128 × 128");
   await expect(page.locator("#svgSizeGroup")).toBeHidden();
 });
+test("colour names, rgb() and the screen picker set the target", async ({
+  page,
+  browser,
+}) => {
+  await pick(page);
+  await page.locator("#targetHex").fill("rebeccapurple");
+  await expect(page.locator("#targetResult")).toContainText(
+    "Requested #663399",
+  );
+  await page.locator("#targetHex").fill("rgb(88 101 242)");
+  await expect(page.locator("#targetResult")).toContainText(
+    "Requested #5865F2",
+  );
+  await page.locator("#targetHex").fill("not a colour");
+  await expect(page.locator("#targetHex")).toHaveAttribute(
+    "aria-invalid",
+    "true",
+  );
+  await page.addInitScript(() => {
+    window.EyeDropper = class {
+      async open() {
+        return { sRGBHex: "#248046" };
+      }
+    };
+  });
+  await page.reload();
+  await ready(page);
+  await pick(page);
+  await page.locator("#eyeDropper").click();
+  await expect(page.locator("#targetResult")).toContainText(
+    "Requested #248046",
+  );
+  const context = await browser.newContext(),
+    plain = await context.newPage();
+  await plain.addInitScript(() => delete window.EyeDropper);
+  await plain.goto("/");
+  await ready(plain);
+  await expect(plain.locator("#eyeDropper")).toBeHidden();
+  await context.close();
+});
+test("palettes open from files and paste, and save as GIMP palettes", async ({
+  page,
+}) => {
+  await page.locator("#palettePanel summary").click();
+  await page.locator("#paletteInput").setInputFiles({
+    name: "brand.gpl",
+    mimeType: "application/octet-stream",
+    buffer: Buffer.from(
+      "GIMP Palette\nName: Brand\n#\n 18 171  52\tGreen\n255 128   0\tOrange\n",
+    ),
+  });
+  await expect(page.locator("#paletteSet")).toHaveValue(/^user-/);
+  await expect(page.locator("#presets button")).toHaveCount(2);
+  await pick(page);
+  await page.getByRole("button", { name: "Green #12AB34" }).click();
+  await expect(page.locator("#targetResult")).toContainText(
+    "Requested #12AB34",
+  );
+  // A palette dropped or opened as an image file is still read as a palette.
+  await page.locator("#fileInput").setInputFiles({
+    name: "lospec.hex",
+    mimeType: "text/plain",
+    buffer: Buffer.from("ff0000\n00ff00\n0000ff\n"),
+  });
+  await expect(page.locator("#presets button")).toHaveCount(3);
+  await expect(page.locator("#fileDims")).toHaveText("128 × 128");
+  // Firefox hides the data of a synthetic paste event, so this part runs
+  // where the browser passes it through.
+  const synthetic = await page.evaluate(() => {
+    const data = new DataTransfer();
+    data.setData("text/plain", "x");
+    return (
+      new ClipboardEvent("paste", {
+        clipboardData: data,
+      }).clipboardData?.getData("text/plain") === "x"
+    );
+  });
+  if (synthetic) {
+    await page.evaluate(() => {
+      const data = new DataTransfer();
+      data.setData("text/plain", "#111111, #222222, #333333, #444444");
+      document.dispatchEvent(
+        new ClipboardEvent("paste", { clipboardData: data, bubbles: true }),
+      );
+    });
+    await expect(page.locator("#presets button")).toHaveCount(4);
+    await expect(page.locator("#paletteSet option:checked")).toHaveText(
+      "Pasted palette",
+    );
+  }
+  await page.locator("#paletteSet").selectOption("skin-noto");
+  const download = page.waitForEvent("download");
+  await page.locator("#savePalette").click();
+  const file = await download;
+  expect(file.suggestedFilename()).toBe("Skin tones Noto.gpl");
+  const text = await readFile(await file.path(), "utf8");
+  expect(text.startsWith("GIMP Palette\nName: Skin tones · Noto\n")).toBe(true);
+  expect(text).toContain("249 221 189\tLight");
+  expect(text).toContain("178 104  48\tLight shade 2");
+  expect(
+    text
+      .trim()
+      .split("\n")
+      .filter((l) => /^\s*\d/.test(l)),
+  ).toHaveLength(14);
+});
+test("variants preview each colour and export the same bytes as a single edit", async ({
+  page,
+}) => {
+  await pick(page);
+  await page.locator("#palettePanel summary").click();
+  await page.locator("#makeVariants").click();
+  await expect(page.locator("#variants .variant")).toHaveCount(4);
+  await expect(page.locator("#exportVariants")).toBeVisible();
+  const lit = await page
+    .locator("#variants canvas")
+    .first()
+    .evaluate((c) => {
+      const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+      let n = 0;
+      for (let i = 3; i < d.length; i += 4) if (d[i]) n++;
+      return n;
+    });
+  expect(lit).toBeGreaterThan(100);
+  const pack = await (async () => {
+    const download = page.waitForEvent("download");
+    await page.locator("#exportVariants").click();
+    const file = await download;
+    expect(file.suggestedFilename()).toMatch(/-variants-discord\.zip$/);
+    return unzip(await readFile(await file.path()));
+  })();
+  expect(Object.keys(pack).map((n) => n.replace(/^.*-/, ""))).toEqual([
+    "5865f2.png",
+    "4e5058.png",
+    "248046.png",
+    "da373c.png",
+  ]);
+  await page.locator("#variants .variant").first().click();
+  await expect(page.locator("#cancel")).toBeHidden();
+  await expect(page.locator("#targetResult")).toContainText(
+    "Requested #5865F2",
+  );
+  const single = await exportFile(page);
+  expect(single.name).toMatch(/-5865f2\.png$/);
+  expect(Buffer.compare(single.bytes, pack[Object.keys(pack)[0]])).toBe(0);
+  // Skin tones: five variants, each a two- or three-colour tone.
+  await page.locator("#paletteSet").selectOption("skin-fluent");
+  await expect(page.locator("#variants")).toBeHidden();
+  await page.locator("#makeVariants").click();
+  await expect(page.locator("#variants .variant")).toHaveCount(5);
+  await page.locator("#variants .variant", { hasText: /^Medium$/ }).click();
+  await expect(page.locator("#targetResult")).toContainText(
+    "Tone #C68D7B · #A9715F",
+  );
+  await page.locator("#hueTol").fill("90");
+  await expect(page.locator("#variantsNote")).toBeVisible();
+  await expect(page.locator("#variants")).toHaveClass(/stale/);
+});
 test("brush overrides, history and preview background do not alter export alpha", async ({
   page,
 }) => {

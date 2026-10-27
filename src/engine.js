@@ -9,6 +9,7 @@ import {
   anchorRemap,
   saturationRemap,
 } from "./colour.js";
+import { mainDeltas, rampSamples, rampShift } from "./tones.js";
 export const MAX_PIXELS = 4194304;
 // Pixels whose HSL chroma is below this are treated as neutral (grey).
 const NEUTRAL = 0.06;
@@ -48,6 +49,14 @@ export function validateEdit(p, seeds, overrides, w, h) {
     typeof p.cleanEdges !== "boolean"
   )
     throw Error("Invalid colour operation.");
+  if (
+    p.ramp != null &&
+    (!Array.isArray(p.ramp) ||
+      p.ramp.length < 1 ||
+      p.ramp.length > 8 ||
+      p.ramp.some((v) => typeof v !== "string" || !parseHex(v)))
+  )
+    throw Error("Invalid colour ramp.");
   if (
     !Array.isArray(seeds) ||
     seeds.length > 64 ||
@@ -122,7 +131,10 @@ export async function prepare(
       await yieldFn();
       if (cancelled()) throw Error("Cancelled");
     }
-    hsl.set(rgbToHsl(colours[c * 3], colours[c * 3 + 1], colours[c * 3 + 2]), c * 4);
+    hsl.set(
+      rgbToHsl(colours[c * 3], colours[c * 3 + 1], colours[c * 3 + 2]),
+      c * 4,
+    );
   }
   return {
     width,
@@ -146,7 +158,11 @@ export async function selectMask(image, p, seeds, overrides, check) {
   const source = seeds
     .map((s) => ({ i: s.y * w + s.x }))
     .filter((s) => ids[s.i] >= 0)
-    .map((s) => ({ ...s, c: ids[s.i], v: hsl.subarray(ids[s.i] * 4, ids[s.i] * 4 + 4) }));
+    .map((s) => ({
+      ...s,
+      c: ids[s.i],
+      v: hsl.subarray(ids[s.i] * 4, ids[s.i] * 4 + 4),
+    }));
   const weight = new Float32Array(colourCount),
     nearest = new Uint8Array(colourCount);
   if (source.length)
@@ -162,7 +178,10 @@ export async function selectMask(image, p, seeds, overrides, check) {
         const v = source[k].v,
           shade = achro
             ? Math.abs(hsl[o + 2] - v[2])
-            : Math.max(Math.abs(hsl[o + 1] - v[1]), Math.abs(hsl[o + 2] - v[2])),
+            : Math.max(
+                Math.abs(hsl[o + 1] - v[1]),
+                Math.abs(hsl[o + 2] - v[2]),
+              ),
           any = hueDistance(hsl[o], v[0]) / 180 + shade;
         if (any < bestAny) {
           bestAny = any;
@@ -172,7 +191,11 @@ export async function selectMask(image, p, seeds, overrides, check) {
         const hd = hueDistance(hsl[o], v[0]);
         const d = Math.max(
           achro ? 0 : p.hueTol ? hd / p.hueTol : hd < 0.5 ? 0 : Infinity,
-          p.shadeTol ? shade / (p.shadeTol / 100) : shade < 0.004 ? 0 : Infinity,
+          p.shadeTol
+            ? shade / (p.shadeTol / 100)
+            : shade < 0.004
+              ? 0
+              : Infinity,
         );
         if (d < best) {
           best = d;
@@ -180,7 +203,8 @@ export async function selectMask(image, p, seeds, overrides, check) {
         }
       }
       nearest[c] = match >= 0 ? match : closest;
-      if (best <= 1) weight[c] = p.soft ? Math.min(1, (1 - best) / (p.soft / 100)) : 1;
+      if (best <= 1)
+        weight[c] = p.soft ? Math.min(1, (1 - best) / (p.soft / 100)) : 1;
     }
   const mask = new Float32Array(n);
   for (let i = 0; i < n; i++) {
@@ -303,7 +327,11 @@ function shifter(p, anchorRgb) {
     const [h, s, l] = toModel(rgb, p.model);
     return fromModel(
       neutral ? th : h + p.dh,
-      neutral ? ts : p.protect ? saturationRemap(s, as, ts) : clamp(s + p.ds / 100, 0, 1),
+      neutral
+        ? ts
+        : p.protect
+          ? saturationRemap(s, as, ts)
+          : clamp(s + p.ds / 100, 0, 1),
       p.protect ? anchorRemap(l, al, tl) : clamp(l + p.dl / 100, 0, 1),
       p.model,
     );
@@ -350,9 +378,29 @@ export async function processImage(
   const pixels = new Uint8ClampedArray(data),
     target = parseHex(p.target),
     anchor = p.mode === "shift" && sel.count ? anchorColour(image, sel) : null,
-    { shift, capped } = anchor ? shifter(p, anchor) : { capped: false },
     unmixing = p.mode === "transparent" && p.cleanEdges && sel.source.length,
     cache = new Map();
+  let shift,
+    capped = false;
+  if (anchor) {
+    // A ramp (skin tones) maps the selection's shades onto its colours; with
+    // one shade, or one colour, it is the single-target shift onto its main colour.
+    let ramped = null;
+    if (p.ramp?.length > 1) {
+      const weights = new Float64Array(colours.length / 3);
+      for (let i = 0; i < n; i++) {
+        if ((i & 16383) === 0) await check();
+        if (mask[i] > 0 && ids[i] >= 0) weights[ids[i]] += mask[i];
+      }
+      ramped = rampShift(p, rampSamples(colours, weights, p.model));
+    }
+    if (ramped) shift = ramped;
+    else
+      ({ shift, capped } = shifter(
+        p.ramp?.length ? { ...p, ...mainDeltas(p, anchor) } : p,
+        anchor,
+      ));
+  }
   // `seed` picks the unmix key; by default the colour's own nearest seed.
   const transform = (c, seed = sel.nearest[c]) => {
     const id = c * 64 + seed;
@@ -362,7 +410,11 @@ export async function processImage(
       if (p.mode === "flat") out = target;
       else if (unmixing) {
         const key = sel.source[seed].c;
-        out = unmix(rgb, [colours[key * 3], colours[key * 3 + 1], colours[key * 3 + 2]]);
+        out = unmix(rgb, [
+          colours[key * 3],
+          colours[key * 3 + 1],
+          colours[key * 3 + 2],
+        ]);
       } else out = shift(rgb);
       cache.set(id, out);
     }
@@ -377,7 +429,12 @@ export async function processImage(
       if ((i & 16383) === 0) await check();
       // Pixels whose colour matched but were excluded (connected regions,
       // subtract brush) stay as they are.
-      if (mask[i] > 0 || ids[i] < 0 || overrides[i] < 0 || sel.weight[ids[i]] > 0)
+      if (
+        mask[i] > 0 ||
+        ids[i] < 0 ||
+        overrides[i] < 0 ||
+        sel.weight[ids[i]] > 0
+      )
         continue;
       const x = i % w,
         y = (i - x) / w;
@@ -386,7 +443,14 @@ export async function processImage(
           const xx = x + dx,
             yy = y + dy,
             j = yy * w + xx;
-          if (xx >= 0 && xx < w && yy >= 0 && yy < h && mask[j] > 0 && ids[j] >= 0) {
+          if (
+            xx >= 0 &&
+            xx < w &&
+            yy >= 0 &&
+            yy < h &&
+            mask[j] > 0 &&
+            ids[j] >= 0
+          ) {
             band[i] = sel.nearest[ids[j]];
             break;
           }
@@ -401,11 +465,12 @@ export async function processImage(
     const o = i * 4;
     if (p.mode === "transparent") {
       // Brush-forced pixels are removed outright; matched ones are unmixed.
-      const out = !unmixing || overrides[i] > 0
-        ? null
-        : edge
-          ? transform(ids[i], band[i])
-          : transform(ids[i]);
+      const out =
+        !unmixing || overrides[i] > 0
+          ? null
+          : edge
+            ? transform(ids[i], band[i])
+            : transform(ids[i]);
       if (out) {
         // Blend premultiplied: a partly removed key colour keeps its colour
         // at lower opacity instead of mixing towards the unmixed black.

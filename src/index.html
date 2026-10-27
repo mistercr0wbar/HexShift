@@ -91,10 +91,20 @@
                   id="targetHex"
                   class="hex"
                   value="#00D9FF"
-                  maxlength="7"
+                  maxlength="64"
                   spellcheck="false"
+                  autocomplete="off"
                   aria-describedby="targetResult"
-                />
+                /><button
+                  id="eyeDropper"
+                  class="icon-button"
+                  type="button"
+                  aria-label="Pick a colour from the screen"
+                  title="Pick a colour from anywhere on the screen"
+                  hidden
+                >
+                  ◎
+                </button>
               </div>
             </div>
             <p id="targetResult" class="readout">
@@ -121,9 +131,38 @@
               </select>
               <div id="fineControls"></div>
             </details>
-            <details class="presets">
-              <summary>Discord button colours</summary>
+            <details class="presets" id="palettePanel">
+              <summary>Palettes and variants</summary>
+              <label for="paletteSet">Palette</label
+              ><select id="paletteSet"></select>
               <div id="presets" class="swatches named"></div>
+              <div class="palette-actions">
+                <button id="openPalette" class="text-button" type="button">
+                  Open palette…</button
+                ><button id="savePalette" class="text-button" type="button">
+                  Save as .gpl
+                </button>
+              </div>
+              <input
+                id="paletteInput"
+                type="file"
+                accept=".gpl,.hex,.pal,.txt,text/plain"
+                hidden
+              />
+              <p class="help">
+                Click a colour to use it. Skin tones map the light and shadow
+                shades of your selection onto each tone. Open or paste GIMP
+                (.gpl), Lospec (.hex), JASC (.pal) or Paint.NET (.txt) palettes,
+                or a list of hex colours.
+              </p>
+              <button id="makeVariants" class="button full" type="button" disabled>
+                Make a variant for each colour
+              </button>
+              <p id="variantsNote" class="readout" hidden></p>
+              <div id="variants" class="variants" hidden></div>
+              <button id="exportVariants" class="button full" type="button" hidden>
+                Export all variants (ZIP)
+              </button>
             </details>
             <div id="recentGroup" hidden>
               <p class="small-label">Recent targets</p>
@@ -246,7 +285,7 @@
                   id="outlineHex"
                   class="hex"
                   value="#FFFFFF"
-                  maxlength="7"
+                  maxlength="64"
                   spellcheck="false"
                 />
               </div>
