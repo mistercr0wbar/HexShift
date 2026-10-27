@@ -427,7 +427,8 @@ test("palettes open from files and paste, and save as GIMP palettes", async ({
   const download = page.waitForEvent("download");
   await page.locator("#savePalette").click();
   const file = await download;
-  expect(file.suggestedFilename()).toBe("Skin tones Noto.gpl");
+  // WebKit on Linux turns spaces in download names into underscores.
+  expect(file.suggestedFilename()).toMatch(/^Skin[ _]tones[ _]Noto\.gpl$/);
   const text = await readFile(await file.path(), "utf8");
   expect(text.startsWith("GIMP Palette\nName: Skin tones · Noto\n")).toBe(true);
   expect(text).toContain("249 221 189\tLight");
