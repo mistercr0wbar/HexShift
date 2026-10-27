@@ -355,6 +355,75 @@ label {
 #makeVariants {
   margin-top: 10px;
 }
+.colour-map {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.map-row {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+.map-row.active {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.map-select {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font:
+    11px Consolas,
+    monospace;
+}
+.map-select .chip {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid #777;
+}
+.map-select .chip.empty {
+  border-style: dashed;
+  background: transparent;
+}
+.map-select .chip.clear {
+  background: repeating-conic-gradient(
+      var(--checker1) 0 25%,
+      var(--checker2) 0 50%
+    )
+    0 0 / 8px 8px;
+}
+.map-select .map-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.map-select .map-count {
+  margin-left: auto;
+  color: var(--muted);
+  flex: none;
+}
+.map-remove {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0 9px;
+  font-size: 15px;
+}
+#recipePanel .button {
+  margin-top: 8px;
+}
 #sizeReadout p + p {
   margin-top: 2px;
 }

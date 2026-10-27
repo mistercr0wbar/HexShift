@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Vy3TWDVCiy3MiRXDZ5fdmsGd36jObYcireq1bxpC3FA='; style-src 'sha256-dvT/yIHz+c8SUs7+iFh0uP/LQJhLIDkSfkANf364UmU='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Issrex0mQdlCZfFVkQGByZqRCVX6ktRheDCsugTfeaE='; style-src 'sha256-67Lt0xzbsBbiGJeP3FtMivrwOtv79EckUL6MWb1LKV4='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta name="theme-color" content="#6756d6" />
     <title>Hex Shift — colour, with character</title>
@@ -365,6 +365,75 @@ label {
 }
 #makeVariants {
   margin-top: 10px;
+}
+.colour-map {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.map-row {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+.map-row.active {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.map-select {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font:
+    11px Consolas,
+    monospace;
+}
+.map-select .chip {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid #777;
+}
+.map-select .chip.empty {
+  border-style: dashed;
+  background: transparent;
+}
+.map-select .chip.clear {
+  background: repeating-conic-gradient(
+      var(--checker1) 0 25%,
+      var(--checker2) 0 50%
+    )
+    0 0 / 8px 8px;
+}
+.map-select .map-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.map-select .map-count {
+  margin-left: auto;
+  color: var(--muted);
+  flex: none;
+}
+.map-remove {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0 9px;
+  font-size: 15px;
+}
+#recipePanel .button {
+  margin-top: 8px;
 }
 #sizeReadout p + p {
   margin-top: 2px;
@@ -1105,6 +1174,20 @@ dialog p {
               <h2><span>01</span> Colour</h2>
               <span id="editState" class="badge">No pending edit</span>
             </div>
+            <p class="small-label" id="colourMapLabel">Colour map</p>
+            <div
+              id="colourMap"
+              class="colour-map"
+              role="group"
+              aria-labelledby="colourMapLabel"
+            ></div>
+            <div class="palette-actions">
+              <button id="addRow" class="text-button" type="button">
+                + Add colour</button
+              ><button id="mapAll" class="text-button" type="button">
+                Map all colours
+              </button>
+            </div>
             <label for="mode">Treatment</label
             ><select id="mode">
               <option value="shift">Shift colour · keep shading</option>
@@ -1187,12 +1270,22 @@ dialog p {
                 (.gpl), Lospec (.hex), JASC (.pal) or Paint.NET (.txt) palettes,
                 or a list of hex colours.
               </p>
-              <button id="makeVariants" class="button full" type="button" disabled>
+              <button
+                id="makeVariants"
+                class="button full"
+                type="button"
+                disabled
+              >
                 Make a variant for each colour
               </button>
               <p id="variantsNote" class="readout" hidden></p>
               <div id="variants" class="variants" hidden></div>
-              <button id="exportVariants" class="button full" type="button" hidden>
+              <button
+                id="exportVariants"
+                class="button full"
+                type="button"
+                hidden
+              >
                 Export all variants (ZIP)
               </button>
             </details>
@@ -1201,7 +1294,7 @@ dialog p {
               <div id="recent" class="swatches"></div>
             </div>
             <button id="apply" class="button full" disabled>
-              Apply & select next colour →
+              Apply, then build on the result →
             </button>
           </section>
           <section>
@@ -1270,7 +1363,8 @@ dialog p {
                 <option value="2048">2048 px</option>
               </select>
             </div>
-            <label for="size">Size</label><select id="size"></select>
+            <label for="size">Size</label
+            ><select id="size"></select>
             <div id="customSizeGroup" hidden>
               <label for="customSize">Longest side in pixels</label
               ><input
@@ -1332,9 +1426,44 @@ dialog p {
               Copy PNG to clipboard
             </button>
             <p class="help">
-              Export includes your current preview, outline and size. Apply is
-              only needed before selecting the next colour.
+              Export includes every colour in your map, plus the outline and
+              size. Apply is only needed to build one change on another.
             </p>
+            <details id="recipePanel">
+              <summary>Recipes and batch</summary>
+              <p class="help">
+                A recipe repeats your colour changes on other images. It keeps
+                colours, not places, so brush strokes and connected-region
+                limits are left out.
+              </p>
+              <div class="palette-actions">
+                <button id="saveRecipe" class="text-button" type="button">
+                  Save recipe</button
+                ><button id="openRecipe" class="text-button" type="button">
+                  Apply a recipe…
+                </button>
+              </div>
+              <input
+                id="recipeInput"
+                type="file"
+                accept=".json,application/json"
+                hidden
+              />
+              <button id="batch" class="button full" type="button" disabled>
+                Apply to many images…
+              </button>
+              <input
+                id="batchInput"
+                type="file"
+                accept="image/*,.svg"
+                multiple
+                hidden
+              />
+              <p id="batchNote" class="readout" aria-live="polite"></p>
+              <button id="cancelBatch" class="button full" type="button" hidden>
+                Cancel batch
+              </button>
+            </details>
           </section>
           <div class="privacy">
             <span aria-hidden="true">◈</span> Images stay on your device.<br /><span
@@ -1477,9 +1606,9 @@ dialog p {
               are drawn at 512 px on their longest side; change it under SVG
               drawn at. All exports are still images. Sizes for Discord, Slack,
               Twitch, Telegram, WhatsApp and YouTube fit and centre the artwork
-              and show the file size against each limit. Preview backgrounds never change
-              exported transparency. For a background, Clean edges works best
-              with Only connected regions.
+              and show the file size against each limit. Preview backgrounds
+              never change exported transparency. For a background, Clean edges
+              works best with Only connected regions.
             </p>
           </details>
         </div>
@@ -1800,7 +1929,18 @@ dialog p {
     if (!Number.isInteger(w2) || !Number.isInteger(h2) || w2 < 1 || h2 < 1 || w2 > 8192 || h2 > 8192 || w2 * h2 > MAX_PIXELS || !(data instanceof Uint8ClampedArray) || data.length !== w2 * h2 * 4)
       throw Error("Invalid image dimensions or pixel buffer.");
   }
-  function validateEdit(p, seeds2, overrides2, w2, h2) {
+  var MAX_ROWS = 16;
+  var MAX_SEEDS = 64;
+  var OVERLAP_SPREAD = 0.12;
+  var OVERLAP_CUTOFF = 4 * OVERLAP_SPREAD;
+  var SCORE_NONE = 99;
+  function validateSeeds(seeds2, w2, h2) {
+    if (!Array.isArray(seeds2) || seeds2.length > MAX_SEEDS || seeds2.some(
+      (s) => typeof s?.hex === "string" ? !/^#[\dA-F]{6}$/i.test(s.hex) : !Number.isInteger(s?.x) || !Number.isInteger(s.y) || s.x < 0 || s.y < 0 || s.x >= w2 || s.y >= h2
+    ))
+      throw Error("Invalid colour samples.");
+  }
+  function validateParams(p) {
     const ranges = {
       hueTol: [0, 180],
       shadeTol: [0, 100],
@@ -1817,12 +1957,28 @@ dialog p {
       throw Error("Invalid colour operation.");
     if (p.ramp != null && (!Array.isArray(p.ramp) || p.ramp.length < 1 || p.ramp.length > 8 || p.ramp.some((v) => typeof v !== "string" || !parseHex(v))))
       throw Error("Invalid colour ramp.");
-    if (!Array.isArray(seeds2) || seeds2.length > 64 || seeds2.some(
-      (s) => !Number.isInteger(s.x) || !Number.isInteger(s.y) || s.x < 0 || s.y < 0 || s.x >= w2 || s.y >= h2
-    ))
-      throw Error("Invalid colour samples.");
-    if (!(overrides2 instanceof Int8Array) || overrides2.length !== w2 * h2)
+  }
+  function validateMap(rows, labels, active, w2, h2) {
+    if (!Array.isArray(rows) || rows.length < 1 || rows.length > MAX_ROWS)
+      throw Error("Invalid colour map.");
+    const ids = /* @__PURE__ */ new Set();
+    let samples = 0;
+    for (const row of rows) {
+      if (!Number.isInteger(row?.id) || row.id < 1 || row.id > 127 || ids.has(row.id))
+        throw Error("Invalid colour map.");
+      ids.add(row.id);
+      validateParams(row.params);
+      validateSeeds(row.seeds, w2, h2);
+      samples += row.seeds.length;
+    }
+    if (samples > MAX_SEEDS) throw Error("Invalid colour samples.");
+    if (!Number.isInteger(active) || active < 0 || active >= rows.length)
+      throw Error("Invalid colour map.");
+    if (!(labels instanceof Int8Array) || labels.length !== w2 * h2)
       throw Error("Invalid selection buffer.");
+    for (let i = 0; i < labels.length; i++)
+      if (labels[i] && labels[i] !== -1 && !ids.has(labels[i]))
+        throw Error("Invalid brush override.");
   }
   async function prepare(width, height, data, yieldFn = async () => {
   }, cancelled = () => false) {
@@ -1881,19 +2037,41 @@ dialog p {
       palette: [...bins.values()].sort((a, b) => b.weight - a.weight).slice(0, 12)
     };
   }
+  function sampleSources(image, seeds2) {
+    const { width: w2, ids, hsl, colours } = image, source = [];
+    for (const s of seeds2) {
+      if (typeof s.hex === "string") {
+        const rgb = parseHex(s.hex);
+        source.push({ i: -1, rgb, v: Float32Array.from(rgbToHsl(...rgb)) });
+        continue;
+      }
+      const i = s.y * w2 + s.x, c = ids[i];
+      if (c >= 0)
+        source.push({
+          i,
+          rgb: [colours[c * 3], colours[c * 3 + 1], colours[c * 3 + 2]],
+          v: hsl.subarray(c * 4, c * 4 + 4)
+        });
+    }
+    return source;
+  }
+  function sampleDistance(hsl, o, v) {
+    if (hsl[o + 3] < NEUTRAL2) return Math.abs(hsl[o + 2] - v[2]) / 2;
+    const shade = Math.max(
+      Math.abs(hsl[o + 1] - v[1]),
+      Math.abs(hsl[o + 2] - v[2])
+    );
+    return hueDistance(hsl[o], v[0]) / 45 + shade / 2;
+  }
   async function selectMask(image, p, seeds2, overrides2, check) {
-    const { width: w2, height: h2, data, ids, hsl } = image, n = w2 * h2, colourCount = hsl.length / 4;
-    const source = seeds2.map((s) => ({ i: s.y * w2 + s.x })).filter((s) => ids[s.i] >= 0).map((s) => ({
-      ...s,
-      c: ids[s.i],
-      v: hsl.subarray(ids[s.i] * 4, ids[s.i] * 4 + 4)
-    }));
-    const weight = new Float32Array(colourCount), nearest = new Uint8Array(colourCount);
+    const { width: w2, height: h2, data, ids, hsl, colours } = image, n = w2 * h2, colourCount = hsl.length / 4;
+    const source = sampleSources(image, seeds2);
+    const weight = new Float32Array(colourCount), score = new Float32Array(colourCount).fill(SCORE_NONE), nearest = new Uint8Array(colourCount);
     if (source.length)
       for (let c = 0; c < colourCount; c++) {
         if ((c & 16383) === 0) await check();
         const o = c * 4, achro = hsl[o + 3] < NEUTRAL2;
-        let best = Infinity, bestAny = Infinity, match = -1, closest = 0;
+        let best = Infinity, bestAny = Infinity, distance = SCORE_NONE, match = -1, closest = 0;
         for (let k = 0; k < source.length; k++) {
           const v = source[k].v, shade = achro ? Math.abs(hsl[o + 2] - v[2]) : Math.max(
             Math.abs(hsl[o + 1] - v[1]),
@@ -1904,6 +2082,7 @@ dialog p {
             closest = k;
           }
           if (achro !== v[3] < NEUTRAL2) continue;
+          distance = Math.min(distance, sampleDistance(hsl, o, v));
           const hd = hueDistance(hsl[o], v[0]);
           const d = Math.max(
             achro ? 0 : p.hueTol ? hd / p.hueTol : hd < 0.5 ? 0 : Infinity,
@@ -1915,6 +2094,7 @@ dialog p {
           }
         }
         nearest[c] = match >= 0 ? match : closest;
+        score[c] = distance;
         if (best <= 1)
           weight[c] = p.soft ? Math.min(1, (1 - best) / (p.soft / 100)) : 1;
       }
@@ -1924,11 +2104,11 @@ dialog p {
       if (ids[i] >= 0) mask[i] = weight[ids[i]];
     }
     if (p.connected && source.length) {
-      const keep = new Uint8Array(n), queue = new Int32Array(n);
+      const keep2 = new Uint8Array(n), queue = new Int32Array(n);
       let head = 0, tail = 0;
       for (const { i } of source)
-        if (mask[i] > 0 && !keep[i]) {
-          keep[i] = 1;
+        if (i >= 0 && mask[i] > 0 && !keep2[i]) {
+          keep2[i] = 1;
           queue[tail++] = i;
         }
       while (head < tail) {
@@ -1937,15 +2117,15 @@ dialog p {
         for (let dy = -1; dy <= 1; dy++)
           for (let dx = -1; dx <= 1; dx++) {
             const xx = x + dx, yy = y + dy, j = yy * w2 + xx;
-            if (xx >= 0 && xx < w2 && yy >= 0 && yy < h2 && !keep[j] && mask[j] > 0) {
-              keep[j] = 1;
+            if (xx >= 0 && xx < w2 && yy >= 0 && yy < h2 && !keep2[j] && mask[j] > 0) {
+              keep2[j] = 1;
               queue[tail++] = j;
             }
           }
       }
       for (let i = 0; i < n; i++) {
         if ((i & 16383) === 0) await check();
-        if (!keep[i]) mask[i] = 0;
+        if (!keep2[i]) mask[i] = 0;
       }
     }
     for (let i = 0; i < n; i++) {
@@ -1984,7 +2164,7 @@ dialog p {
       if (data[i * 4 + 3]) opaque++;
       if (mask[i] > 0) count++;
     }
-    return { mask, weight, nearest, source, count, opaque };
+    return { mask, weight, score, nearest, source, count, opaque };
   }
   async function rings(w2, h2, start, check) {
     const n = w2 * h2, d = new Uint8Array(n);
@@ -2009,11 +2189,8 @@ dialog p {
     return d;
   }
   function anchorColour(image, sel) {
-    const { colours, data } = image;
-    if (sel.source.length) {
-      const c = sel.source.at(-1).c;
-      return [colours[c * 3], colours[c * 3 + 1], colours[c * 3 + 2]];
-    }
+    const { data } = image;
+    if (sel.source.length) return sel.source.at(-1).rgb;
     const sum = [0, 0, 0];
     let total = 0;
     for (let i = 0; i < sel.mask.length; i++)
@@ -2052,18 +2229,171 @@ dialog p {
       a
     ];
   }
-  async function processImage(image, p, seeds2, overrides2, yieldFn = async () => {
+  var checker = (yieldFn, cancelled) => async () => {
+    await yieldFn();
+    if (cancelled()) throw Error("Cancelled");
+  };
+  async function processEdit(image, rows, labels, active, yieldFn = async () => {
   }, cancelled = () => false) {
-    const { width: w2, height: h2, data, ids, colours } = image, n = w2 * h2;
-    validateEdit(p, seeds2, overrides2, w2, h2);
-    const check = async () => {
-      await yieldFn();
-      if (cancelled()) throw Error("Cancelled");
+    const { width: w2, height: h2, data, ids } = image, n = w2 * h2;
+    validateMap(rows, labels, active, w2, h2);
+    const check = checker(yieldFn, cancelled), pixels2 = new Uint8ClampedArray(data), mixed = new Float32Array(4 * n), total = new Float32Array(n), nearest = new Float32Array(n), top = new Float32Array(n), shared = new Uint8Array(n), owner = new Int8Array(n).fill(-1), rowLabels = new Int8Array(n), counts = [];
+    let shown = null;
+    for (const [k, row] of rows.entries()) {
+      for (let i = 0; i < n; i++) {
+        if ((i & 16383) === 0) await check();
+        rowLabels[i] = labels[i] === row.id ? 1 : labels[i] ? -1 : 0;
+      }
+      const r = await editRow(image, row.params, row.seeds, rowLabels, check);
+      counts.push(r.count);
+      if (k === active) shown = r;
+      for (let i = 0; i < n; i++) {
+        if ((i & 16383) === 0) await check();
+        const weight = r.weight[i];
+        if (!(weight > 0)) continue;
+        const distance = labels[i] === row.id || ids[i] < 0 ? 0 : r.score[ids[i]], o = i * 4;
+        if (shared[i] && distance > nearest[i] + OVERLAP_CUTOFF) continue;
+        if (!shared[i] || distance < nearest[i] - OVERLAP_CUTOFF) {
+          pixels2.set(r.pixels.subarray(o, o + 4), o);
+          nearest[i] = distance;
+          shared[i] = 1;
+          for (let c = 0; c < 4; c++) mixed[o + c] = weight * r.pixels[o + c];
+          total[i] = top[i] = weight;
+          owner[i] = k;
+          continue;
+        }
+        const share = weight * Math.exp(-(distance - nearest[i]) / OVERLAP_SPREAD);
+        shared[i]++;
+        for (let c = 0; c < 4; c++) mixed[o + c] += share * r.pixels[o + c];
+        total[i] += share;
+        if (share > top[i]) {
+          top[i] = share;
+          owner[i] = k;
+        }
+      }
+    }
+    for (let i = 0; i < n; i++) {
+      if ((i & 16383) === 0) await check();
+      if (shared[i] > 1 && total[i] > 0)
+        for (let c = 0; c < 4; c++)
+          pixels2[i * 4 + c] = mixed[i * 4 + c] / total[i];
+    }
+    if (rows.length > 1) await reblend(image, rows, owner, pixels2, check);
+    let changed = 0;
+    for (let i = 0; i < n; i++) {
+      if ((i & 16383) === 0) await check();
+      const o = i * 4;
+      if (pixels2[o] !== data[o] || pixels2[o + 1] !== data[o + 1] || pixels2[o + 2] !== data[o + 2] || pixels2[o + 3] !== data[o + 3])
+        changed++;
+    }
+    return {
+      pixels: pixels2,
+      mask: shown.mask,
+      owner,
+      counts,
+      count: shown.count,
+      opaque: shown.opaque,
+      changed,
+      capped: shown.capped
     };
+  }
+  var BLEND_REACH = 2;
+  var BLEND_WINDOW = 3;
+  async function reblend(image, rows, owner, out, check) {
+    const { width: w2, height: h2, data } = image, opaque = rows.map((r) => r.params.mode !== "transparent"), fixes = [];
+    const colour = (j, k) => data[j * 4 + k];
+    for (let y = 0; y < h2; y++) {
+      if ((y & 15) === 0) await check();
+      for (let x = 0; x < w2; x++) {
+        const i = y * w2 + x, a = owner[i];
+        if (a < 0 || !opaque[a]) continue;
+        let b = -1;
+        for (let dy = -BLEND_REACH; dy <= BLEND_REACH && b < 0; dy++)
+          for (let dx = -BLEND_REACH; dx <= BLEND_REACH; dx++) {
+            const xx = x + dx, yy = y + dy;
+            if (xx < 0 || yy < 0 || xx >= w2 || yy >= h2) continue;
+            const o = owner[yy * w2 + xx];
+            if (o >= 0 && o !== a && opaque[o]) {
+              b = o;
+              break;
+            }
+          }
+        if (b < 0) continue;
+        const side = [[], []];
+        for (let dy = -BLEND_WINDOW; dy <= BLEND_WINDOW; dy++)
+          for (let dx = -BLEND_WINDOW; dx <= BLEND_WINDOW; dx++) {
+            const xx = x + dx, yy = y + dy;
+            if (xx < 0 || yy < 0 || xx >= w2 || yy >= h2) continue;
+            const j = yy * w2 + xx;
+            if (!data[j * 4 + 3]) continue;
+            if (owner[j] === a) side[0].push(j);
+            else if (owner[j] === b) side[1].push(j);
+          }
+        let g = -1, gD = -1;
+        for (const j of side[1]) {
+          let d = 0;
+          for (let k = 0; k < 3; k++) d += (colour(j, k) - colour(i, k)) ** 2;
+          if (d > gD) {
+            gD = d;
+            g = j;
+          }
+        }
+        let f = -1, t = 0, length2 = 0;
+        for (const j of side[0]) {
+          const span = [0, 1, 2].map((k) => colour(j, k) - colour(g, k)), l2 = span[0] ** 2 + span[1] ** 2 + span[2] ** 2;
+          if (l2 < 3 * 32 ** 2) continue;
+          let tj = 0;
+          for (let k = 0; k < 3; k++)
+            tj += (colour(i, k) - colour(g, k)) * span[k];
+          tj /= l2;
+          if (tj > 0.97 || tj < 0.03) continue;
+          let off = 0;
+          for (let k = 0; k < 3; k++)
+            off += (colour(i, k) - (colour(g, k) + tj * span[k])) ** 2;
+          if (off <= 0.04 * l2 && l2 > length2) {
+            f = j;
+            t = tj;
+            length2 = l2;
+          }
+        }
+        if (f < 0) continue;
+        const fRgb = [0, 1, 2].map((k) => colour(f, k));
+        const toF = (j) => {
+          let d = 0;
+          for (let k = 0; k < 3; k++) d += (colour(j, k) - fRgb[k]) ** 2;
+          return d;
+        };
+        let purer = false;
+        for (let dy = -1; dy <= 1 && !purer; dy++)
+          for (let dx = -1; dx <= 1; dx++) {
+            const xx = x + dx, yy = y + dy, j = yy * w2 + xx;
+            if (xx >= 0 && yy >= 0 && xx < w2 && yy < h2 && owner[j] === a && data[j * 4 + 3] && toF(j) < toF(i) - 0.01 * length2) {
+              purer = true;
+              break;
+            }
+          }
+        if (!purer) continue;
+        let same = true;
+        for (let k = 0; k < 3; k++)
+          same &&= out[f * 4 + k] === colour(f, k) && out[g * 4 + k] === colour(g, k);
+        if (same) continue;
+        fixes.push(
+          i,
+          ...[0, 1, 2].map((k) => out[f * 4 + k] * t + out[g * 4 + k] * (1 - t))
+        );
+      }
+    }
+    for (let q = 0; q < fixes.length; q += 4)
+      for (let k = 0; k < 3; k++) out[fixes[q] * 4 + k] = fixes[q + 1 + k];
+  }
+  async function editRow(image, p, seeds2, overrides2, check) {
+    const { width: w2, height: h2, data, ids, colours } = image, n = w2 * h2;
     const sel = await selectMask(image, p, seeds2, overrides2, check), { mask } = sel;
-    const pixels2 = new Uint8ClampedArray(data), target = parseHex(p.target), anchor = p.mode === "shift" && sel.count ? anchorColour(image, sel) : null, unmixing = p.mode === "transparent" && p.cleanEdges && sel.source.length, cache = /* @__PURE__ */ new Map();
+    const pixels2 = new Uint8ClampedArray(data), effective = new Float32Array(n), target = parseHex(p.target), anchor = p.mode === "shift" && sel.count ? anchorColour(image, sel) : null, unmixing = p.mode === "transparent" && p.cleanEdges && sel.source.length, cache = /* @__PURE__ */ new Map();
     let shift, capped = false;
-    if (anchor) {
+    if (anchor && !p.ramp?.length && !p.dh && !p.ds && !p.dl)
+      shift = (rgb) => rgb;
+    else if (anchor) {
       let ramped = null;
       if (p.ramp?.length > 1) {
         const weights = new Float64Array(colours.length / 3);
@@ -2087,12 +2417,7 @@ dialog p {
         const rgb = [colours[c * 3], colours[c * 3 + 1], colours[c * 3 + 2]];
         if (p.mode === "flat") out = target;
         else if (unmixing) {
-          const key = sel.source[seed].c;
-          out = unmix(rgb, [
-            colours[key * 3],
-            colours[key * 3 + 1],
-            colours[key * 3 + 2]
-          ]);
+          out = unmix(rgb, sel.source[seed].rgb);
         } else out = shift(rgb);
         cache.set(id, out);
       }
@@ -2146,6 +2471,7 @@ dialog p {
       if ((i & 16383) === 0) await check();
       const edge = unmixing && band[i] >= 0, weight = edge || full[i] ? 1 : mask[i];
       if (weight <= 0) continue;
+      effective[i] = weight;
       const o = i * 4;
       if (p.mode === "transparent") {
         const out = !unmixing || overrides2[i] > 0 ? null : edge ? transform(ids[i], band[i]) : transform(ids[i]);
@@ -2168,11 +2494,64 @@ dialog p {
     return {
       pixels: pixels2,
       mask,
+      weight: effective,
+      score: sel.score,
       count: sel.count,
       opaque: sel.opaque,
       changed,
       capped: p.mode === "shift" && capped
     };
+  }
+  function colourFamilies(image, max = 8) {
+    const { width: w2, data, ids, hsl } = image, count = hsl.length / 4, weight = new Float64Array(count), first = new Int32Array(count).fill(-1);
+    let total = 0;
+    for (let i = 0; i < ids.length; i++) {
+      const c = ids[i];
+      if (c < 0) continue;
+      weight[c] += data[i * 4 + 3] / 255;
+      total += data[i * 4 + 3] / 255;
+      if (first[c] < 0) first[c] = i;
+    }
+    const bins = new Float64Array(36), taken = new Uint8Array(36), centres = [];
+    let grey = 0;
+    for (let c = 0; c < count; c++)
+      if (hsl[c * 4 + 3] < NEUTRAL2) grey += weight[c];
+      else bins[Math.floor(hsl[c * 4] / 10) % 36] += weight[c];
+    while (centres.length < max - (grey >= total * 0.02 ? 1 : 0)) {
+      let b = -1;
+      for (let k = 0; k < 36; k++)
+        if (!taken[k] && (b < 0 || bins[k] > bins[b])) b = k;
+      if (b < 0 || bins[b] < total * 0.02) break;
+      for (let d = -3; d <= 3; d++) taken[(b + d + 36) % 36] = 1;
+      centres.push(b * 10 + 5);
+    }
+    const best = centres.map(() => -1), sums = centres.map(() => 0);
+    let greyBest = -1;
+    for (let c = 0; c < count; c++) {
+      if (!weight[c]) continue;
+      if (hsl[c * 4 + 3] < NEUTRAL2) {
+        if (greyBest < 0 || weight[c] > weight[greyBest]) greyBest = c;
+        continue;
+      }
+      let f = -1;
+      for (let k = 0; k < centres.length; k++)
+        if (hueDistance(hsl[c * 4], centres[k]) <= 35 && (f < 0 || hueDistance(hsl[c * 4], centres[k]) < hueDistance(hsl[c * 4], centres[f])))
+          f = k;
+      if (f < 0) continue;
+      sums[f] += weight[c];
+      if (best[f] < 0 || weight[c] * hsl[c * 4 + 3] > weight[best[f]] * hsl[best[f] * 4 + 3])
+        best[f] = c;
+    }
+    const families = centres.map((_, k) => ({ c: best[k], weight: sums[k], grey: false })).filter((f) => f.c >= 0);
+    if (greyBest >= 0 && grey >= total * 0.02)
+      families.push({ c: greyBest, weight: grey, grey: true });
+    return families.sort((a, b) => b.weight - a.weight).map(({ c, weight: weight2, grey: grey2 }) => ({
+      x: first[c] % w2,
+      y: Math.floor(first[c] / w2),
+      hex: toHex(...image.colours.subarray(c * 3, c * 3 + 3)),
+      share: weight2 / total,
+      grey: grey2
+    }));
   }
 
   // src/history.js
@@ -5494,6 +5873,122 @@ dialog p {
   }
   var isPaletteFile = (file) => /\.(gpl|hex|pal|txt)$/i.test(file.name || "") || file.type === "text/plain";
 
+  // src/recipe.js
+  var MAX_RECIPE_BYTES = 64 * 1024;
+  var MAX_STEPS = 32;
+  var NUMBERS = ["hueTol", "shadeTol", "soft", "feather", "dh", "ds", "dl"];
+  var CHOICES = { mode: ["shift", "flat", "transparent"], model: ["oklch", "hsl"] };
+  var FLAGS = ["protect", "cleanEdges"];
+  function cleanParams(source) {
+    if (!source || typeof source !== "object" || Array.isArray(source))
+      throw Error("A recipe row has no settings.");
+    const p = defaults();
+    for (const key of NUMBERS) if (key in source) p[key] = Number(source[key]);
+    for (const [key, options] of Object.entries(CHOICES))
+      if (key in source)
+        p[key] = options.includes(source[key]) ? source[key] : "";
+    for (const key of FLAGS) if (key in source) p[key] = source[key];
+    if ("target" in source) p.target = String(source.target).toUpperCase();
+    p.ramp = Array.isArray(source.ramp) ? source.ramp.map((v) => String(v).toUpperCase()) : null;
+    p.connected = false;
+    validateParams(p);
+    if (!/^#[\dA-F]{6}$/.test(p.target) || p.ramp?.some((v) => !/^#[\dA-F]{6}$/.test(v)))
+      throw Error("Recipe colours must be #RRGGBB.");
+    return p;
+  }
+  var keep = (p) => {
+    const out = {};
+    for (const key of [...NUMBERS, ...Object.keys(CHOICES), ...FLAGS, "target"])
+      out[key] = p[key];
+    if (p.ramp) out.ramp = p.ramp.slice();
+    return out;
+  };
+  function recipeStep(rows, pixels2, width, labels) {
+    const step = { rows: [], approximate: false };
+    for (const row of rows) {
+      if (!row.seeds.length) continue;
+      step.rows.push({
+        params: keep(row.params),
+        seeds: row.seeds.map(
+          (s) => s.hex ? { hex: s.hex } : {
+            hex: toHex(
+              ...pixels2.subarray(
+                (s.y * width + s.x) * 4,
+                (s.y * width + s.x) * 4 + 3
+              )
+            )
+          }
+        )
+      });
+      if (row.params.connected) step.approximate = true;
+    }
+    if (labels?.some((v) => v !== 0)) step.approximate = true;
+    return step;
+  }
+  function writeRecipe(steps) {
+    return JSON.stringify(
+      {
+        format: "hexshift-recipe",
+        version: 1,
+        steps: steps.map((s) => ({ rows: s.rows }))
+      },
+      null,
+      2
+    ) + "\n";
+  }
+  function parseRecipe(text2) {
+    if (typeof text2 !== "string") throw Error("A recipe must be text.");
+    if (new TextEncoder().encode(text2).length > MAX_RECIPE_BYTES)
+      throw Error("Recipes must be 64 KB or smaller.");
+    let data;
+    try {
+      data = JSON.parse(text2.replace(/^﻿/, ""));
+    } catch {
+      throw Error("This is not a Hex Shift recipe (it is not valid JSON).");
+    }
+    if (data?.format !== "hexshift-recipe")
+      throw Error("This is not a Hex Shift recipe.");
+    if (data.version !== 1)
+      throw Error("This recipe needs a newer version of Hex Shift.");
+    if (!Array.isArray(data.steps) || !data.steps.length || data.steps.length > MAX_STEPS)
+      throw Error("A recipe has 1 to 32 steps.");
+    return data.steps.map((step) => {
+      if (!Array.isArray(step?.rows) || !step.rows.length || step.rows.length > MAX_ROWS)
+        throw Error("Each recipe step has 1 to 16 colours.");
+      let samples = 0;
+      const rows = step.rows.map((row) => {
+        if (!Array.isArray(row?.seeds) || !row.seeds.length || row.seeds.some(
+          (s) => typeof s?.hex !== "string" || !/^#[\dA-F]{6}$/i.test(s.hex)
+        ))
+          throw Error("Each recipe colour needs #RRGGBB samples.");
+        samples += row.seeds.length;
+        return {
+          params: cleanParams(row.params),
+          seeds: row.seeds.map((s) => ({ hex: s.hex.toUpperCase() }))
+        };
+      });
+      if (samples > MAX_SEEDS)
+        throw Error("A recipe step can have at most 64 samples.");
+      return { rows, approximate: false };
+    });
+  }
+  async function replay(width, height, data, steps, yieldFn = async () => {
+  }, cancelled = () => false) {
+    let pixels2 = data;
+    for (const step of steps) {
+      const image = await prepare(width, height, pixels2, yieldFn, cancelled), rows = step.rows.map((row, k) => ({ id: k + 1, ...row })), result2 = await processEdit(
+        image,
+        rows,
+        new Int8Array(width * height),
+        0,
+        yieldFn,
+        cancelled
+      );
+      pixels2 = result2.pixels;
+    }
+    return pixels2;
+  }
+
   // src/sample.js
   var sample_default = "data:image/png;base64,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";
 
@@ -5507,8 +6002,9 @@ dialog p {
   var pixels = null;
   var overrides = null;
   var result = null;
-  var params = defaults();
-  var seeds = [];
+  var edit = freshEdit();
+  var params = null;
+  var seeds = null;
   var palette = [];
   var recent = [];
   var svgSource = null;
@@ -5543,8 +6039,19 @@ dialog p {
   function status(message) {
     $("status").textContent = message;
   }
+  function newRow(id, base = defaults()) {
+    return { id, params: base, seeds: [] };
+  }
+  function freshEdit(base) {
+    return { rows: [newRow(1, base)], active: 0, steps: [] };
+  }
+  function activate() {
+    edit.active = clamp(edit.active, 0, edit.rows.length - 1);
+    ({ params, seeds } = edit.rows[edit.active]);
+  }
+  activate();
   function meta() {
-    return structuredClone({ params, seeds });
+    return structuredClone({ edit });
   }
   function snapshot() {
     return { pixels, overrides: overrides.slice(), meta: meta() };
@@ -5583,6 +6090,7 @@ dialog p {
     $("copy").disabled = !available;
     $("export").disabled = !available;
     $("cancel").hidden = !processing;
+    $("batch").disabled = !available || !$("cancelBatch").hidden;
     $("editState").textContent = result?.changed ? "Pending edit" : "No pending edit";
     $("editState").classList.toggle("pending", !!result?.changed);
   }
@@ -5692,6 +6200,119 @@ dialog p {
       chip.append(dot, text2, remove);
       box.append(chip);
     });
+  }
+  var seedHex = (s) => s.hex || toHex(...pixels.subarray((s.y * w + s.x) * 4, (s.y * w + s.x) * 4 + 3));
+  function rowText(row) {
+    const brushed = overrides?.some((v) => v === row.id), from = row.seeds.length ? seedHex(row.seeds.at(-1)) : brushed ? "brushed" : null, p = row.params, to = p.mode === "transparent" ? "transparent" : p.mode === "shift" && !p.ramp && !p.dh && !p.ds && !p.dl ? "unchanged" : p.mode === "shift" && p.manual ? "adjusted" : p.ramp ? p.ramp[0] : p.target;
+    return { from, to };
+  }
+  function renderMap() {
+    if (!pixels) return;
+    const box = $("colourMap");
+    box.replaceChildren();
+    edit.rows.forEach((row, k) => {
+      const item = document.createElement("div"), select = document.createElement("button"), { from, to } = rowText(row), chip = (hex, kind) => {
+        const c = document.createElement("span");
+        c.className = "chip" + (kind ? " " + kind : "");
+        if (hex) c.style.backgroundColor = hex;
+        return c;
+      }, text2 = document.createElement("span"), count = document.createElement("span"), pixelsOwned = result?.counts?.[k];
+      item.className = "map-row" + (k === edit.active ? " active" : "");
+      select.type = "button";
+      select.className = "map-select";
+      select.setAttribute("aria-pressed", String(k === edit.active));
+      text2.className = "map-text";
+      text2.textContent = from ? from + " \u2192 " + to : "Pick a colour";
+      count.className = "map-count";
+      count.textContent = from && Number.isInteger(pixelsOwned) ? pixelsOwned.toLocaleString() + " px" : "";
+      select.setAttribute(
+        "aria-label",
+        "Colour " + (k + 1) + ": " + (from ? from + " to " + to : "nothing picked yet") + (count.textContent ? ", " + count.textContent.replace("px", "pixels") : "")
+      );
+      select.append(
+        chip(from?.startsWith("#") ? from : null, from ? "" : "empty"),
+        text2,
+        chip(
+          to.startsWith("#") ? to : to === "unchanged" ? from : null,
+          to === "transparent" ? "clear" : ""
+        ),
+        count
+      );
+      select.onclick = () => selectRow(k);
+      item.append(select);
+      if (edit.rows.length > 1) {
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "map-remove";
+        remove.textContent = "\xD7";
+        remove.setAttribute("aria-label", "Remove colour " + (k + 1));
+        remove.onclick = () => removeRow(k);
+        item.append(remove);
+      }
+      box.append(item);
+    });
+    $("addRow").disabled = edit.rows.length >= MAX_ROWS;
+  }
+  function selectRow(k) {
+    if (k === edit.active) return;
+    commit("Adjust colour");
+    edit.active = k;
+    activate();
+    sync();
+    schedule();
+  }
+  function addRow() {
+    if (!pixels || edit.rows.length >= MAX_ROWS) return;
+    const used = new Set(edit.rows.map((r) => r.id));
+    let id = 1;
+    while (used.has(id)) id++;
+    action("Add colour", () => {
+      edit.rows.push(newRow(id, { ...defaults(), model: params.model }));
+      edit.active = edit.rows.length - 1;
+      activate();
+    });
+    status("Added a colour. Click the part of the image to change.");
+  }
+  function removeRow(k) {
+    action("Remove colour", () => {
+      const { id } = edit.rows[k];
+      edit.rows.splice(k, 1);
+      for (let i = 0; i < overrides.length; i++)
+        if (overrides[i] === id) overrides[i] = 0;
+      if (edit.active > k || edit.active === edit.rows.length) edit.active--;
+      activate();
+    });
+  }
+  async function mapAll() {
+    if (!pixels) return;
+    commit("Adjust colour");
+    try {
+      const families = colourFamilies(await variantImage());
+      if (!families.length) {
+        status("There are no colours to map in this image.");
+        return;
+      }
+      action("Map all colours", () => {
+        edit.rows = families.map((f, k) => {
+          const row = newRow(k + 1, {
+            ...defaults(),
+            model: params.model,
+            target: f.hex,
+            shadeTol: f.grey ? 60 : 100
+          });
+          row.seeds.push({ x: f.x, y: f.y });
+          return row;
+        });
+        edit.active = 0;
+        overrides.fill(0);
+        activate();
+      });
+      status(
+        "Mapped " + families.length + (families.length === 1 ? " colour family" : " colour families") + ". Choose one, then set its new colour."
+      );
+    } catch (e) {
+      status("Could not map the colours: " + e.message);
+    }
   }
   function rememberTarget(hex) {
     if (!parseHex(hex)) return;
@@ -5805,6 +6426,7 @@ dialog p {
     $("cleanEdges").checked = params.cleanEdges;
     syncTarget();
     renderSeeds();
+    renderMap();
     buttons();
   }
   function setTarget(hex) {
@@ -5836,7 +6458,7 @@ dialog p {
       return;
     }
     action("Pick colour", () => {
-      if (!addSample && !space) seeds = [];
+      if (!addSample && !space) seeds.length = 0;
       if (!seeds.some((s) => s.x === x && s.y === y)) {
         if (seeds.length >= 64) {
           status("Use up to 64 colour samples.");
@@ -5855,7 +6477,7 @@ dialog p {
     let url;
     try {
       url = URL.createObjectURL(
-        new Blob(['(()=>{var N=(t,e,n)=>Math.min(n,Math.max(e,t)),$=(t,e)=>Math.abs((t-e+540)%360-180),B=(t,e)=>(t-e+540)%360-180;function j(t,e,n){t/=255,e/=255,n/=255;let a=Math.max(t,e,n),s=Math.min(t,e,n),r=a-s,o=(a+s)/2,i=0;return r&&(i=a===t?(e-n)/r%6:a===e?(n-t)/r+2:(t-e)/r+4),[(i*60+360)%360,r?r/(1-Math.abs(2*o-1)):0,o,r]}function ut(t,e,n){t=(t%360+360)%360,e=N(e,0,1),n=N(n,0,1);let a=(1-Math.abs(2*n-1))*e,s=a*(1-Math.abs(t/60%2-1)),r=n-a/2,[o,i,l]=t<60?[a,s,0]:t<120?[s,a,0]:t<180?[0,a,s]:t<240?[0,s,a]:t<300?[s,0,a]:[a,0,s];return[o,i,l].map(c=>Math.round((c+r)*255))}function D(t){let e=String(t).trim().replace(/^#/,"");return/^[\\da-f]{3}$/i.test(e)&&(e=[...e].map(n=>n+n).join("")),/^[\\da-f]{6}$/i.test(e)?[0,2,4].map(n=>parseInt(e.slice(n,n+2),16)):null}var V=(t,e,n)=>"#"+[t,e,n].map(a=>N(Math.round(a),0,255).toString(16).padStart(2,"0")).join("").toUpperCase(),G=Float32Array.from({length:256},(t,e)=>{let n=e/255;return n<=.04045?n/12.92:((n+.055)/1.055)**2.4}),ht=t=>255*(t<=.0031308?12.92*t:1.055*Math.max(0,t)**(1/2.4)-.055);function mt(t,e,n){let a=G[t],s=G[e],r=G[n],o=Math.cbrt(.4122214708*a+.5363325363*s+.0514459929*r),i=Math.cbrt(.2119034982*a+.6806995451*s+.1073969566*r),l=Math.cbrt(.0883024619*a+.2817188376*s+.6299787005*r),c=.2104542553*o+.793617785*i-.0040720468*l,u=1.9779984951*o-2.428592205*i+.4505937099*l,w=.0259040371*o+.7827717662*i-.808675766*l;return[c,Math.hypot(u,w),(Math.atan2(w,u)*180/Math.PI+360)%360]}function X(t,e,n){let a=e*Math.cos(n*Math.PI/180),s=e*Math.sin(n*Math.PI/180),r=(t+.3963377774*a+.2158037573*s)**3,o=(t-.1055613458*a-.0638541728*s)**3,i=(t-.0894841775*a-1.291485548*s)**3;return[4.0767416621*r-3.3077115913*o+.2309699292*i,-1.2684380046*r+2.6097574011*o-.3413193965*i,-.0041960863*r-.7034186147*o+1.707614701*i]}var Q=t=>t.every(e=>e>=-1e-4&&e<=1+1e-4);function dt(t,e,n){t=N(t,0,1),e=Math.max(0,e);let a=X(t,e,n);if(!Q(a)){let s=0,r=e;for(let o=0;o<16;o++){let i=(s+r)/2;Q(X(t,i,n))?s=i:r=i}a=X(t,s,n)}return a.map(s=>N(Math.round(ht(s)),0,255))}var Y=.4;function H(t,e){if(e==="hsl"){let[r,o,i]=j(...t);return[r,o,i]}let[n,a,s]=mt(...t);return[s,Math.min(1,a/Y),n]}var L=(t,e,n,a)=>a==="hsl"?ut(t,e,n):dt(n,e*Y,t);function Z(t,e,n){let[a,s,r]=H(t,n),[o,i,l]=H(e,n);return{dh:B(o,a),ds:(i-s)*100,dl:(l-r)*100}}function K(t,e,n){return t<=e?e>0?t*n/e:n:e<1?n+(t-e)*(1-n)/(1-e):n}var tt=(t,e,n)=>n<e?t*n/e:K(t,e,n);var pt=.06;function gt(t,e){let n=t.length,a=[],s=new Array(n);for(let r=0;r<n-1;r++)a.push((e[r+1]-e[r])/(t[r+1]-t[r]));s[0]=a[0],s[n-1]=a[n-2];for(let r=1;r<n-1;r++)s[r]=a[r-1]*a[r]>0?(a[r-1]+a[r])/2:0;for(let r=0;r<n-1;r++){if(a[r]===0){s[r]=s[r+1]=0;continue}let o=s[r]/a[r],i=s[r+1]/a[r],l=o*o+i*i;if(l>9){let c=3/Math.sqrt(l);s[r]=c*o*a[r],s[r+1]=c*i*a[r]}}return r=>{if(r<=t[0])return e[0];if(r>=t[n-1])return e[n-1];let o=0;for(;r>t[o+1];)o++;let i=t[o+1]-t[o],l=(r-t[o])/i,c=l*l,u=c*l;return(2*u-3*c+1)*e[o]+(u-2*c+l)*i*s[o]+(3*c-2*u)*e[o+1]+(u-c)*i*s[o+1]}}function W(t,e){return n=>{if(n<=t[0])return e[0];let a=t.length;if(n>=t[a-1])return e[a-1];let s=0;for(;n>t[s+1];)s++;return e[s]+(e[s+1]-e[s])*(n-t[s])/(t[s+1]-t[s])}}function wt(t,e){let n=[...t].sort((o,i)=>o.l-i.l),a=n.reduce((o,i)=>o+i.weight,0);if(!a)return[];let s=[];for(let o=0,i=0,l=0;o<e;o++){let c=0,u=0,w=a*(o+1)/e;for(;l<n.length&&i+n[l].weight/2<=w;l++)c+=n[l].l*n[l].weight,u+=n[l].weight,i+=n[l].weight;u&&s.push(c/u)}let r=[];for(let o=0;o<32;o++){r=s.map(()=>[]);for(let c of n){let u=0;for(let w=1;w<s.length;w++)Math.abs(c.l-s[w])<Math.abs(c.l-s[u])&&(u=w);r[u].push(c)}r=r.filter(c=>c.length);let i=r.map(c=>c.reduce((u,w)=>u+w.l*w.weight,0)/c.reduce((u,w)=>u+w.weight,0)),l=i.length===s.length&&i.every((c,u)=>c===s[u]);if(s=i,l)break}return r.map(et)}function et(t){let e=t.reduce((o,i)=>o+i.weight,0),n=0,a=0,s=0,r=0;for(let o of t){let i=o.h*Math.PI/180,l=o.weight*Math.max(o.s,1e-6);n+=Math.cos(i)*l,a+=Math.sin(i)*l,s+=o.l*o.weight,r+=o.s*o.weight}return{h:(Math.atan2(a,n)*180/Math.PI+360)%360,s:r/e,l:s/e,weight:e,neutral:t.every(o=>o.neutral),members:t}}function nt(t,e,n){let a=t.ramp.map(M=>H(D(M),t.model)).sort((M,T)=>M[2]-T[2]),s=wt(e,a.length),r=[];for(let M of s)r.length&&M.l-r.at(-1).l<1/255?r.push(et([...r.pop().members,...M.members])):r.push(M);if(r.length<2)return null;let o=r.length,i=r.map((M,T)=>a[Math.round(T*(a.length-1)/(o-1))]),l=r.map(M=>M.l),c=i.map(M=>M[2]),u=[],w=[];l[0]>0&&(u.push(0),w.push(0)),u.push(...l),w.push(...c),l.at(-1)<1&&(u.push(1),w.push(1));let k=gt(u,w),b=r.every(M=>M.neutral),p=[];r.forEach((M,T)=>{let f=b?i[T][0]:B(i[T][0],M.h);if(T){for(;f-p[T-1]>180;)f-=360;for(;f-p[T-1]<-180;)f+=360}p.push(f)});let d=W(l,p),S=b?W(l,i.map(M=>M[1])):W(l,i.map((M,T)=>Math.log(N(M[1]/Math.max(r[T].s,.01),1/64,64))));return M=>{let[T,f,y]=H(M,t.model);return L(b?d(y):T+d(y),b?N(S(y),0,1):N(f*Math.exp(S(y)),0,1),N(k(y),0,1),t.model)}}function rt(t,e,n){let a=[];for(let s=0;s<e.length;s++)if(e[s]>0){let r=[t[s*3],t[s*3+1],t[s*3+2]],[o,i,l]=H(r,n);a.push({h:o,s:i,l,weight:e[s],neutral:j(...r)[3]<pt})}return a}var ot=(t,e)=>Z(e,D(t.ramp[0]),t.model);var yt=4194304,q=.06,Mt=2,bt=.2;function xt(t,e,n){if(!Number.isInteger(t)||!Number.isInteger(e)||t<1||e<1||t>8192||e>8192||t*e>yt||!(n instanceof Uint8ClampedArray)||n.length!==t*e*4)throw Error("Invalid image dimensions or pixel buffer.")}function It(t,e,n,a,s){let r={hueTol:[0,180],shadeTol:[0,100],soft:[0,100],feather:[0,8],dh:[-180,180],ds:[-100,100],dl:[-100,100]};for(let[o,[i,l]]of Object.entries(r))if(!Number.isFinite(t[o])||t[o]<i||t[o]>l)throw Error("Invalid processing parameter: "+o);if(!["shift","flat","transparent"].includes(t.mode)||!["oklch","hsl"].includes(t.model)||!D(t.target)||typeof t.protect!="boolean"||typeof t.connected!="boolean"||typeof t.cleanEdges!="boolean")throw Error("Invalid colour operation.");if(t.ramp!=null&&(!Array.isArray(t.ramp)||t.ramp.length<1||t.ramp.length>8||t.ramp.some(o=>typeof o!="string"||!D(o))))throw Error("Invalid colour ramp.");if(!Array.isArray(e)||e.length>64||e.some(o=>!Number.isInteger(o.x)||!Number.isInteger(o.y)||o.x<0||o.y<0||o.x>=a||o.y>=s))throw Error("Invalid colour samples.");if(!(n instanceof Int8Array)||n.length!==a*s)throw Error("Invalid selection buffer.")}async function st(t,e,n,a=async()=>{},s=()=>!1){xt(t,e,n);let r=t*e,o=new Int32Array(r),i=[],l=new Map,c=r>1<<20,u=c?new Int32Array(1<<24):new Map,w=0;for(let p=0;p<r;p++){if((p&16383)===0&&(await a(),s()))throw Error("Cancelled");let d=p*4;if(!n[d+3]){o[p]=-1;continue}let S=n[d]<<16|n[d+1]<<8|n[d+2],M=(c?u[S]:u.get(S))||0;M||(M=++w,c?u[S]=M:u.set(S,M),i.push(n[d],n[d+1],n[d+2])),o[p]=M-1;let T=(n[d]>>4)*256+(n[d+1]>>4)*16+(n[d+2]>>4),f=l.get(T);f?f.weight+=n[d+3]:l.set(T,{weight:n[d+3],x:p%t,y:Math.floor(p/t),hex:V(...n.subarray(d,d+3))})}let k=Uint8Array.from(i),b=new Float32Array(w*4);for(let p=0;p<w;p++){if((p&16383)===0&&(await a(),s()))throw Error("Cancelled");b.set(j(k[p*3],k[p*3+1],k[p*3+2]),p*4)}return{width:t,height:e,data:n,ids:o,colours:k,hsl:b,palette:[...l.values()].sort((p,d)=>d.weight-p.weight).slice(0,12)}}async function At(t,e,n,a,s){let{width:r,height:o,data:i,ids:l,hsl:c}=t,u=r*o,w=c.length/4,k=n.map(f=>({i:f.y*r+f.x})).filter(f=>l[f.i]>=0).map(f=>({...f,c:l[f.i],v:c.subarray(l[f.i]*4,l[f.i]*4+4)})),b=new Float32Array(w),p=new Uint8Array(w);if(k.length)for(let f=0;f<w;f++){(f&16383)===0&&await s();let y=f*4,F=c[y+3]<q,x=1/0,U=1/0,C=-1,R=0;for(let h=0;h<k.length;h++){let E=k[h].v,A=F?Math.abs(c[y+2]-E[2]):Math.max(Math.abs(c[y+1]-E[1]),Math.abs(c[y+2]-E[2])),g=$(c[y],E[0])/180+A;if(g<U&&(U=g,R=h),F!==E[3]<q)continue;let m=$(c[y],E[0]),I=Math.max(F?0:e.hueTol?m/e.hueTol:m<.5?0:1/0,e.shadeTol?A/(e.shadeTol/100):A<.004?0:1/0);I<x&&(x=I,C=h)}p[f]=C>=0?C:R,x<=1&&(b[f]=e.soft?Math.min(1,(1-x)/(e.soft/100)):1)}let d=new Float32Array(u);for(let f=0;f<u;f++)(f&16383)===0&&await s(),l[f]>=0&&(d[f]=b[l[f]]);if(e.connected&&k.length){let f=new Uint8Array(u),y=new Int32Array(u),F=0,x=0;for(let{i:U}of k)d[U]>0&&!f[U]&&(f[U]=1,y[x++]=U);for(;F<x;){(F&16383)===0&&await s();let U=y[F++],C=U%r,R=Math.floor(U/r);for(let h=-1;h<=1;h++)for(let E=-1;E<=1;E++){let A=C+E,g=R+h,m=g*r+A;A>=0&&A<r&&g>=0&&g<o&&!f[m]&&d[m]>0&&(f[m]=1,y[x++]=m)}}for(let U=0;U<u;U++)(U&16383)===0&&await s(),f[U]||(d[U]=0)}for(let f=0;f<u;f++){if((f&16383)===0&&await s(),a[f]!==0&&a[f]!==1&&a[f]!==-1)throw Error("Invalid brush override.");a[f]&&(d[f]=i[f*4+3]&&a[f]>0?1:0)}let S=Math.round(e.feather);if(S){let f=new Float32Array(u);for(let y=0;y<o;y++){(y&15)===0&&await s();let F=0;for(let x=-S;x<=S;x++)F+=d[y*r+N(x,0,r-1)];for(let x=0;x<r;x++)f[y*r+x]=F/(S*2+1),F+=d[y*r+N(x+S+1,0,r-1)]-d[y*r+N(x-S,0,r-1)]}for(let y=0;y<r;y++){(y&15)===0&&await s();let F=0;for(let x=-S;x<=S;x++)F+=f[N(x,0,o-1)*r+y];for(let x=0;x<o;x++)d[x*r+y]=i[(x*r+y)*4+3]?F/(S*2+1):0,F+=f[N(x+S+1,0,o-1)*r+y]-f[N(x-S,0,o-1)*r+y]}}let M=0,T=0;for(let f=0;f<u;f++)(f&16383)===0&&await s(),i[f*4+3]&&T++,d[f]>0&&M++;return{mask:d,weight:b,nearest:p,source:k,count:M,opaque:T}}async function at(t,e,n,a){let s=t*e,r=new Uint8Array(s);for(let o=0;o<s;o++)(o&16383)===0&&await a(),n(o)&&(r[o]=1);for(let o=2;o<=Mt+1;o++)for(let i=0;i<s;i++){if((i&16383)===0&&await a(),r[i])continue;let l=i%t,c=(i-l)/t;for(let u=-1;u<=1&&!r[i];u++)for(let w=-1;w<=1;w++){let k=l+w,b=c+u,p=b*t+k;if(k>=0&&k<t&&b>=0&&b<e&&r[p]&&r[p]<o){r[i]=o;break}}}return r}function kt(t,e){let{colours:n,data:a}=t;if(e.source.length){let o=e.source.at(-1).c;return[n[o*3],n[o*3+1],n[o*3+2]]}let s=[0,0,0],r=0;for(let o=0;o<e.mask.length;o++)if(e.mask[o]>0){for(let i=0;i<3;i++)s[i]+=a[o*4+i]*e.mask[o];r+=e.mask[o]}return r?s.map(o=>Math.round(o/r)):null}function Et(t,e){let[n,a,s]=H(e,t.model),r=j(...e)[3]<q,o=a+t.ds/100,i=s+t.dl/100,l=N(o,0,1),c=N(i,0,1),u=n+t.dh;return{shift:k=>{let[,b,p]=H(k,t.model);return L(u,r?l:t.protect?tt(b,a,l):N(b+t.ds/100,0,1),t.protect?K(p,s,c):N(p+t.dl/100,0,1),t.model)},capped:o!==l||i!==c}}function Tt(t,e){let n=0;for(let a=0;a<3;a++){let s=t[a]/255,r=e[a]/255;s>r?n=Math.max(n,(s-r)/(1-r)):s<r&&(n=Math.max(n,(r-s)/r))}return n=Math.round(n*255)/255,n?[...[0,1,2].map(a=>N(Math.round((t[a]-(1-n)*e[a])/n),0,255)),n]:[0,0,0,0]}async function it(t,e,n,a,s=async()=>{},r=()=>!1){let{width:o,height:i,data:l,ids:c,colours:u}=t,w=o*i;It(e,n,a,o,i);let k=async()=>{if(await s(),r())throw Error("Cancelled")},b=await At(t,e,n,a,k),{mask:p}=b,d=new Uint8ClampedArray(l),S=D(e.target),M=e.mode==="shift"&&b.count?kt(t,b):null,T=e.mode==="transparent"&&e.cleanEdges&&b.source.length,f=new Map,y,F=!1;if(M){let h=null;if(e.ramp?.length>1){let E=new Float64Array(u.length/3);for(let A=0;A<w;A++)(A&16383)===0&&await k(),p[A]>0&&c[A]>=0&&(E[c[A]]+=p[A]);h=nt(e,rt(u,E,e.model))}h?y=h:{shift:y,capped:F}=Et(e.ramp?.length?{...e,...ot(e,M)}:e,M)}let x=(h,E=b.nearest[h])=>{let A=h*64+E,g=f.get(A);if(!g){let m=[u[h*3],u[h*3+1],u[h*3+2]];if(e.mode==="flat")g=S;else if(T){let I=b.source[E].c;g=Tt(m,[u[I*3],u[I*3+1],u[I*3+2]])}else g=y(m);f.set(A,g)}return g},U=new Int8Array(T?w:0).fill(-1);if(T)for(let h=0;h<w;h++){if((h&16383)===0&&await k(),p[h]>0||c[h]<0||a[h]<0||b.weight[c[h]]>0)continue;let E=h%o,A=(h-E)/o;for(let g=-1;g<=1&&U[h]<0;g++)for(let m=-1;m<=1;m++){let I=E+m,v=A+g,P=v*o+I;if(I>=0&&I<o&&v>=0&&v<i&&p[P]>0&&c[P]>=0){U[h]=b.nearest[c[P]];break}}}let C=new Uint8Array(M&&e.mode==="shift"&&b.source.length&&!e.feather?w:0);if(C.length){let{hsl:h}=t,E=new Uint8Array(h.length/4),A=await at(o,i,m=>p[m]>0,k),g=await at(o,i,m=>c[m]>=0&&(h[c[m]*4+3]<q||h[c[m]*4+2]<bt),k);for(let m=0;m<E.length;m++){(m&16383)===0&&await k();let I=m*4,v=b.source[b.nearest[m]].v;if(h[I+3]<q||v[3]<q)continue;let P=$(h[I],v[0]),z=Math.max(Math.abs(h[I+1]-v[1]),Math.abs(h[I+2]-v[2])),J=e.hueTol?P/e.hueTol:P<.5?0:1/0,ct=e.shadeTol?z/(e.shadeTol/100):z<.004?0:1/0;E[m]=J<=1&&ct>=J?1:0}for(let m=0;m<w;m++){(m&16383)===0&&await k();let I=c[m];I>=0&&p[m]<1&&a[m]>=0&&!(p[m]<=0&&b.weight[I]>0)&&E[I]&&A[m]&&g[m]&&(C[m]=1)}}let R=0;for(let h=0;h<w;h++){(h&16383)===0&&await k();let E=T&&U[h]>=0,A=E||C[h]?1:p[h];if(A<=0)continue;let g=h*4;if(e.mode==="transparent"){let m=!T||a[h]>0?null:E?x(c[h],U[h]):x(c[h]);if(m){let I=1-A*(1-m[3]);if(I>0)for(let v=0;v<3;v++)d[g+v]=(l[g+v]*(1-A)+m[v]*m[3]*A)/I;d[g+3]=Math.round(l[g+3]*I)}else d[g+3]=Math.round(l[g+3]*(1-A));d[g+3]||d.fill(0,g,g+4)}else{let m=x(c[h]);for(let I=0;I<3;I++)d[g+I]=l[g+I]+(m[I]-l[g+I])*A}(d[g]!==l[g]||d[g+1]!==l[g+1]||d[g+2]!==l[g+2]||d[g+3]!==l[g+3])&&R++}return{pixels:d,mask:p,count:b.count,opaque:b.opaque,changed:R,capped:e.mode==="shift"&&F}}function lt(t=12){let e=0;return()=>{if(!(performance.now()-e<t))return new Promise(n=>{let a=new MessageChannel;a.port1.onmessage=()=>{a.port1.close(),e=performance.now(),n()},a.port2.postMessage(0)})}}var O=null,_=0,ft=lt();self.onmessage=async({data:t})=>{let e=++_;try{if(!Number.isSafeInteger(t.imageId)||!Number.isSafeInteger(t.editId))throw Error("Invalid request identifiers.");if(t.type==="cancel")return;if(t.type==="image"){O=null;let a=await st(t.width,t.height,t.pixels,ft,()=>e!==_);if(e!==_)return;O={...a,id:t.imageId},self.postMessage({type:"ready",imageId:t.imageId,editId:t.editId,palette:O.palette});return}if(t.type!=="edit"||!O||O.id!==t.imageId)throw Error("Unknown image or operation.");let n=await it(O,t.params,t.seeds,t.overrides,ft,()=>e!==_);e===_&&self.postMessage({type:"result",imageId:t.imageId,editId:t.editId,...n},[n.pixels.buffer,n.mask.buffer])}catch(n){e===_&&self.postMessage({type:"error",imageId:t.imageId,editId:t.editId,message:n.message})}};})();\n'], { type: "text/javascript" })
+        new Blob(['(()=>{var v=(t,e,n)=>Math.min(n,Math.max(e,t)),$=(t,e)=>Math.abs((t-e+540)%360-180),K=(t,e)=>(t-e+540)%360-180;function j(t,e,n){t/=255,e/=255,n/=255;let o=Math.max(t,e,n),a=Math.min(t,e,n),r=o-a,i=(o+a)/2,s=0;return r&&(s=o===t?(e-n)/r%6:o===e?(n-t)/r+2:(t-e)/r+4),[(s*60+360)%360,r?r/(1-Math.abs(2*i-1)):0,i,r]}function gt(t,e,n){t=(t%360+360)%360,e=v(e,0,1),n=v(n,0,1);let o=(1-Math.abs(2*n-1))*e,a=o*(1-Math.abs(t/60%2-1)),r=n-o/2,[i,s,f]=t<60?[o,a,0]:t<120?[a,o,0]:t<180?[0,o,a]:t<240?[0,a,o]:t<300?[a,0,o]:[o,0,a];return[i,s,f].map(p=>Math.round((p+r)*255))}function _(t){let e=String(t).trim().replace(/^#/,"");return/^[\\da-f]{3}$/i.test(e)&&(e=[...e].map(n=>n+n).join("")),/^[\\da-f]{6}$/i.test(e)?[0,2,4].map(n=>parseInt(e.slice(n,n+2),16)):null}var Y=(t,e,n)=>"#"+[t,e,n].map(o=>v(Math.round(o),0,255).toString(16).padStart(2,"0")).join("").toUpperCase(),W=Float32Array.from({length:256},(t,e)=>{let n=e/255;return n<=.04045?n/12.92:((n+.055)/1.055)**2.4}),wt=t=>255*(t<=.0031308?12.92*t:1.055*Math.max(0,t)**(1/2.4)-.055);function yt(t,e,n){let o=W[t],a=W[e],r=W[n],i=Math.cbrt(.4122214708*o+.5363325363*a+.0514459929*r),s=Math.cbrt(.2119034982*o+.6806995451*a+.1073969566*r),f=Math.cbrt(.0883024619*o+.2817188376*a+.6299787005*r),p=.2104542553*i+.793617785*s-.0040720468*f,u=1.9779984951*i-2.428592205*s+.4505937099*f,c=.0259040371*i+.7827717662*s-.808675766*f;return[p,Math.hypot(u,c),(Math.atan2(c,u)*180/Math.PI+360)%360]}function V(t,e,n){let o=e*Math.cos(n*Math.PI/180),a=e*Math.sin(n*Math.PI/180),r=(t+.3963377774*o+.2158037573*a)**3,i=(t-.1055613458*o-.0638541728*a)**3,s=(t-.0894841775*o-1.291485548*a)**3;return[4.0767416621*r-3.3077115913*i+.2309699292*s,-1.2684380046*r+2.6097574011*i-.3413193965*s,-.0041960863*r-.7034186147*i+1.707614701*s]}var Q=t=>t.every(e=>e>=-1e-4&&e<=1+1e-4);function xt(t,e,n){t=v(t,0,1),e=Math.max(0,e);let o=V(t,e,n);if(!Q(o)){let a=0,r=e;for(let i=0;i<16;i++){let s=(a+r)/2;Q(V(t,s,n))?a=s:r=s}o=V(t,a,n)}return o.map(a=>v(Math.round(wt(a)),0,255))}var Z=.4;function C(t,e){if(e==="hsl"){let[r,i,s]=j(...t);return[r,i,s]}let[n,o,a]=yt(...t);return[a,Math.min(1,o/Z),n]}var B=(t,e,n,o)=>o==="hsl"?gt(t,e,n):xt(n,e*Z,t);function tt(t,e,n){let[o,a,r]=C(t,n),[i,s,f]=C(e,n);return{dh:K(i,o),ds:(s-a)*100,dl:(f-r)*100}}function z(t,e,n){return t<=e?e>0?t*n/e:n:e<1?n+(t-e)*(1-n)/(1-e):n}var et=(t,e,n)=>n<e?t*n/e:z(t,e,n);var Mt=.06;function bt(t,e){let n=t.length,o=[],a=new Array(n);for(let r=0;r<n-1;r++)o.push((e[r+1]-e[r])/(t[r+1]-t[r]));a[0]=o[0],a[n-1]=o[n-2];for(let r=1;r<n-1;r++)a[r]=o[r-1]*o[r]>0?(o[r-1]+o[r])/2:0;for(let r=0;r<n-1;r++){if(o[r]===0){a[r]=a[r+1]=0;continue}let i=a[r]/o[r],s=a[r+1]/o[r],f=i*i+s*s;if(f>9){let p=3/Math.sqrt(f);a[r]=p*i*o[r],a[r+1]=p*s*o[r]}}return r=>{if(r<=t[0])return e[0];if(r>=t[n-1])return e[n-1];let i=0;for(;r>t[i+1];)i++;let s=t[i+1]-t[i],f=(r-t[i])/s,p=f*f,u=p*f;return(2*u-3*p+1)*e[i]+(u-2*p+f)*s*a[i]+(3*p-2*u)*e[i+1]+(u-p)*s*a[i+1]}}function J(t,e){return n=>{if(n<=t[0])return e[0];let o=t.length;if(n>=t[o-1])return e[o-1];let a=0;for(;n>t[a+1];)a++;return e[a]+(e[a+1]-e[a])*(n-t[a])/(t[a+1]-t[a])}}function It(t,e){let n=[...t].sort((i,s)=>i.l-s.l),o=n.reduce((i,s)=>i+s.weight,0);if(!o)return[];let a=[];for(let i=0,s=0,f=0;i<e;i++){let p=0,u=0,c=o*(i+1)/e;for(;f<n.length&&s+n[f].weight/2<=c;f++)p+=n[f].l*n[f].weight,u+=n[f].weight,s+=n[f].weight;u&&a.push(p/u)}let r=[];for(let i=0;i<32;i++){r=a.map(()=>[]);for(let p of n){let u=0;for(let c=1;c<a.length;c++)Math.abs(p.l-a[c])<Math.abs(p.l-a[u])&&(u=c);r[u].push(p)}r=r.filter(p=>p.length);let s=r.map(p=>p.reduce((u,c)=>u+c.l*c.weight,0)/p.reduce((u,c)=>u+c.weight,0)),f=s.length===a.length&&s.every((p,u)=>p===a[u]);if(a=s,f)break}return r.map(nt)}function nt(t){let e=t.reduce((i,s)=>i+s.weight,0),n=0,o=0,a=0,r=0;for(let i of t){let s=i.h*Math.PI/180,f=i.weight*Math.max(i.s,1e-6);n+=Math.cos(s)*f,o+=Math.sin(s)*f,a+=i.l*i.weight,r+=i.s*i.weight}return{h:(Math.atan2(o,n)*180/Math.PI+360)%360,s:r/e,l:a/e,weight:e,neutral:t.every(i=>i.neutral),members:t}}function rt(t,e,n){let o=t.ramp.map(g=>C(_(g),t.model)).sort((g,F)=>g[2]-F[2]),a=It(e,o.length),r=[];for(let g of a)r.length&&g.l-r.at(-1).l<1/255?r.push(nt([...r.pop().members,...g.members])):r.push(g);if(r.length<2)return null;let i=r.length,s=r.map((g,F)=>o[Math.round(F*(o.length-1)/(i-1))]),f=r.map(g=>g.l),p=s.map(g=>g[2]),u=[],c=[];f[0]>0&&(u.push(0),c.push(0)),u.push(...f),c.push(...p),f.at(-1)<1&&(u.push(1),c.push(1));let b=bt(u,c),E=r.every(g=>g.neutral),I=[];r.forEach((g,F)=>{let T=E?s[F][0]:K(s[F][0],g.h);if(F){for(;T-I[F-1]>180;)T-=360;for(;T-I[F-1]<-180;)T+=360}I.push(T)});let S=J(f,I),R=E?J(f,s.map(g=>g[1])):J(f,s.map((g,F)=>Math.log(v(g[1]/Math.max(r[F].s,.01),1/64,64))));return g=>{let[F,T,U]=C(g,t.model);return B(E?S(U):F+S(U),E?v(R(U),0,1):v(T*Math.exp(R(U)),0,1),v(b(U),0,1),t.model)}}function ot(t,e,n){let o=[];for(let a=0;a<e.length;a++)if(e[a]>0){let r=[t[a*3],t[a*3+1],t[a*3+2]],[i,s,f]=C(r,n);o.push({h:i,s,l:f,weight:e[a],neutral:j(...r)[3]<Mt})}return o}var at=(t,e)=>tt(e,_(t.ramp[0]),t.model);var At=4194304,O=.06,Et=2,kt=.2;function Ft(t,e,n){if(!Number.isInteger(t)||!Number.isInteger(e)||t<1||e<1||t>8192||e>8192||t*e>At||!(n instanceof Uint8ClampedArray)||n.length!==t*e*4)throw Error("Invalid image dimensions or pixel buffer.")}var Nt=16,ft=64,ct=.12,it=4*ct,st=99;function St(t,e,n){if(!Array.isArray(t)||t.length>ft||t.some(o=>typeof o?.hex=="string"?!/^#[\\dA-F]{6}$/i.test(o.hex):!Number.isInteger(o?.x)||!Number.isInteger(o.y)||o.x<0||o.y<0||o.x>=e||o.y>=n))throw Error("Invalid colour samples.")}function Tt(t){let e={hueTol:[0,180],shadeTol:[0,100],soft:[0,100],feather:[0,8],dh:[-180,180],ds:[-100,100],dl:[-100,100]};for(let[n,[o,a]]of Object.entries(e))if(!Number.isFinite(t[n])||t[n]<o||t[n]>a)throw Error("Invalid processing parameter: "+n);if(!["shift","flat","transparent"].includes(t.mode)||!["oklch","hsl"].includes(t.model)||!_(t.target)||typeof t.protect!="boolean"||typeof t.connected!="boolean"||typeof t.cleanEdges!="boolean")throw Error("Invalid colour operation.");if(t.ramp!=null&&(!Array.isArray(t.ramp)||t.ramp.length<1||t.ramp.length>8||t.ramp.some(n=>typeof n!="string"||!_(n))))throw Error("Invalid colour ramp.")}function Rt(t,e,n,o,a){if(!Array.isArray(t)||t.length<1||t.length>Nt)throw Error("Invalid colour map.");let r=new Set,i=0;for(let s of t){if(!Number.isInteger(s?.id)||s.id<1||s.id>127||r.has(s.id))throw Error("Invalid colour map.");r.add(s.id),Tt(s.params),St(s.seeds,o,a),i+=s.seeds.length}if(i>ft)throw Error("Invalid colour samples.");if(!Number.isInteger(n)||n<0||n>=t.length)throw Error("Invalid colour map.");if(!(e instanceof Int8Array)||e.length!==o*a)throw Error("Invalid selection buffer.");for(let s=0;s<e.length;s++)if(e[s]&&e[s]!==-1&&!r.has(e[s]))throw Error("Invalid brush override.")}async function ut(t,e,n,o=async()=>{},a=()=>!1){Ft(t,e,n);let r=t*e,i=new Int32Array(r),s=[],f=new Map,p=r>1<<20,u=p?new Int32Array(1<<24):new Map,c=0;for(let I=0;I<r;I++){if((I&16383)===0&&(await o(),a()))throw Error("Cancelled");let S=I*4;if(!n[S+3]){i[I]=-1;continue}let R=n[S]<<16|n[S+1]<<8|n[S+2],g=(p?u[R]:u.get(R))||0;g||(g=++c,p?u[R]=g:u.set(R,g),s.push(n[S],n[S+1],n[S+2])),i[I]=g-1;let F=(n[S]>>4)*256+(n[S+1]>>4)*16+(n[S+2]>>4),T=f.get(F);T?T.weight+=n[S+3]:f.set(F,{weight:n[S+3],x:I%t,y:Math.floor(I/t),hex:Y(...n.subarray(S,S+3))})}let b=Uint8Array.from(s),E=new Float32Array(c*4);for(let I=0;I<c;I++){if((I&16383)===0&&(await o(),a()))throw Error("Cancelled");E.set(j(b[I*3],b[I*3+1],b[I*3+2]),I*4)}return{width:t,height:e,data:n,ids:i,colours:b,hsl:E,palette:[...f.values()].sort((I,S)=>S.weight-I.weight).slice(0,12)}}function vt(t,e){let{width:n,ids:o,hsl:a,colours:r}=t,i=[];for(let s of e){if(typeof s.hex=="string"){let u=_(s.hex);i.push({i:-1,rgb:u,v:Float32Array.from(j(...u))});continue}let f=s.y*n+s.x,p=o[f];p>=0&&i.push({i:f,rgb:[r[p*3],r[p*3+1],r[p*3+2]],v:a.subarray(p*4,p*4+4)})}return i}function Ut(t,e,n){if(t[e+3]<O)return Math.abs(t[e+2]-n[2])/2;let o=Math.max(Math.abs(t[e+1]-n[1]),Math.abs(t[e+2]-n[2]));return $(t[e],n[0])/45+o/2}async function Dt(t,e,n,o,a){let{width:r,height:i,data:s,ids:f,hsl:p,colours:u}=t,c=r*i,b=p.length/4,E=vt(t,n),I=new Float32Array(b),S=new Float32Array(b).fill(st),R=new Uint8Array(b);if(E.length)for(let x=0;x<b;x++){(x&16383)===0&&await a();let N=x*4,k=p[N+3]<O,M=1/0,h=1/0,l=st,w=-1,m=0;for(let d=0;d<E.length;d++){let y=E[d].v,A=k?Math.abs(p[N+2]-y[2]):Math.max(Math.abs(p[N+1]-y[1]),Math.abs(p[N+2]-y[2])),D=$(p[N],y[0])/180+A;if(D<h&&(h=D,m=d),k!==y[3]<O)continue;l=Math.min(l,Ut(p,N,y));let H=$(p[N],y[0]),L=Math.max(k?0:e.hueTol?H/e.hueTol:H<.5?0:1/0,e.shadeTol?A/(e.shadeTol/100):A<.004?0:1/0);L<M&&(M=L,w=d)}R[x]=w>=0?w:m,S[x]=l,M<=1&&(I[x]=e.soft?Math.min(1,(1-M)/(e.soft/100)):1)}let g=new Float32Array(c);for(let x=0;x<c;x++)(x&16383)===0&&await a(),f[x]>=0&&(g[x]=I[f[x]]);if(e.connected&&E.length){let x=new Uint8Array(c),N=new Int32Array(c),k=0,M=0;for(let{i:h}of E)h>=0&&g[h]>0&&!x[h]&&(x[h]=1,N[M++]=h);for(;k<M;){(k&16383)===0&&await a();let h=N[k++],l=h%r,w=Math.floor(h/r);for(let m=-1;m<=1;m++)for(let d=-1;d<=1;d++){let y=l+d,A=w+m,D=A*r+y;y>=0&&y<r&&A>=0&&A<i&&!x[D]&&g[D]>0&&(x[D]=1,N[M++]=D)}}for(let h=0;h<c;h++)(h&16383)===0&&await a(),x[h]||(g[h]=0)}for(let x=0;x<c;x++){if((x&16383)===0&&await a(),o[x]!==0&&o[x]!==1&&o[x]!==-1)throw Error("Invalid brush override.");o[x]&&(g[x]=s[x*4+3]&&o[x]>0?1:0)}let F=Math.round(e.feather);if(F){let x=new Float32Array(c);for(let N=0;N<i;N++){(N&15)===0&&await a();let k=0;for(let M=-F;M<=F;M++)k+=g[N*r+v(M,0,r-1)];for(let M=0;M<r;M++)x[N*r+M]=k/(F*2+1),k+=g[N*r+v(M+F+1,0,r-1)]-g[N*r+v(M-F,0,r-1)]}for(let N=0;N<r;N++){(N&15)===0&&await a();let k=0;for(let M=-F;M<=F;M++)k+=x[v(M,0,i-1)*r+N];for(let M=0;M<i;M++)g[M*r+N]=s[(M*r+N)*4+3]?k/(F*2+1):0,k+=x[v(M+F+1,0,i-1)*r+N]-x[v(M-F,0,i-1)*r+N]}}let T=0,U=0;for(let x=0;x<c;x++)(x&16383)===0&&await a(),s[x*4+3]&&U++,g[x]>0&&T++;return{mask:g,weight:I,score:S,nearest:R,source:E,count:T,opaque:U}}async function lt(t,e,n,o){let a=t*e,r=new Uint8Array(a);for(let i=0;i<a;i++)(i&16383)===0&&await o(),n(i)&&(r[i]=1);for(let i=2;i<=Et+1;i++)for(let s=0;s<a;s++){if((s&16383)===0&&await o(),r[s])continue;let f=s%t,p=(s-f)/t;for(let u=-1;u<=1&&!r[s];u++)for(let c=-1;c<=1;c++){let b=f+c,E=p+u,I=E*t+b;if(b>=0&&b<t&&E>=0&&E<e&&r[I]&&r[I]<i){r[s]=i;break}}}return r}function Ct(t,e){let{data:n}=t;if(e.source.length)return e.source.at(-1).rgb;let o=[0,0,0],a=0;for(let r=0;r<e.mask.length;r++)if(e.mask[r]>0){for(let i=0;i<3;i++)o[i]+=n[r*4+i]*e.mask[r];a+=e.mask[r]}return a?o.map(r=>Math.round(r/a)):null}function _t(t,e){let[n,o,a]=C(e,t.model),r=j(...e)[3]<O,i=o+t.ds/100,s=a+t.dl/100,f=v(i,0,1),p=v(s,0,1),u=n+t.dh;return{shift:b=>{let[,E,I]=C(b,t.model);return B(u,r?f:t.protect?et(E,o,f):v(E+t.ds/100,0,1),t.protect?z(I,a,p):v(I+t.dl/100,0,1),t.model)},capped:i!==f||s!==p}}function jt(t,e){let n=0;for(let o=0;o<3;o++){let a=t[o]/255,r=e[o]/255;a>r?n=Math.max(n,(a-r)/(1-r)):a<r&&(n=Math.max(n,(r-a)/r))}return n=Math.round(n*255)/255,n?[...[0,1,2].map(o=>v(Math.round((t[o]-(1-n)*e[o])/n),0,255)),n]:[0,0,0,0]}var Ot=(t,e)=>async()=>{if(await t(),e())throw Error("Cancelled")};async function ht(t,e,n,o,a=async()=>{},r=()=>!1){let{width:i,height:s,data:f,ids:p}=t,u=i*s;Rt(e,n,o,i,s);let c=Ot(a,r),b=new Uint8ClampedArray(f),E=new Float32Array(4*u),I=new Float32Array(u),S=new Float32Array(u),R=new Float32Array(u),g=new Uint8Array(u),F=new Int8Array(u).fill(-1),T=new Int8Array(u),U=[],x=null;for(let[k,M]of e.entries()){for(let l=0;l<u;l++)(l&16383)===0&&await c(),T[l]=n[l]===M.id?1:n[l]?-1:0;let h=await qt(t,M.params,M.seeds,T,c);U.push(h.count),k===o&&(x=h);for(let l=0;l<u;l++){(l&16383)===0&&await c();let w=h.weight[l];if(!(w>0))continue;let m=n[l]===M.id||p[l]<0?0:h.score[p[l]],d=l*4;if(g[l]&&m>S[l]+it)continue;if(!g[l]||m<S[l]-it){b.set(h.pixels.subarray(d,d+4),d),S[l]=m,g[l]=1;for(let A=0;A<4;A++)E[d+A]=w*h.pixels[d+A];I[l]=R[l]=w,F[l]=k;continue}let y=w*Math.exp(-(m-S[l])/ct);g[l]++;for(let A=0;A<4;A++)E[d+A]+=y*h.pixels[d+A];I[l]+=y,y>R[l]&&(R[l]=y,F[l]=k)}}for(let k=0;k<u;k++)if((k&16383)===0&&await c(),g[k]>1&&I[k]>0)for(let M=0;M<4;M++)b[k*4+M]=E[k*4+M]/I[k];e.length>1&&await Pt(t,e,F,b,c);let N=0;for(let k=0;k<u;k++){(k&16383)===0&&await c();let M=k*4;(b[M]!==f[M]||b[M+1]!==f[M+1]||b[M+2]!==f[M+2]||b[M+3]!==f[M+3])&&N++}return{pixels:b,mask:x.mask,owner:F,counts:U,count:x.count,opaque:x.opaque,changed:N,capped:x.capped}}var X=2,G=3;async function Pt(t,e,n,o,a){let{width:r,height:i,data:s}=t,f=e.map(c=>c.params.mode!=="transparent"),p=[],u=(c,b)=>s[c*4+b];for(let c=0;c<i;c++){(c&15)===0&&await a();for(let b=0;b<r;b++){let E=c*r+b,I=n[E];if(I<0||!f[I])continue;let S=-1;for(let l=-X;l<=X&&S<0;l++)for(let w=-X;w<=X;w++){let m=b+w,d=c+l;if(m<0||d<0||m>=r||d>=i)continue;let y=n[d*r+m];if(y>=0&&y!==I&&f[y]){S=y;break}}if(S<0)continue;let R=[[],[]];for(let l=-G;l<=G;l++)for(let w=-G;w<=G;w++){let m=b+w,d=c+l;if(m<0||d<0||m>=r||d>=i)continue;let y=d*r+m;s[y*4+3]&&(n[y]===I?R[0].push(y):n[y]===S&&R[1].push(y))}let g=-1,F=-1;for(let l of R[1]){let w=0;for(let m=0;m<3;m++)w+=(u(l,m)-u(E,m))**2;w>F&&(F=w,g=l)}let T=-1,U=0,x=0;for(let l of R[0]){let w=[0,1,2].map(A=>u(l,A)-u(g,A)),m=w[0]**2+w[1]**2+w[2]**2;if(m<3*32**2)continue;let d=0;for(let A=0;A<3;A++)d+=(u(E,A)-u(g,A))*w[A];if(d/=m,d>.97||d<.03)continue;let y=0;for(let A=0;A<3;A++)y+=(u(E,A)-(u(g,A)+d*w[A]))**2;y<=.04*m&&m>x&&(T=l,U=d,x=m)}if(T<0)continue;let N=[0,1,2].map(l=>u(T,l)),k=l=>{let w=0;for(let m=0;m<3;m++)w+=(u(l,m)-N[m])**2;return w},M=!1;for(let l=-1;l<=1&&!M;l++)for(let w=-1;w<=1;w++){let m=b+w,d=c+l,y=d*r+m;if(m>=0&&d>=0&&m<r&&d<i&&n[y]===I&&s[y*4+3]&&k(y)<k(E)-.01*x){M=!0;break}}if(!M)continue;let h=!0;for(let l=0;l<3;l++)h&&=o[T*4+l]===u(T,l)&&o[g*4+l]===u(g,l);h||p.push(E,...[0,1,2].map(l=>o[T*4+l]*U+o[g*4+l]*(1-U)))}}for(let c=0;c<p.length;c+=4)for(let b=0;b<3;b++)o[p[c]*4+b]=p[c+1+b]}async function qt(t,e,n,o,a){let{width:r,height:i,data:s,ids:f,colours:p}=t,u=r*i,c=await Dt(t,e,n,o,a),{mask:b}=c,E=new Uint8ClampedArray(s),I=new Float32Array(u),S=_(e.target),R=e.mode==="shift"&&c.count?Ct(t,c):null,g=e.mode==="transparent"&&e.cleanEdges&&c.source.length,F=new Map,T,U=!1;if(R&&!e.ramp?.length&&!e.dh&&!e.ds&&!e.dl)T=h=>h;else if(R){let h=null;if(e.ramp?.length>1){let l=new Float64Array(p.length/3);for(let w=0;w<u;w++)(w&16383)===0&&await a(),b[w]>0&&f[w]>=0&&(l[f[w]]+=b[w]);h=rt(e,ot(p,l,e.model))}h?T=h:{shift:T,capped:U}=_t(e.ramp?.length?{...e,...at(e,R)}:e,R)}let x=(h,l=c.nearest[h])=>{let w=h*64+l,m=F.get(w);if(!m){let d=[p[h*3],p[h*3+1],p[h*3+2]];e.mode==="flat"?m=S:g?m=jt(d,c.source[l].rgb):m=T(d),F.set(w,m)}return m},N=new Int8Array(g?u:0).fill(-1);if(g)for(let h=0;h<u;h++){if((h&16383)===0&&await a(),b[h]>0||f[h]<0||o[h]<0||c.weight[f[h]]>0)continue;let l=h%r,w=(h-l)/r;for(let m=-1;m<=1&&N[h]<0;m++)for(let d=-1;d<=1;d++){let y=l+d,A=w+m,D=A*r+y;if(y>=0&&y<r&&A>=0&&A<i&&b[D]>0&&f[D]>=0){N[h]=c.nearest[f[D]];break}}}let k=new Uint8Array(R&&e.mode==="shift"&&c.source.length&&!e.feather?u:0);if(k.length){let{hsl:h}=t,l=new Uint8Array(h.length/4),w=await lt(r,i,d=>b[d]>0,a),m=await lt(r,i,d=>f[d]>=0&&(h[f[d]*4+3]<O||h[f[d]*4+2]<kt),a);for(let d=0;d<l.length;d++){(d&16383)===0&&await a();let y=d*4,A=c.source[c.nearest[d]].v;if(h[y+3]<O||A[3]<O)continue;let D=$(h[y],A[0]),H=Math.max(Math.abs(h[y+1]-A[1]),Math.abs(h[y+2]-A[2])),L=e.hueTol?D/e.hueTol:D<.5?0:1/0,pt=e.shadeTol?H/(e.shadeTol/100):H<.004?0:1/0;l[d]=L<=1&&pt>=L?1:0}for(let d=0;d<u;d++){(d&16383)===0&&await a();let y=f[d];y>=0&&b[d]<1&&o[d]>=0&&!(b[d]<=0&&c.weight[y]>0)&&l[y]&&w[d]&&m[d]&&(k[d]=1)}}let M=0;for(let h=0;h<u;h++){(h&16383)===0&&await a();let l=g&&N[h]>=0,w=l||k[h]?1:b[h];if(w<=0)continue;I[h]=w;let m=h*4;if(e.mode==="transparent"){let d=!g||o[h]>0?null:l?x(f[h],N[h]):x(f[h]);if(d){let y=1-w*(1-d[3]);if(y>0)for(let A=0;A<3;A++)E[m+A]=(s[m+A]*(1-w)+d[A]*d[3]*w)/y;E[m+3]=Math.round(s[m+3]*y)}else E[m+3]=Math.round(s[m+3]*(1-w));E[m+3]||E.fill(0,m,m+4)}else{let d=x(f[h]);for(let y=0;y<3;y++)E[m+y]=s[m+y]+(d[y]-s[m+y])*w}(E[m]!==s[m]||E[m+1]!==s[m+1]||E[m+2]!==s[m+2]||E[m+3]!==s[m+3])&&M++}return{pixels:E,mask:b,weight:I,score:c.score,count:c.count,opaque:c.opaque,changed:M,capped:e.mode==="shift"&&U}}function dt(t=12){let e=0;return()=>{if(!(performance.now()-e<t))return new Promise(n=>{let o=new MessageChannel;o.port1.onmessage=()=>{o.port1.close(),e=performance.now(),n()},o.port2.postMessage(0)})}}var P=null,q=0,mt=dt();self.onmessage=async({data:t})=>{let e=++q;try{if(!Number.isSafeInteger(t.imageId)||!Number.isSafeInteger(t.editId))throw Error("Invalid request identifiers.");if(t.type==="cancel")return;if(t.type==="image"){P=null;let o=await ut(t.width,t.height,t.pixels,mt,()=>e!==q);if(e!==q)return;P={...o,id:t.imageId},self.postMessage({type:"ready",imageId:t.imageId,editId:t.editId,palette:P.palette});return}if(t.type!=="edit"||!P||P.id!==t.imageId)throw Error("Unknown image or operation.");let n=await ht(P,t.rows,t.overrides,t.active,mt,()=>e!==q);e===q&&self.postMessage({type:"result",imageId:t.imageId,editId:t.editId,...n},[n.pixels.buffer,n.mask.buffer,n.owner.buffer])}catch(n){e===q&&self.postMessage({type:"error",imageId:t.imageId,editId:t.editId,message:n.message})}};})();\n'], { type: "text/javascript" })
       );
       worker = new Worker(url);
       worker.onmessage = ({ data: m }) => receive(m);
@@ -5936,7 +6558,7 @@ dialog p {
     if (!pixels || !ready) return;
     const iid = imageId, eid = editId;
     try {
-      validateEdit(params, seeds, overrides, w, h);
+      validateMap(edit.rows, overrides, edit.active, w, h);
       const copy = overrides.slice();
       if (worker)
         worker.postMessage(
@@ -5944,18 +6566,18 @@ dialog p {
             type: "edit",
             imageId: iid,
             editId: eid,
-            params: structuredClone(params),
-            seeds: structuredClone(seeds),
+            rows: structuredClone(edit.rows),
+            active: edit.active,
             overrides: copy
           },
           [copy.buffer]
         );
       else
-        processImage(
+        processEdit(
           prepared,
-          structuredClone(params),
-          structuredClone(seeds),
+          structuredClone(edit.rows),
           copy,
+          edit.active,
           pause,
           () => iid !== imageId || eid !== editId
         ).then(
@@ -6003,6 +6625,7 @@ dialog p {
       $("targetResult").textContent = params.mode === "transparent" ? "Selected pixels become transparent." : (params.manual && params.mode === "shift" ? "Manual shift" : params.ramp && params.mode === "shift" ? "Tone " + params.ramp.join(" \xB7 ") : "Requested " + params.target) + " \xB7 achieved " + toHex(...m.pixels.subarray(o, o + 3));
     } else $("targetResult").textContent = "Pick a source colour to begin.";
     $("capWarning").hidden = !(m.capped && params.mode === "shift");
+    renderMap();
     draw();
     buttons();
     wake();
@@ -6086,8 +6709,8 @@ dialog p {
       original = decoded.pixels;
       pixels = original.slice();
       overrides = new Int8Array(w * h);
-      params = defaults();
-      seeds = [];
+      edit = freshEdit();
+      activate();
       dirty = false;
       history.clear();
       gesture = null;
@@ -6119,8 +6742,8 @@ dialog p {
     commit("Adjust colour");
     const moved = history.move({ pixels, overrides }, redo);
     if (!moved) return;
-    params = moved.meta.params;
-    seeds = moved.meta.seeds;
+    edit = moved.meta.edit;
+    activate();
     dirty = true;
     sync();
     if (moved.pixelsChanged) prepareCurrent();
@@ -6132,16 +6755,20 @@ dialog p {
       commit("Adjust colour");
       const r = await latest();
       if (!r.changed) return;
-      const old = snapshot();
+      const old = snapshot(), step = recipeStep(edit.rows, pixels, w, overrides);
       pixels = r.pixels.slice();
       overrides = new Int8Array(w * h);
-      seeds = [];
-      params = { ...params, dh: 0, ds: 0, dl: 0, manual: false };
+      edit = {
+        rows: [newRow(1, { ...params, dh: 0, ds: 0, dl: 0, manual: false })],
+        active: 0,
+        steps: [...edit.steps, step]
+      };
+      activate();
       dirty = true;
-      history.record(old, snapshot(), "Apply colour");
+      history.record(old, snapshot(), "Apply colours");
       sync();
       prepareCurrent();
-      status("Applied. Select the next colour, or export.");
+      status("Applied. Pick the next colour to build on this, or export.");
     } catch (e) {
       status(e.message);
     }
@@ -6150,8 +6777,8 @@ dialog p {
     action("Reset original", () => {
       pixels = original.slice();
       overrides = new Int8Array(w * h);
-      params = defaults();
-      seeds = [];
+      edit = freshEdit();
+      activate();
       dirty = false;
       prepareCurrent();
     });
@@ -6183,10 +6810,10 @@ dialog p {
           throw Error(
             "The image changed during export. Export again to save the latest edit."
           );
-        const pack = files.length > 1, named = files.map((f) => ({
-          name: outputName(name, f.format, params.target, f.suffix),
+        const tag = edit.rows.length === 1 && !edit.steps.length ? params.target : null, pack = files.length > 1, named = files.map((f) => ({
+          name: outputName(name, f.format, tag, f.suffix),
           blob: f.blob
-        })), blob = pack ? await zip(named) : named[0].blob, filename = pack ? outputName(name, "zip", params.target, settings.size) : named[0].name, over = files.filter((f) => f.limit && f.blob.size > f.limit);
+        })), blob = pack ? await zip(named) : named[0].blob, filename = pack ? outputName(name, "zip", tag, settings.size) : named[0].name, over = files.filter((f) => f.limit && f.blob.size > f.limit);
         download(blob, filename);
         status(
           "Prepared " + filename + " (" + formatBytes(blob.size) + "). " + (over.length ? "It is over the " + presetById(settings.size).label.split(" \xB7 ")[0] + " size limit. " : "") + "Choose where to save it."
@@ -6520,12 +7147,19 @@ dialog p {
     Object.assign(p, deltasTo(p.target, p.model) || {});
     return p;
   }
+  function variantRows(p) {
+    return structuredClone(
+      edit.rows.map(
+        (row, k) => k === edit.active ? { ...row, params: p } : row
+      )
+    );
+  }
   function selectionKey() {
     let sum = 0;
     for (let i = 0; i < overrides.length; i++)
       if (overrides[i]) sum = (sum * 31 + (i + 1) * overrides[i]) % 2147483647;
-    const { target, ramp, dh, ds, dl, manual, ...rest } = params;
-    return JSON.stringify([imageId, seeds, rest, sum]);
+    const { target, ramp, dh, ds, dl, manual, ...rest } = params, others = edit.rows.filter((_, k) => k !== edit.active);
+    return JSON.stringify([imageId, seeds, rest, others, sum]);
   }
   async function variantImage() {
     if (prepared && !worker) return prepared;
@@ -6572,11 +7206,11 @@ dialog p {
       variantsKey = key;
       status("Making " + entries2.length + " variants\u2026");
       for (const { canvas, entry } of tiles) {
-        const r = await processImage(
+        const r = await processEdit(
           image,
-          variantParams(entry),
-          structuredClone(seeds),
+          variantRows(variantParams(entry)),
           overrides.slice(),
+          edit.active,
           pause,
           () => run !== variantRun
         );
@@ -6603,11 +7237,11 @@ dialog p {
       const set = currentSet(), entries2 = set.entries.slice(0, MAX_VARIANTS), image = await variantImage(), settings = finishSettings(), files = [];
       for (const [i, entry] of entries2.entries()) {
         status("Exporting variant " + (i + 1) + " of " + entries2.length + "\u2026");
-        const p = variantParams(entry), r = await processImage(
+        const p = variantParams(entry), r = await processEdit(
           image,
-          p,
-          structuredClone(seeds),
+          variantRows(p),
           overrides.slice(),
+          edit.active,
           pause
         );
         for (const f of await deliver(r.pixels, w, h, settings, pause))
@@ -6630,6 +7264,153 @@ dialog p {
   $("makeVariants").onclick = makeVariants;
   $("exportVariants").onclick = exportVariants;
   renderSet();
+  async function currentSteps() {
+    commit("Adjust colour");
+    let preview = null;
+    try {
+      const r = await latest();
+      if (r.changed) preview = r;
+    } catch {
+    }
+    const steps = edit.steps.slice();
+    if (preview) steps.push(recipeStep(edit.rows, pixels, w, overrides));
+    return { steps: steps.filter((s) => s.rows.length), preview };
+  }
+  async function saveRecipe() {
+    if (!pixels) return;
+    const { steps } = await currentSteps();
+    if (!steps.length) {
+      status("Nothing to save yet. Change a colour first.");
+      return;
+    }
+    const filename = safeStem(name) + "-recipe.json";
+    download(
+      new Blob([writeRecipe(steps)], { type: "application/json" }),
+      filename
+    );
+    status(
+      "Prepared " + filename + " (" + steps.length + (steps.length === 1 ? " step). " : " steps). ") + (steps.some((s) => s.approximate) ? "Brush strokes and connected-region limits are not part of it. " : "") + "Choose where to save it."
+    );
+  }
+  async function applyRecipe(file) {
+    if (!pixels) return;
+    try {
+      if (file.size > MAX_RECIPE_BYTES)
+        throw Error("Recipes must be 64 KB or smaller.");
+      const recipe = parseRecipe(await file.text()), { steps, preview } = await currentSteps(), iid = imageId, base = preview ? preview.pixels : pixels;
+      status("Applying " + file.name + "\u2026");
+      const out = await replay(w, h, base, recipe, pause, () => iid !== imageId);
+      if (iid !== imageId) return;
+      const old = snapshot();
+      pixels = out;
+      overrides = new Int8Array(w * h);
+      edit = {
+        rows: [newRow(1, { ...params, dh: 0, ds: 0, dl: 0, manual: false })],
+        active: 0,
+        steps: [...steps, ...recipe]
+      };
+      activate();
+      dirty = true;
+      history.record(old, snapshot(), "Apply recipe");
+      sync();
+      prepareCurrent();
+      status(
+        "Applied " + file.name + " (" + recipe.length + (recipe.length === 1 ? " step" : " steps") + "). Undo is available."
+      );
+    } catch (e) {
+      status("Could not apply the recipe: " + e.message);
+    }
+  }
+  $("saveRecipe").onclick = saveRecipe;
+  $("openRecipe").onclick = () => $("recipeInput").click();
+  $("recipeInput").onchange = (e) => {
+    const f = e.target.files[0];
+    e.target.value = "";
+    if (f) applyRecipe(f);
+  };
+  var MAX_BATCH = 100;
+  var batchRun = 0;
+  var batchAbort = null;
+  function endBatch() {
+    batchAbort?.abort();
+    batchAbort = null;
+    $("cancelBatch").hidden = true;
+    buttons();
+  }
+  async function runBatch(list) {
+    const run = ++batchRun, cancelled = () => run !== batchRun;
+    try {
+      if (list.length > MAX_BATCH)
+        throw Error("Choose up to " + MAX_BATCH + " images at a time.");
+      const { steps } = await currentSteps();
+      if (!steps.length) {
+        status("Nothing to apply yet. Change a colour first, then run a batch.");
+        return;
+      }
+      const settings = finishSettings(), edge = Number($("svgSize").value), files = [], errors = [];
+      batchAbort = new AbortController();
+      $("cancelBatch").hidden = false;
+      buttons();
+      for (const [i, file] of list.entries()) {
+        if (cancelled()) return;
+        $("batchNote").textContent = "Image " + (i + 1) + " of " + list.length + ": " + file.name;
+        try {
+          const decoded = await decodeBlob(file, batchAbort.signal, {
+            svgEdge: edge
+          }), out = await replay(
+            decoded.width,
+            decoded.height,
+            decoded.pixels,
+            steps,
+            pause,
+            cancelled
+          );
+          for (const f of await deliver(
+            out,
+            decoded.width,
+            decoded.height,
+            settings,
+            pause
+          ))
+            files.push({
+              name: outputName(file.name, f.format, null, f.suffix),
+              blob: f.blob
+            });
+        } catch (e) {
+          if (cancelled()) return;
+          errors.push(file.name + ": " + e.message);
+        }
+      }
+      if (errors.length)
+        files.push({
+          name: "errors.txt",
+          blob: new Blob([errors.join("\r\n") + "\r\n"], { type: "text/plain" })
+        });
+      const blob = await zip(files), filename = "hexshift-batch.zip", done = list.length - errors.length;
+      if (cancelled()) return;
+      download(blob, filename);
+      $("batchNote").textContent = "Done: " + done + " of " + list.length + (list.length === 1 ? " image" : " images") + (errors.length ? ". errors.txt in the ZIP lists the others." : ".");
+      status(
+        "Prepared " + filename + " (" + formatBytes(blob.size) + "). Choose where to save it."
+      );
+    } catch (e) {
+      if (!cancelled()) status("Batch failed: " + e.message);
+    } finally {
+      if (run === batchRun) endBatch();
+    }
+  }
+  $("batch").onclick = () => $("batchInput").click();
+  $("batchInput").onchange = (e) => {
+    const list = [...e.target.files];
+    e.target.value = "";
+    if (list.length) runBatch(list);
+  };
+  $("cancelBatch").onclick = () => {
+    batchRun++;
+    endBatch();
+    $("batchNote").textContent = "Batch cancelled.";
+    status("Batch cancelled.");
+  };
   function layout() {
     if (!w) return;
     const pane = after.parentElement;
@@ -6665,7 +7446,7 @@ dialog p {
     return x >= 0 && y >= 0 && x < w && y < h ? { x, y } : null;
   }
   function brush(x, y) {
-    const radius = Number($("brushSize").value) / 2, value = tool === "add" ? 1 : -1;
+    const radius = Number($("brushSize").value) / 2, value = tool === "add" ? edit.rows[edit.active].id : -1;
     for (let yy = Math.max(0, Math.floor(y - radius)); yy <= Math.min(h - 1, Math.ceil(y + radius)); yy++)
       for (let xx = Math.max(0, Math.floor(x - radius)); xx <= Math.min(w - 1, Math.ceil(x + radius)); xx++)
         if ((xx - x) ** 2 + (yy - y) ** 2 <= radius * radius)
@@ -6806,6 +7587,8 @@ dialog p {
   $("open").onclick = () => $("fileInput").click();
   function openFile(f) {
     if (isPaletteFile(f)) openPalette(f, f.name);
+    else if (/\.json$/i.test(f.name) || f.type === "application/json")
+      applyRecipe(f);
     else openBlob(f, f.name);
   }
   $("fileInput").onchange = (e) => {
@@ -6866,9 +7649,13 @@ dialog p {
     params.manual = false;
     targetDeltas();
   });
+  $("addRow").onclick = addRow;
+  $("mapAll").onclick = mapAll;
   $("clear").onclick = () => action("Clear selection", () => {
-    seeds = [];
-    overrides.fill(0);
+    const id = edit.rows[edit.active].id;
+    seeds.length = 0;
+    for (let i = 0; i < overrides.length; i++)
+      if (overrides[i] === id || overrides[i] === -1) overrides[i] = 0;
   });
   $("replaceSample").onclick = () => {
     addSample = false;

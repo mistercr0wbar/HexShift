@@ -7,10 +7,12 @@ import {
   deltasFor,
 } from "./colour.js";
 import {
+  MAX_ROWS,
+  colourFamilies,
   prepare,
-  processImage,
+  processEdit,
   validateImage,
-  validateEdit,
+  validateMap,
 } from "./engine.js";
 import { History } from "./history.js";
 import { decodeBlob } from "./import.js";
@@ -32,6 +34,13 @@ import {
   parsePalette,
   writeGpl,
 } from "./palettes.js";
+import {
+  MAX_RECIPE_BYTES,
+  parseRecipe,
+  recipeStep,
+  replay,
+  writeRecipe,
+} from "./recipe.js";
 import sample from "./sample.js";
 import { makePause } from "./yield.js";
 const $ = (id) => document.getElementById(id),
@@ -43,8 +52,11 @@ let w = 0,
   pixels = null,
   overrides = null,
   result = null,
-  params = defaults(),
-  seeds = [],
+  // The colour map: rows of { id, params, seeds }; `params` and `seeds` are
+  // the active row's. `steps` are the maps applied so far (for recipes).
+  edit = freshEdit(),
+  params = null,
+  seeds = null,
   palette = [],
   recent = [],
   svgSource = null;
@@ -79,8 +91,20 @@ const history = new History(),
 function status(message) {
   $("status").textContent = message;
 }
+function newRow(id, base = defaults()) {
+  return { id, params: base, seeds: [] };
+}
+function freshEdit(base) {
+  return { rows: [newRow(1, base)], active: 0, steps: [] };
+}
+// Points `params` and `seeds` at the active row.
+function activate() {
+  edit.active = clamp(edit.active, 0, edit.rows.length - 1);
+  ({ params, seeds } = edit.rows[edit.active]);
+}
+activate();
 function meta() {
-  return structuredClone({ params, seeds });
+  return structuredClone({ edit });
 }
 function snapshot() {
   return { pixels, overrides: overrides.slice(), meta: meta() };
@@ -119,6 +143,7 @@ function buttons() {
   $("copy").disabled = !available;
   $("export").disabled = !available;
   $("cancel").hidden = !processing;
+  $("batch").disabled = !available || !$("cancelBatch").hidden;
   $("editState").textContent = result?.changed
     ? "Pending edit"
     : "No pending edit";
@@ -231,6 +256,158 @@ function renderSeeds() {
     chip.append(dot, text, remove);
     box.append(chip);
   });
+}
+// The colour map: one row per colour being changed. The controls above edit
+// the active row.
+const seedHex = (s) =>
+  s.hex ||
+  toHex(...pixels.subarray((s.y * w + s.x) * 4, (s.y * w + s.x) * 4 + 3));
+function rowText(row) {
+  const brushed = overrides?.some((v) => v === row.id),
+    from = row.seeds.length
+      ? seedHex(row.seeds.at(-1))
+      : brushed
+        ? "brushed"
+        : null,
+    p = row.params,
+    to =
+      p.mode === "transparent"
+        ? "transparent"
+        : p.mode === "shift" && !p.ramp && !p.dh && !p.ds && !p.dl
+          ? "unchanged"
+          : p.mode === "shift" && p.manual
+            ? "adjusted"
+            : p.ramp
+              ? p.ramp[0]
+              : p.target;
+  return { from, to };
+}
+function renderMap() {
+  if (!pixels) return;
+  const box = $("colourMap");
+  box.replaceChildren();
+  edit.rows.forEach((row, k) => {
+    const item = document.createElement("div"),
+      select = document.createElement("button"),
+      { from, to } = rowText(row),
+      chip = (hex, kind) => {
+        const c = document.createElement("span");
+        c.className = "chip" + (kind ? " " + kind : "");
+        if (hex) c.style.backgroundColor = hex;
+        return c;
+      },
+      text = document.createElement("span"),
+      count = document.createElement("span"),
+      pixelsOwned = result?.counts?.[k];
+    item.className = "map-row" + (k === edit.active ? " active" : "");
+    select.type = "button";
+    select.className = "map-select";
+    select.setAttribute("aria-pressed", String(k === edit.active));
+    text.className = "map-text";
+    text.textContent = from ? from + " → " + to : "Pick a colour";
+    count.className = "map-count";
+    count.textContent =
+      from && Number.isInteger(pixelsOwned)
+        ? pixelsOwned.toLocaleString() + " px"
+        : "";
+    select.setAttribute(
+      "aria-label",
+      "Colour " +
+        (k + 1) +
+        ": " +
+        (from ? from + " to " + to : "nothing picked yet") +
+        (count.textContent
+          ? ", " + count.textContent.replace("px", "pixels")
+          : ""),
+    );
+    select.append(
+      chip(from?.startsWith("#") ? from : null, from ? "" : "empty"),
+      text,
+      chip(
+        to.startsWith("#") ? to : to === "unchanged" ? from : null,
+        to === "transparent" ? "clear" : "",
+      ),
+      count,
+    );
+    select.onclick = () => selectRow(k);
+    item.append(select);
+    if (edit.rows.length > 1) {
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "map-remove";
+      remove.textContent = "×";
+      remove.setAttribute("aria-label", "Remove colour " + (k + 1));
+      remove.onclick = () => removeRow(k);
+      item.append(remove);
+    }
+    box.append(item);
+  });
+  $("addRow").disabled = edit.rows.length >= MAX_ROWS;
+}
+function selectRow(k) {
+  if (k === edit.active) return;
+  commit("Adjust colour");
+  edit.active = k;
+  activate();
+  sync();
+  schedule();
+}
+function addRow() {
+  if (!pixels || edit.rows.length >= MAX_ROWS) return;
+  const used = new Set(edit.rows.map((r) => r.id));
+  let id = 1;
+  while (used.has(id)) id++;
+  action("Add colour", () => {
+    edit.rows.push(newRow(id, { ...defaults(), model: params.model }));
+    edit.active = edit.rows.length - 1;
+    activate();
+  });
+  status("Added a colour. Click the part of the image to change.");
+}
+function removeRow(k) {
+  action("Remove colour", () => {
+    const { id } = edit.rows[k];
+    edit.rows.splice(k, 1);
+    for (let i = 0; i < overrides.length; i++)
+      if (overrides[i] === id) overrides[i] = 0;
+    if (edit.active > k || edit.active === edit.rows.length) edit.active--;
+    activate();
+  });
+}
+// One row per colour family, each set to keep its own colour until changed.
+async function mapAll() {
+  if (!pixels) return;
+  commit("Adjust colour");
+  try {
+    const families = colourFamilies(await variantImage());
+    if (!families.length) {
+      status("There are no colours to map in this image.");
+      return;
+    }
+    action("Map all colours", () => {
+      edit.rows = families.map((f, k) => {
+        const row = newRow(k + 1, {
+          ...defaults(),
+          model: params.model,
+          target: f.hex,
+          shadeTol: f.grey ? 60 : 100,
+        });
+        row.seeds.push({ x: f.x, y: f.y });
+        return row;
+      });
+      edit.active = 0;
+      overrides.fill(0);
+      activate();
+    });
+    status(
+      "Mapped " +
+        families.length +
+        (families.length === 1 ? " colour family" : " colour families") +
+        ". Choose one, then set its new colour.",
+    );
+  } catch (e) {
+    status("Could not map the colours: " + e.message);
+  }
 }
 function rememberTarget(hex) {
   if (!parseHex(hex)) return;
@@ -369,6 +546,7 @@ function sync() {
   $("cleanEdges").checked = params.cleanEdges;
   syncTarget();
   renderSeeds();
+  renderMap();
   buttons();
 }
 function setTarget(hex) {
@@ -400,7 +578,7 @@ function pick(x, y) {
     return;
   }
   action("Pick colour", () => {
-    if (!addSample && !space) seeds = [];
+    if (!addSample && !space) seeds.length = 0;
     if (!seeds.some((s) => s.x === x && s.y === y)) {
       if (seeds.length >= 64) {
         status("Use up to 64 colour samples.");
@@ -506,7 +684,7 @@ function sendEdit() {
   const iid = imageId,
     eid = editId;
   try {
-    validateEdit(params, seeds, overrides, w, h);
+    validateMap(edit.rows, overrides, edit.active, w, h);
     const copy = overrides.slice();
     if (worker)
       worker.postMessage(
@@ -514,18 +692,18 @@ function sendEdit() {
           type: "edit",
           imageId: iid,
           editId: eid,
-          params: structuredClone(params),
-          seeds: structuredClone(seeds),
+          rows: structuredClone(edit.rows),
+          active: edit.active,
           overrides: copy,
         },
         [copy.buffer],
       );
     else
-      processImage(
+      processEdit(
         prepared,
-        structuredClone(params),
-        structuredClone(seeds),
+        structuredClone(edit.rows),
         copy,
+        edit.active,
         pause,
         () => iid !== imageId || eid !== editId,
       )
@@ -600,6 +778,7 @@ function receive(m) {
           toHex(...m.pixels.subarray(o, o + 3));
   } else $("targetResult").textContent = "Pick a source colour to begin.";
   $("capWarning").hidden = !(m.capped && params.mode === "shift");
+  renderMap();
   draw();
   buttons();
   wake();
@@ -690,8 +869,8 @@ async function openBlob(blob, fileName, isSample = false, redraw = false) {
     original = decoded.pixels;
     pixels = original.slice();
     overrides = new Int8Array(w * h);
-    params = defaults();
-    seeds = [];
+    edit = freshEdit();
+    activate();
     dirty = false;
     history.clear();
     gesture = null;
@@ -728,8 +907,8 @@ function restore(redo) {
   commit("Adjust colour");
   const moved = history.move({ pixels, overrides }, redo);
   if (!moved) return;
-  params = moved.meta.params;
-  seeds = moved.meta.seeds;
+  edit = moved.meta.edit;
+  activate();
   dirty = true;
   sync();
   if (moved.pixelsChanged) prepareCurrent();
@@ -741,16 +920,21 @@ async function apply() {
     commit("Adjust colour");
     const r = await latest();
     if (!r.changed) return;
-    const old = snapshot();
+    const old = snapshot(),
+      step = recipeStep(edit.rows, pixels, w, overrides);
     pixels = r.pixels.slice();
     overrides = new Int8Array(w * h);
-    seeds = [];
-    params = { ...params, dh: 0, ds: 0, dl: 0, manual: false };
+    edit = {
+      rows: [newRow(1, { ...params, dh: 0, ds: 0, dl: 0, manual: false })],
+      active: 0,
+      steps: [...edit.steps, step],
+    };
+    activate();
     dirty = true;
-    history.record(old, snapshot(), "Apply colour");
+    history.record(old, snapshot(), "Apply colours");
     sync();
     prepareCurrent();
-    status("Applied. Select the next colour, or export.");
+    status("Applied. Pick the next colour to build on this, or export.");
   } catch (e) {
     status(e.message);
   }
@@ -759,8 +943,8 @@ function reset() {
   action("Reset original", () => {
     pixels = original.slice();
     overrides = new Int8Array(w * h);
-    params = defaults();
-    seeds = [];
+    edit = freshEdit();
+    activate();
     dirty = false;
     prepareCurrent();
   });
@@ -795,14 +979,18 @@ async function save(copy = false) {
         throw Error(
           "The image changed during export. Export again to save the latest edit.",
         );
-      const pack = files.length > 1,
+      // Named after the target colour when there is just one; "shifted" for
+      // a map of several colours or a recipe.
+      const tag =
+          edit.rows.length === 1 && !edit.steps.length ? params.target : null,
+        pack = files.length > 1,
         named = files.map((f) => ({
-          name: outputName(name, f.format, params.target, f.suffix),
+          name: outputName(name, f.format, tag, f.suffix),
           blob: f.blob,
         })),
         blob = pack ? await zip(named) : named[0].blob,
         filename = pack
-          ? outputName(name, "zip", params.target, settings.size)
+          ? outputName(name, "zip", tag, settings.size)
           : named[0].name,
         over = files.filter((f) => f.limit && f.blob.size > f.limit);
       download(blob, filename);
@@ -1221,13 +1409,22 @@ function variantParams(entry) {
   Object.assign(p, deltasTo(p.target, p.model) || {});
   return p;
 }
+// The colour map with the active row given a variant's colour.
+function variantRows(p) {
+  return structuredClone(
+    edit.rows.map((row, k) =>
+      k === edit.active ? { ...row, params: p } : row,
+    ),
+  );
+}
 // What a variant depends on, apart from its colour.
 function selectionKey() {
   let sum = 0;
   for (let i = 0; i < overrides.length; i++)
     if (overrides[i]) sum = (sum * 31 + (i + 1) * overrides[i]) % 2147483647;
-  const { target, ramp, dh, ds, dl, manual, ...rest } = params;
-  return JSON.stringify([imageId, seeds, rest, sum]);
+  const { target, ramp, dh, ds, dl, manual, ...rest } = params,
+    others = edit.rows.filter((_, k) => k !== edit.active);
+  return JSON.stringify([imageId, seeds, rest, others, sum]);
 }
 // A main-thread copy of the prepared image for variants (the worker keeps its own).
 async function variantImage() {
@@ -1288,11 +1485,11 @@ async function makeVariants() {
     variantsKey = key;
     status("Making " + entries.length + " variants…");
     for (const { canvas, entry } of tiles) {
-      const r = await processImage(
+      const r = await processEdit(
         image,
-        variantParams(entry),
-        structuredClone(seeds),
+        variantRows(variantParams(entry)),
         overrides.slice(),
+        edit.active,
         pause,
         () => run !== variantRun,
       );
@@ -1328,11 +1525,11 @@ async function exportVariants() {
     for (const [i, entry] of entries.entries()) {
       status("Exporting variant " + (i + 1) + " of " + entries.length + "…");
       const p = variantParams(entry),
-        r = await processImage(
+        r = await processEdit(
           image,
-          p,
-          structuredClone(seeds),
+          variantRows(p),
           overrides.slice(),
+          edit.active,
           pause,
         );
       for (const f of await deliver(r.pixels, w, h, settings, pause))
@@ -1366,6 +1563,192 @@ async function exportVariants() {
 $("makeVariants").onclick = makeVariants;
 $("exportVariants").onclick = exportVariants;
 renderSet();
+// Recipes: the maps applied so far, plus the current one if it changes
+// anything. Also returns that current preview (null when it changes nothing).
+async function currentSteps() {
+  commit("Adjust colour");
+  let preview = null;
+  try {
+    const r = await latest();
+    if (r.changed) preview = r;
+  } catch {}
+  const steps = edit.steps.slice();
+  if (preview) steps.push(recipeStep(edit.rows, pixels, w, overrides));
+  return { steps: steps.filter((s) => s.rows.length), preview };
+}
+async function saveRecipe() {
+  if (!pixels) return;
+  const { steps } = await currentSteps();
+  if (!steps.length) {
+    status("Nothing to save yet. Change a colour first.");
+    return;
+  }
+  const filename = safeStem(name) + "-recipe.json";
+  download(
+    new Blob([writeRecipe(steps)], { type: "application/json" }),
+    filename,
+  );
+  status(
+    "Prepared " +
+      filename +
+      " (" +
+      steps.length +
+      (steps.length === 1 ? " step). " : " steps). ") +
+      (steps.some((s) => s.approximate)
+        ? "Brush strokes and connected-region limits are not part of it. "
+        : "") +
+      "Choose where to save it.",
+  );
+}
+// Applies a recipe on top of the current preview, as one undoable change.
+async function applyRecipe(file) {
+  if (!pixels) return;
+  try {
+    if (file.size > MAX_RECIPE_BYTES)
+      throw Error("Recipes must be 64 KB or smaller.");
+    const recipe = parseRecipe(await file.text()),
+      { steps, preview } = await currentSteps(),
+      iid = imageId,
+      base = preview ? preview.pixels : pixels;
+    status("Applying " + file.name + "…");
+    const out = await replay(w, h, base, recipe, pause, () => iid !== imageId);
+    if (iid !== imageId) return;
+    const old = snapshot();
+    pixels = out;
+    overrides = new Int8Array(w * h);
+    edit = {
+      rows: [newRow(1, { ...params, dh: 0, ds: 0, dl: 0, manual: false })],
+      active: 0,
+      steps: [...steps, ...recipe],
+    };
+    activate();
+    dirty = true;
+    history.record(old, snapshot(), "Apply recipe");
+    sync();
+    prepareCurrent();
+    status(
+      "Applied " +
+        file.name +
+        " (" +
+        recipe.length +
+        (recipe.length === 1 ? " step" : " steps") +
+        "). Undo is available.",
+    );
+  } catch (e) {
+    status("Could not apply the recipe: " + e.message);
+  }
+}
+$("saveRecipe").onclick = saveRecipe;
+$("openRecipe").onclick = () => $("recipeInput").click();
+$("recipeInput").onchange = (e) => {
+  const f = e.target.files[0];
+  e.target.value = "";
+  if (f) applyRecipe(f);
+};
+// Batch: the recipe for this image, applied to other images one at a time and
+// exported at the chosen size and format into one ZIP. Images that fail are
+// listed in errors.txt.
+const MAX_BATCH = 100;
+let batchRun = 0,
+  batchAbort = null;
+function endBatch() {
+  batchAbort?.abort();
+  batchAbort = null;
+  $("cancelBatch").hidden = true;
+  buttons();
+}
+async function runBatch(list) {
+  const run = ++batchRun,
+    cancelled = () => run !== batchRun;
+  try {
+    if (list.length > MAX_BATCH)
+      throw Error("Choose up to " + MAX_BATCH + " images at a time.");
+    const { steps } = await currentSteps();
+    if (!steps.length) {
+      status("Nothing to apply yet. Change a colour first, then run a batch.");
+      return;
+    }
+    const settings = finishSettings(),
+      edge = Number($("svgSize").value),
+      files = [],
+      errors = [];
+    batchAbort = new AbortController();
+    $("cancelBatch").hidden = false;
+    buttons();
+    for (const [i, file] of list.entries()) {
+      if (cancelled()) return;
+      $("batchNote").textContent =
+        "Image " + (i + 1) + " of " + list.length + ": " + file.name;
+      try {
+        const decoded = await decodeBlob(file, batchAbort.signal, {
+            svgEdge: edge,
+          }),
+          out = await replay(
+            decoded.width,
+            decoded.height,
+            decoded.pixels,
+            steps,
+            pause,
+            cancelled,
+          );
+        for (const f of await deliver(
+          out,
+          decoded.width,
+          decoded.height,
+          settings,
+          pause,
+        ))
+          files.push({
+            name: outputName(file.name, f.format, null, f.suffix),
+            blob: f.blob,
+          });
+      } catch (e) {
+        if (cancelled()) return;
+        errors.push(file.name + ": " + e.message);
+      }
+    }
+    if (errors.length)
+      files.push({
+        name: "errors.txt",
+        blob: new Blob([errors.join("\r\n") + "\r\n"], { type: "text/plain" }),
+      });
+    const blob = await zip(files),
+      filename = "hexshift-batch.zip",
+      done = list.length - errors.length;
+    if (cancelled()) return;
+    download(blob, filename);
+    $("batchNote").textContent =
+      "Done: " +
+      done +
+      " of " +
+      list.length +
+      (list.length === 1 ? " image" : " images") +
+      (errors.length ? ". errors.txt in the ZIP lists the others." : ".");
+    status(
+      "Prepared " +
+        filename +
+        " (" +
+        formatBytes(blob.size) +
+        "). Choose where to save it.",
+    );
+  } catch (e) {
+    if (!cancelled()) status("Batch failed: " + e.message);
+  } finally {
+    if (run === batchRun) endBatch();
+  }
+}
+$("batch").onclick = () => $("batchInput").click();
+$("batchInput").onchange = (e) => {
+  const list = [...e.target.files];
+  e.target.value = "";
+  if (list.length) runBatch(list);
+};
+$("cancelBatch").onclick = () => {
+  batchRun++;
+  endBatch();
+  $("batchNote").textContent = "Batch cancelled.";
+  status("Batch cancelled.");
+};
 function layout() {
   if (!w) return;
   const pane = after.parentElement;
@@ -1405,8 +1788,9 @@ function point(e, c) {
   return x >= 0 && y >= 0 && x < w && y < h ? { x, y } : null;
 }
 function brush(x, y) {
+  // Add forces pixels into the active colour; subtract keeps them out of all.
   const radius = Number($("brushSize").value) / 2,
-    value = tool === "add" ? 1 : -1;
+    value = tool === "add" ? edit.rows[edit.active].id : -1;
   for (
     let yy = Math.max(0, Math.floor(y - radius));
     yy <= Math.min(h - 1, Math.ceil(y + radius));
@@ -1570,9 +1954,12 @@ for (const c of [before, after]) {
   });
 }
 $("open").onclick = () => $("fileInput").click();
-// Palette files (.gpl, .hex, .pal, .txt) open as palettes, anything else as an image.
+// Palette files (.gpl, .hex, .pal, .txt) open as palettes, recipes (.json)
+// apply to the image, anything else opens as an image.
 function openFile(f) {
   if (isPaletteFile(f)) openPalette(f, f.name);
+  else if (/\.json$/i.test(f.name) || f.type === "application/json")
+    applyRecipe(f);
   else openBlob(f, f.name);
 }
 $("fileInput").onchange = (e) => {
@@ -1638,10 +2025,15 @@ $("model").onchange = (e) =>
     params.manual = false;
     targetDeltas();
   });
+// Clears the active colour's samples and brush strokes, and subtract strokes.
+$("addRow").onclick = addRow;
+$("mapAll").onclick = mapAll;
 $("clear").onclick = () =>
   action("Clear selection", () => {
-    seeds = [];
-    overrides.fill(0);
+    const id = edit.rows[edit.active].id;
+    seeds.length = 0;
+    for (let i = 0; i < overrides.length; i++)
+      if (overrides[i] === id || overrides[i] === -1) overrides[i] = 0;
   });
 $("replaceSample").onclick = () => {
   addSample = false;

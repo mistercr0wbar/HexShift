@@ -1,4 +1,4 @@
-import { prepare, processImage } from "./engine.js";
+import { prepare, processEdit } from "./engine.js";
 import { makePause } from "./yield.js";
 let image = null,
   sequence = 0;
@@ -30,18 +30,18 @@ self.onmessage = async ({ data: m }) => {
     }
     if (m.type !== "edit" || !image || image.id !== m.imageId)
       throw Error("Unknown image or operation.");
-    const result = await processImage(
+    const result = await processEdit(
       image,
-      m.params,
-      m.seeds,
+      m.rows,
       m.overrides,
+      m.active,
       pause,
       () => ticket !== sequence,
     );
     if (ticket === sequence)
       self.postMessage(
         { type: "result", imageId: m.imageId, editId: m.editId, ...result },
-        [result.pixels.buffer, result.mask.buffer],
+        [result.pixels.buffer, result.mask.buffer, result.owner.buffer],
       );
   } catch (e) {
     if (ticket === sequence)
