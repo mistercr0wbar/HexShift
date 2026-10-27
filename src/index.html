@@ -190,11 +190,36 @@
               <h2><span>03</span> Finish</h2>
               <button id="reset" class="text-button">Reset original</button>
             </div>
+            <div id="svgSizeGroup" hidden>
+              <label for="svgSize">SVG drawn at</label
+              ><select id="svgSize">
+                <option value="256">256 px</option>
+                <option value="512" selected>512 px</option>
+                <option value="1024">1024 px</option>
+                <option value="2048">2048 px</option>
+              </select>
+            </div>
+            <label for="size">Size</label><select id="size"></select>
+            <div id="customSizeGroup" hidden>
+              <label for="customSize">Longest side in pixels</label
+              ><input
+                id="customSize"
+                type="number"
+                min="16"
+                max="2048"
+                step="1"
+                value="512"
+                inputmode="numeric"
+              />
+            </div>
             <label for="format">Export format</label
             ><select id="format">
               <option value="png">PNG · lossless, transparent</option>
               <option value="webp">WebP · lossless, transparent</option>
+              <option value="webp-small">WebP · small, transparent</option>
+              <option value="zip" disabled>ZIP · set by the size</option>
             </select>
+            <div id="sizeReadout" class="readout"></div>
             <details id="outlinePanel">
               <summary>Outline</summary>
               <label class="check"
@@ -236,8 +261,8 @@
               Copy PNG to clipboard
             </button>
             <p class="help">
-              Export includes your current preview and outline. Apply is only
-              needed before selecting the next colour.
+              Export includes your current preview, outline and size. Apply is
+              only needed before selecting the next colour.
             </p>
           </section>
           <div class="privacy">
@@ -377,8 +402,11 @@
             <p>
               Static SVG supports shapes, paths, text, gradients, clips, masks,
               blend modes and filter effects. Active content, external
-              resources, reuse elements and embedded images are rejected. All
-              exports are still images. Preview backgrounds never change
+              resources, reuse elements and embedded images are rejected. SVGs
+              are drawn at 512 px on their longest side; change it under SVG
+              drawn at. All exports are still images. Sizes for Discord, Slack,
+              Twitch, Telegram, WhatsApp and YouTube fit and centre the artwork
+              and show the file size against each limit. Preview backgrounds never change
               exported transparency. For a background, Clean edges works best
               with Only connected regions.
             </p>
@@ -389,14 +417,14 @@
     <div id="dropOverlay" hidden>Drop an image to open it</div>
     <dialog id="replaceDialog">
       <form method="dialog">
-        <h2>Open another image?</h2>
-        <p>
+        <h2 id="replaceTitle">Open another image?</h2>
+        <p id="replaceText">
           Your current image has edits. Export it first if you want to keep
           them.
         </p>
         <div class="dialog-actions">
           <button class="button" value="cancel">Keep editing</button
-          ><button class="button primary" value="replace">
+          ><button id="replaceConfirm" class="button primary" value="replace">
             Open new image
           </button>
         </div>

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-gd6Ryjk5pa5mSyP9CydNungZRgdVxYOQa6nBYZbuGuA='; style-src 'sha256-qR2bEzqFswJOX7hXsOEag0OAilfaHtOUkS44YBOOL3U='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-tPqYCrwJC4V4litgQzCI88CjShigCQ3Re8oiCw0fWXU='; style-src 'sha256-32Q6i1p8SpiyZEAocVoWXfE8SVA4GG++zTazqBNyJpw='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta name="theme-color" content="#6756d6" />
     <title>Hex Shift — colour, with character</title>
@@ -313,6 +313,24 @@ label {
 }
 .inspector select {
   width: 100%;
+}
+#customSize {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--subtle);
+  padding: 7px 8px;
+  font-size: 12px;
+}
+#customSize[aria-invalid="true"] {
+  outline: 2px solid var(--warn);
+}
+#sizeReadout p + p {
+  margin-top: 2px;
+}
+#sizeReadout .over {
+  color: var(--warn);
+  font-weight: 600;
 }
 .target-row {
   display: flex;
@@ -1163,11 +1181,36 @@ dialog p {
               <h2><span>03</span> Finish</h2>
               <button id="reset" class="text-button">Reset original</button>
             </div>
+            <div id="svgSizeGroup" hidden>
+              <label for="svgSize">SVG drawn at</label
+              ><select id="svgSize">
+                <option value="256">256 px</option>
+                <option value="512" selected>512 px</option>
+                <option value="1024">1024 px</option>
+                <option value="2048">2048 px</option>
+              </select>
+            </div>
+            <label for="size">Size</label><select id="size"></select>
+            <div id="customSizeGroup" hidden>
+              <label for="customSize">Longest side in pixels</label
+              ><input
+                id="customSize"
+                type="number"
+                min="16"
+                max="2048"
+                step="1"
+                value="512"
+                inputmode="numeric"
+              />
+            </div>
             <label for="format">Export format</label
             ><select id="format">
               <option value="png">PNG · lossless, transparent</option>
               <option value="webp">WebP · lossless, transparent</option>
+              <option value="webp-small">WebP · small, transparent</option>
+              <option value="zip" disabled>ZIP · set by the size</option>
             </select>
+            <div id="sizeReadout" class="readout"></div>
             <details id="outlinePanel">
               <summary>Outline</summary>
               <label class="check"
@@ -1209,8 +1252,8 @@ dialog p {
               Copy PNG to clipboard
             </button>
             <p class="help">
-              Export includes your current preview and outline. Apply is only
-              needed before selecting the next colour.
+              Export includes your current preview, outline and size. Apply is
+              only needed before selecting the next colour.
             </p>
           </section>
           <div class="privacy">
@@ -1350,8 +1393,11 @@ dialog p {
             <p>
               Static SVG supports shapes, paths, text, gradients, clips, masks,
               blend modes and filter effects. Active content, external
-              resources, reuse elements and embedded images are rejected. All
-              exports are still images. Preview backgrounds never change
+              resources, reuse elements and embedded images are rejected. SVGs
+              are drawn at 512 px on their longest side; change it under SVG
+              drawn at. All exports are still images. Sizes for Discord, Slack,
+              Twitch, Telegram, WhatsApp and YouTube fit and centre the artwork
+              and show the file size against each limit. Preview backgrounds never change
               exported transparency. For a background, Clean edges works best
               with Only connected regions.
             </p>
@@ -1362,14 +1408,14 @@ dialog p {
     <div id="dropOverlay" hidden>Drop an image to open it</div>
     <dialog id="replaceDialog">
       <form method="dialog">
-        <h2>Open another image?</h2>
-        <p>
+        <h2 id="replaceTitle">Open another image?</h2>
+        <p id="replaceText">
           Your current image has edits. Export it first if you want to keep
           them.
         </p>
         <div class="dialog-actions">
           <button class="button" value="cancel">Keep editing</button
-          ><button class="button primary" value="replace">
+          ><button id="replaceConfirm" class="button primary" value="replace">
             Open new image
           </button>
         </div>
@@ -4171,7 +4217,25 @@ dialog p {
     ],
     ["isolation", /* @__PURE__ */ new Set(["auto", "isolate"])]
   ]);
-  function guardSvg(text2) {
+  var UNITS = {
+    px: 1,
+    pt: 4 / 3,
+    pc: 16,
+    in: 96,
+    cm: 96 / 2.54,
+    mm: 96 / 25.4
+  };
+  function svgLength(value) {
+    const m = /^\s*(\d+\.?\d*|\.\d+)(?:e([+-]?\d+))?\s*(px|pt|pc|in|cm|mm)?\s*$/i.exec(
+      value || ""
+    );
+    if (!m) return NaN;
+    const v = Number(m[1] + (m[2] ? "e" + m[2] : "")) * UNITS[(m[3] || "px").toLowerCase()];
+    return Number.isFinite(v) ? v : NaN;
+  }
+  var SVG_EDGES = [256, 512, 1024, 2048];
+  function guardSvg(text2, edge = 512) {
+    if (!SVG_EDGES.includes(edge)) throw Error("Unsupported SVG size.");
     if (new TextEncoder().encode(text2).length > 2 * 1024 * 1024)
       throw Error("SVG files must be 2 MiB or smaller.");
     if (/<!DOCTYPE|<!ENTITY|<\?/i.test(
@@ -4262,15 +4326,18 @@ dialog p {
       done.add(el);
     }
     for (const el of all) visit(el);
-    const box = (root.getAttribute("viewBox") || "").trim().split(/[\s,]+/).map(Number);
-    let w2 = Number(root.getAttribute("width")?.replace(/px$/, "")), h2 = Number(root.getAttribute("height")?.replace(/px$/, ""));
-    if (!w2 || !h2) {
-      if (box.length !== 4 || !box.every(Number.isFinite) || box[2] <= 0 || box[3] <= 0)
+    const box = (root.getAttribute("viewBox") || "").trim().split(/[\s,]+/).map(Number), hasBox = box.length === 4 && box.every(Number.isFinite) && box[2] > 0 && box[3] > 0;
+    let sw = svgLength(root.getAttribute("width")), sh = svgLength(root.getAttribute("height"));
+    if (!(sw > 0 && sh > 0)) {
+      if (!hasBox)
         throw Error("SVG needs positive dimensions or a valid viewBox.");
-      const scale = 512 / Math.max(box[2], box[3]);
-      w2 = Math.max(1, Math.round(box[2] * scale));
-      h2 = Math.max(1, Math.round(box[3] * scale));
-    }
+      sw = box[2];
+      sh = box[3];
+    } else if (!hasBox) root.setAttribute("viewBox", "0 0 " + sw + " " + sh);
+    const scale = Math.min(
+      edge / Math.max(sw, sh),
+      Math.sqrt(MAX_PIXELS / (sw * sh))
+    ), w2 = Math.min(8192, Math.max(1, Math.round(sw * scale))), h2 = Math.min(8192, Math.max(1, Math.round(sh * scale)));
     dimensions(w2, h2);
     root.setAttribute("width", String(w2));
     root.setAttribute("height", String(h2));
@@ -4298,7 +4365,7 @@ dialog p {
       type: "image/svg+xml"
     };
   }
-  async function decodeBlob(blob, signal) {
+  async function decodeBlob(blob, signal, { svgEdge = 512 } = {}) {
     if (!(blob instanceof Blob) || !blob.size) throw Error("The file is empty.");
     if (blob.size > 16 * 1024 * 1024)
       throw Error("Image files must be 16 MiB or smaller.");
@@ -4308,7 +4375,7 @@ dialog p {
     const svg2 = /^(?:<\?xml\s[^?]*\?>\s*)?(?:<!--[\s\S]*?-->\s*)*<svg(?:\s|>)/i.test(
       prefix
     ) || prefix.startsWith("<");
-    let info = svg2 ? guardSvg(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) : inspectRaster(bytes);
+    let info = svg2 ? guardSvg(new TextDecoder("utf-8", { fatal: true }).decode(bytes), svgEdge) : inspectRaster(bytes);
     const source = info.blob || new Blob([bytes], { type: info.type });
     let bitmap, url;
     try {
@@ -4348,24 +4415,53 @@ dialog p {
       ctx.drawImage(bitmap, 0, 0);
       const pixels2 = ctx.getImageData(0, 0, w2, h2).data;
       canvas.width = canvas.height = 1;
-      return { width: w2, height: h2, pixels: pixels2, still: info.still };
+      return {
+        width: w2,
+        height: h2,
+        pixels: pixels2,
+        still: info.still,
+        svg: info.type === "image/svg+xml"
+      };
     } finally {
       bitmap?.close?.();
       if (url) URL.revokeObjectURL(url);
     }
   }
 
+  // src/yield.js
+  function makePause(budget = 12) {
+    let last = 0;
+    return () => {
+      if (performance.now() - last < budget) return;
+      return new Promise((resolve) => {
+        const channel = new MessageChannel();
+        channel.port1.onmessage = () => {
+          channel.port1.close();
+          last = performance.now();
+          resolve();
+        };
+        channel.port2.postMessage(0);
+      });
+    };
+  }
+
   // src/export.js
-  function outputName(name2, format = "png", target = "shifted") {
+  function outputName(name2, format = "png", target = "shifted", suffix = "") {
     let stem = String(name2).replace(/\.[^.]*$/, "").replace(/[\x00-\x1f\x7f<>:"/\\|?*\u202a-\u202e\u2066-\u2069]/g, "_").replace(/[. ]+$/, "").slice(0, 80) || "image";
     if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(stem))
       stem = "image-" + stem;
     const tag = /^#[\da-f]{6}$/i.test(target) ? target.slice(1).toLowerCase() : "shifted";
-    return stem + "-" + tag + "." + (format === "webp" ? "webp" : "png");
+    const ext = format === "zip" ? "zip" : /^webp/.test(format) ? "webp" : "png", extra = /^[\w-]{1,32}$/.test(suffix) ? "-" + suffix : "";
+    return stem + "-" + tag + extra + "." + ext;
+  }
+  function formatBytes(n) {
+    if (n < 1024) return n + " bytes";
+    const [v, unit] = n < 1048576 ? [n / 1024, "KB"] : [n / 1048576, "MB"];
+    return (v < 10 ? Math.ceil(v * 10) / 10 : Math.ceil(v)) + " " + unit;
   }
   async function losslessWebP(width, height, pixels2) {
-    if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || width > 8192 || height > 8192 || width * height > 4194304 || pixels2.length !== width * height * 4)
-      throw Error("Invalid export dimensions.");
+    checkDimensions(width, height, pixels2);
+    const pause2 = makePause();
     const bytes = new Uint8Array(pixels2.length + 512);
     let acc = 0, bits = 0, length = 0;
     const put = (value, count) => {
@@ -4402,7 +4498,7 @@ dialog p {
       return (v2 & 15) << 4 | v2 >>> 4;
     };
     for (let i = 0; i < pixels2.length; i += 4) {
-      if ((i & 262143) === 0) await new Promise((r) => setTimeout(r, 0));
+      if ((i & 262143) === 0) await pause2();
       put(reverse(pixels2[i + 1]), 8);
       put(reverse(pixels2[i]), 8);
       put(reverse(pixels2[i + 2]), 8);
@@ -4419,13 +4515,72 @@ dialog p {
     out.set(bytes.subarray(0, length), 25);
     return new Blob([out], { type: "image/webp" });
   }
-  async function encode(pixels2, width, height, format = "png") {
+  var WEBP_UNAVAILABLE = "Small WebP files can't be made in this browser. Use Chrome, Edge or Firefox, or the Hex Shift Windows app.";
+  var webpSupport;
+  function canEncodeWebP() {
+    if (webpSupport === void 0) {
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 1;
+      webpSupport = canvas.toDataURL("image/webp").startsWith("data:image/webp");
+    }
+    return webpSupport;
+  }
+  async function smallWebP(width, height, pixels2, limit = Infinity) {
+    checkDimensions(width, height, pixels2);
+    if (!canEncodeWebP()) throw Error(WEBP_UNAVAILABLE);
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw Error("Canvas is unavailable.");
+    ctx.putImageData(
+      new ImageData(new Uint8ClampedArray(pixels2), width, height),
+      0,
+      0
+    );
+    const at = (quality) => new Promise(
+      (resolve, reject) => canvas.toBlob(
+        (blob) => blob?.type === "image/webp" ? resolve(blob) : reject(Error(WEBP_UNAVAILABLE)),
+        "image/webp",
+        quality
+      )
+    );
+    try {
+      let blob = await at(0.9);
+      if (blob.size <= limit) return blob;
+      let lo = 0, hi = 0.9, best = null;
+      for (let i = 0; i < 6; i++) {
+        const quality = (lo + hi) / 2;
+        blob = await at(quality);
+        if (blob.size <= limit) {
+          best = blob;
+          lo = quality;
+        } else hi = quality;
+      }
+      if (!best && (blob = await at(0)).size <= limit) best = blob;
+      if (!best)
+        throw Error(
+          "This image can't be made smaller than " + formatBytes(limit) + " as a WebP. Try a simpler image."
+        );
+      return best;
+    } finally {
+      canvas.width = canvas.height = 1;
+    }
+  }
+  async function encode(pixels2, width, height, format = "png", limit) {
+    if (format === "webp-small") return smallWebP(width, height, pixels2, limit);
     return format === "webp" ? losslessWebP(width, height, pixels2) : losslessPNG(width, height, pixels2);
   }
   var crcTable = Uint32Array.from({ length: 256 }, (_, n) => {
     for (let i = 0; i < 8; i++) n = n & 1 ? 3988292384 ^ n >>> 1 : n >>> 1;
     return n >>> 0;
   });
+  function crc32(bytes) {
+    let crc = 4294967295;
+    for (let i = 0; i < bytes.length; i++)
+      crc = crcTable[(crc ^ bytes[i]) & 255] ^ crc >>> 8;
+    return (crc ^ 4294967295) >>> 0;
+  }
   function chunk(type, data) {
     const out = new Uint8Array(data.length + 12), v = new DataView(out.buffer);
     v.setUint32(0, data.length);
@@ -4434,27 +4589,53 @@ dialog p {
       4
     );
     out.set(data, 8);
-    let crc = 4294967295;
-    for (let i = 4; i < out.length - 4; i++)
-      crc = crcTable[(crc ^ out[i]) & 255] ^ crc >>> 8;
-    v.setUint32(out.length - 4, (crc ^ 4294967295) >>> 0);
+    v.setUint32(out.length - 4, crc32(out.subarray(4, out.length - 4)));
+    return out;
+  }
+  function checkDimensions(width, height, pixels2) {
+    if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || width > 8192 || height > 8192 || width * height > 4194304 || pixels2.length !== width * height * 4)
+      throw Error("Invalid export dimensions.");
+  }
+  var paeth = (a, b, c) => {
+    const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+    return pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+  };
+  async function filterRows(pixels2, width, height, pause2) {
+    const stride = width * 4, out = new Uint8Array((stride + 1) * height), trial = Array.from({ length: 5 }, () => new Uint8Array(stride)), none = new Uint8Array(stride);
+    for (let y = 0; y < height; y++) {
+      if ((y & 63) === 0) await pause2();
+      const cur = pixels2.subarray(y * stride, (y + 1) * stride), up = y ? pixels2.subarray((y - 1) * stride, y * stride) : none, [raw, sub, above, avg, pae] = trial;
+      for (let i = 0; i < stride; i++) {
+        const a = i >= 4 ? cur[i - 4] : 0, b = up[i], c = i >= 4 ? up[i - 4] : 0, x = cur[i];
+        raw[i] = x;
+        sub[i] = x - a;
+        above[i] = x - b;
+        avg[i] = x - (a + b >> 1);
+        pae[i] = x - paeth(a, b, c);
+      }
+      let best = 0, bestScore = Infinity;
+      for (let f = 0; f < 5; f++) {
+        const row = trial[f];
+        let score = 0;
+        for (let i = 0; i < stride && score < bestScore; i++)
+          score += row[i] < 128 ? row[i] : 256 - row[i];
+        if (score < bestScore) {
+          bestScore = score;
+          best = f;
+        }
+      }
+      out[y * (stride + 1)] = best;
+      out.set(trial[best], y * (stride + 1) + 1);
+    }
     return out;
   }
   async function losslessPNG(width, height, pixels2) {
-    if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || width > 8192 || height > 8192 || width * height > 4194304 || pixels2.length !== width * height * 4)
-      throw Error("Invalid export dimensions.");
+    checkDimensions(width, height, pixels2);
     if (typeof CompressionStream !== "function")
       throw Error(
         "Lossless export needs a current browser with CompressionStream support."
       );
-    const rows = new Uint8Array(pixels2.length + height);
-    for (let y = 0; y < height; y++) {
-      if ((y & 127) === 0) await new Promise((r) => setTimeout(r, 0));
-      rows.set(
-        pixels2.subarray(y * width * 4, (y + 1) * width * 4),
-        y * (width * 4 + 1) + 1
-      );
-    }
+    const rows = await filterRows(pixels2, width, height, makePause());
     const compressed = new Uint8Array(
       await new Response(
         new Blob([rows]).stream().pipeThrough(new CompressionStream("deflate"))
@@ -4474,6 +4655,103 @@ dialog p {
       ],
       { type: "image/png" }
     );
+  }
+
+  // src/presets.js
+  var KB = 1024;
+  var PRESETS = [
+    { id: "original", label: "Original size" },
+    {
+      id: "discord-emoji",
+      label: "Discord emoji \xB7 128 px",
+      outputs: [{ box: 128, pad: true, limit: 256 * KB }]
+    },
+    {
+      id: "discord-sticker",
+      label: "Discord sticker \xB7 320 px",
+      outputs: [{ box: 320, pad: true, limit: 512 * KB }]
+    },
+    {
+      id: "slack-emoji",
+      label: "Slack emoji \xB7 128 px",
+      outputs: [{ box: 128, pad: true, limit: 128 * KB }]
+    },
+    {
+      id: "twitch-emotes",
+      label: "Twitch emotes \xB7 112, 56, 28 px",
+      outputs: [112, 56, 28].map((box) => ({
+        box,
+        pad: true,
+        limit: 1024 * KB,
+        suffix: box + "px",
+        format: "png"
+      }))
+    },
+    {
+      id: "telegram-sticker",
+      label: "Telegram sticker \xB7 512 px",
+      outputs: [{ box: 512, limit: 512 * KB }],
+      formats: ["png", "webp", "webp-small"]
+    },
+    {
+      id: "telegram-emoji",
+      label: "Telegram emoji \xB7 100 px",
+      outputs: [{ box: 100, pad: true, limit: 256 * KB }],
+      formats: ["png", "webp"]
+    },
+    {
+      id: "whatsapp-sticker",
+      label: "WhatsApp sticker \xB7 512 px + tray",
+      outputs: [
+        {
+          box: 512,
+          pad: true,
+          limit: 100 * KB,
+          suffix: "sticker",
+          format: "webp-small"
+        },
+        { box: 96, pad: true, limit: 50 * KB, suffix: "tray", format: "png" }
+      ]
+    },
+    {
+      id: "youtube-emoji",
+      label: "YouTube emoji \xB7 48 px",
+      outputs: [{ box: 48, pad: true, limit: 1024 * KB }]
+    },
+    { id: "custom", label: "Custom size" }
+  ];
+  var FORMATS = ["png", "webp", "webp-small"];
+  var CUSTOM_MIN = 16;
+  var CUSTOM_MAX = 2048;
+  var presetById = (id) => PRESETS.find((p) => p.id === id) || PRESETS[0];
+  function formatsFor(preset) {
+    if (preset.outputs?.every((o) => o.format)) return [];
+    return preset.formats || (preset.outputs ? ["png"] : FORMATS);
+  }
+  function outputsFor(id, w2, h2, { format = "png", custom = 512 } = {}) {
+    const preset = presetById(id), allowed = formatsFor(preset), chosen = allowed.includes(format) ? format : allowed[0];
+    if (id === "custom") {
+      const box = Number.isFinite(custom) ? Math.round(Math.min(CUSTOM_MAX, Math.max(CUSTOM_MIN, custom))) : 512;
+      return [
+        { box, format: chosen, suffix: box + "px", ...fitted(w2, h2, box, false) }
+      ];
+    }
+    if (!preset.outputs)
+      return [{ format: chosen, width: w2, height: h2, enlarged: false }];
+    return preset.outputs.map((o) => ({
+      ...o,
+      suffix: o.suffix || preset.id,
+      format: o.format || chosen,
+      ...fitted(w2, h2, o.box, o.pad)
+    }));
+  }
+  function fitted(w2, h2, box, pad) {
+    const scale = box / Math.max(w2, h2);
+    return {
+      width: pad ? box : Math.max(1, Math.round(w2 * scale)),
+      height: pad ? box : Math.max(1, Math.round(h2 * scale)),
+      enlarged: scale > 1
+    };
   }
 
   // src/output.js
@@ -4604,7 +4882,8 @@ dialog p {
             acc[c] += mid[(t[k] * ow + x) * 4 + c] * t[k + 1];
         const o = (y * ow + x) * 4, a = Math.round(acc[3]);
         if (a <= 0) continue;
-        for (let c = 0; c < 3; c++) out[o + c] = Math.round(acc[c] / (acc[3] / 255));
+        for (let c = 0; c < 3; c++)
+          out[o + c] = Math.round(acc[c] / (acc[3] / 255));
         out[o + 3] = a;
       }
     return out;
@@ -4618,6 +4897,18 @@ dialog p {
           out[oy * ow + Math.min(ow - 1, Math.floor(x * ow / w2))] = 1;
     }
     return out;
+  }
+  function fit(pixels2, w2, h2, box, pad) {
+    const { width, height } = fitted(w2, h2, box, false), scaled = resize(pixels2, w2, h2, width, height);
+    if (!pad || width === box && height === box)
+      return { pixels: scaled, width, height };
+    const out = new Uint8ClampedArray(box * box * 4), left = box - width >> 1, top = box - height >> 1;
+    for (let y = 0; y < height; y++)
+      out.set(
+        scaled.subarray(y * width * 4, (y + 1) * width * 4),
+        ((y + top) * box + left) * 4
+      );
+    return { pixels: out, width: box, height: box };
   }
   async function finish(pixels2, w2, h2, settings = {}, yieldFn, silhouette) {
     let out = { pixels: pixels2, width: w2, height: h2 };
@@ -4633,25 +4924,80 @@ dialog p {
     return out;
   }
 
+  // src/deliver.js
+  async function deliver(pixels2, w2, h2, settings, yieldFn, { first = false, format } = {}) {
+    const done = await finish(pixels2, w2, h2, settings, yieldFn), outputs = outputsFor(settings.size, done.width, done.height, settings), files = [];
+    for (const o of first ? outputs.slice(0, 1) : outputs) {
+      const image = o.box ? fit(done.pixels, done.width, done.height, o.box, o.pad) : done;
+      await yieldFn?.();
+      files.push({
+        ...o,
+        format: format || o.format,
+        blob: await encode(
+          image.pixels,
+          image.width,
+          image.height,
+          format || o.format,
+          o.limit
+        )
+      });
+    }
+    return files;
+  }
+
+  // src/zip.js
+  async function zip(files, date = /* @__PURE__ */ new Date()) {
+    if (!files.length || files.length > 1e3)
+      throw Error("Invalid ZIP contents.");
+    const encoder = new TextEncoder(), used = /* @__PURE__ */ new Set(), parts = [], central = [], time = date.getHours() << 11 | date.getMinutes() << 5 | date.getSeconds() >> 1, day = Math.min(2107, Math.max(1980, date.getFullYear())) - 1980 << 9 | date.getMonth() + 1 << 5 | date.getDate();
+    let offset = 0;
+    for (const { name: name2, blob } of files) {
+      const data = new Uint8Array(await blob.arrayBuffer()), path = encoder.encode(unique(name2, used)), crc = crc32(data), local = new Uint8Array(30 + path.length), entry = new Uint8Array(46 + path.length), l = new DataView(local.buffer), c = new DataView(entry.buffer);
+      if (offset + local.length + data.length > 4294967295)
+        throw Error("The ZIP would be larger than 4 GB.");
+      l.setUint32(0, 67324752, true);
+      c.setUint32(0, 33639248, true);
+      c.setUint16(4, 20, true);
+      for (const [v, at] of [
+        [l, 4],
+        [c, 6]
+      ]) {
+        v.setUint16(at, 20, true);
+        v.setUint16(at + 2, 2048, true);
+        v.setUint16(at + 4, 0, true);
+        v.setUint16(at + 6, time, true);
+        v.setUint16(at + 8, day, true);
+        v.setUint32(at + 10, crc, true);
+        v.setUint32(at + 14, data.length, true);
+        v.setUint32(at + 18, data.length, true);
+        v.setUint16(at + 22, path.length, true);
+      }
+      c.setUint32(42, offset, true);
+      local.set(path, 30);
+      entry.set(path, 46);
+      parts.push(local, data);
+      central.push(entry);
+      offset += local.length + data.length;
+    }
+    const size = central.reduce((n, e2) => n + e2.length, 0), end = new Uint8Array(22), e = new DataView(end.buffer);
+    e.setUint32(0, 101010256, true);
+    e.setUint16(8, files.length, true);
+    e.setUint16(10, files.length, true);
+    e.setUint32(12, size, true);
+    e.setUint32(16, offset, true);
+    return new Blob([...parts, ...central, end], { type: "application/zip" });
+  }
+  function unique(name2, used) {
+    const clean = String(name2).replace(/[\x00-\x1f\x7f/\\:]/g, "_").replace(/^\.+/, "").slice(0, 120) || "image", dot = clean.lastIndexOf("."), stem = dot > 0 ? clean.slice(0, dot) : clean, ext = dot > 0 ? clean.slice(dot) : "";
+    let candidate = clean;
+    for (let n = 2; used.has(candidate.toLowerCase()); n++)
+      candidate = stem + " (" + n + ")" + ext;
+    used.add(candidate.toLowerCase());
+    return candidate;
+  }
+
   // src/sample.js
   var sample_default = "data:image/png;base64,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";
-
-  // src/yield.js
-  function makePause(budget = 12) {
-    let last = 0;
-    return () => {
-      if (performance.now() - last < budget) return;
-      return new Promise((resolve) => {
-        const channel = new MessageChannel();
-        channel.port1.onmessage = () => {
-          channel.port1.close();
-          last = performance.now();
-          resolve();
-        };
-        channel.port2.postMessage(0);
-      });
-    };
-  }
 
   // src/app.js
   var $ = (id) => document.getElementById(id);
@@ -4667,6 +5013,7 @@ dialog p {
   var seeds = [];
   var palette = [];
   var recent = [];
+  var svgSource = null;
   var imageId = 0;
   var editId = 0;
   var ready = false;
@@ -5126,15 +5473,27 @@ dialog p {
     status(lastError.message);
     buttons();
   }
-  async function openBlob(blob, fileName, isSample = false) {
+  var dialogText = {
+    open: [
+      "Open another image?",
+      "Your current image has edits. Export it first if you want to keep them.",
+      "Open new image"
+    ],
+    redraw: [
+      "Redraw the SVG at a new size?",
+      "Redrawing starts again from the SVG file, so your edits are cleared. Export first if you want to keep them.",
+      "Redraw"
+    ]
+  };
+  async function openBlob(blob, fileName, isSample = false, redraw = false) {
     const ticket = ++importId;
     importAbort?.abort();
     const controller = new AbortController();
     importAbort = controller;
-    status("Checking image\u2026");
+    status(redraw ? "Redrawing SVG\u2026" : "Checking image\u2026");
     try {
-      const decoded = await decodeBlob(blob, controller.signal);
-      if (ticket !== importId) return;
+      const edge = Number($("svgSize").value), decoded = await decodeBlob(blob, controller.signal, { svgEdge: edge });
+      if (ticket !== importId) return false;
       if (!isSample && pixels && (dirty || result?.changed)) {
         const dialog = $("replaceDialog");
         if (dialog.open) {
@@ -5144,7 +5503,12 @@ dialog p {
           dialog.close("cancel");
           await closed;
         }
-        if (ticket !== importId) return;
+        if (ticket !== importId) return false;
+        [
+          $("replaceTitle").textContent,
+          $("replaceText").textContent,
+          $("replaceConfirm").textContent
+        ] = dialogText[redraw ? "redraw" : "open"];
         dialog.showModal();
         const choice = await new Promise(
           (resolve) => dialog.addEventListener("close", () => resolve(dialog.returnValue), {
@@ -5152,14 +5516,19 @@ dialog p {
           })
         );
         if (ticket !== importId || choice !== "replace") {
-          if (ticket === importId) status("Kept the current image.");
-          return;
+          if (ticket === importId)
+            status(
+              redraw ? "Kept the current drawing." : "Kept the current image."
+            );
+          return false;
         }
       }
       commit("Adjust colour");
       w = decoded.width;
       h = decoded.height;
       name = String(fileName || "image").slice(0, 200);
+      svgSource = decoded.svg ? { blob, name, edge } : null;
+      $("svgSizeGroup").hidden = !svgSource;
       original = decoded.pixels;
       pixels = original.slice();
       overrides = new Int8Array(w * h);
@@ -5181,11 +5550,13 @@ dialog p {
       layout();
       outlineControls();
       status(
-        isSample ? "Sample ready. Pick a colour to get started." : "Opened " + name + (decoded.still ? " as a still image." : ".")
+        isSample ? "Sample ready. Pick a colour to get started." : redraw ? "Redrew " + name + " at " + edge + " px." : "Opened " + name + (decoded.still ? " as a still image." : ".")
       );
+      return true;
     } catch (e) {
       if (ticket === importId && e.name !== "AbortError")
         status("Could not open image: " + e.message);
+      return false;
     } finally {
       if (ticket === importId) importAbort = null;
     }
@@ -5240,21 +5611,28 @@ dialog p {
       commit("Adjust colour");
       const r = await latest(), revision = editId, iid = imageId;
       status(copy ? "Preparing clipboard image\u2026" : "Encoding image\u2026");
-      const format = copy ? "png" : $("format").value, out = await finish(r.pixels, w, h, finishSettings(), pause), blobPromise = encode(out.pixels, out.width, out.height, format);
+      const settings = finishSettings();
       if (copy) {
         if (!navigator.clipboard?.write || !window.ClipboardItem)
-          throw Error("Clipboard is unavailable here. Use Export PNG.");
+          throw Error("Clipboard is unavailable here. Use Export.");
+        const blobPromise = deliver(r.pixels, w, h, settings, pause, {
+          first: true,
+          format: "png"
+        }).then((files) => files[0].blob);
         await navigator.clipboard.write([
           new ClipboardItem({ "image/png": blobPromise })
         ]);
         status("PNG copied to clipboard.");
       } else {
-        const blob = await blobPromise;
+        const files = await deliver(r.pixels, w, h, settings, pause);
         if (iid !== imageId || revision !== editId)
           throw Error(
             "The image changed during export. Export again to save the latest edit."
           );
-        const filename = outputName(name, format, params.target), url = URL.createObjectURL(blob);
+        const pack = files.length > 1, named = files.map((f) => ({
+          name: outputName(name, f.format, params.target, f.suffix),
+          blob: f.blob
+        })), blob = pack ? await zip(named) : named[0].blob, filename = pack ? outputName(name, "zip", params.target, settings.size) : named[0].name, over = files.filter((f) => f.limit && f.blob.size > f.limit), url = URL.createObjectURL(blob);
         try {
           const a = document.createElement("a");
           a.href = url;
@@ -5267,7 +5645,9 @@ dialog p {
           URL.revokeObjectURL(url);
           throw e;
         }
-        status("Prepared " + filename + ". Choose where to save it.");
+        status(
+          "Prepared " + filename + " (" + formatBytes(blob.size) + "). " + (over.length ? "It is over the " + presetById(settings.size).label.split(" \xB7 ")[0] + " size limit. " : "") + "Choose where to save it."
+        );
       }
     } catch (e) {
       status((copy ? "Copy failed: " : "Export failed: ") + e.message);
@@ -5310,14 +5690,20 @@ dialog p {
     $("beforeLabel").textContent = $("compare").selectedOptions[0].textContent;
     wipeCanvas.style.clipPath = "inset(0 " + (100 - Number($("wipe").value)) + "% 0 0)";
     renderPreview();
+    scheduleReadout();
   }
   function finishSettings() {
-    return $("outline").checked ? {
-      outline: {
+    const settings = {
+      size: $("size").value,
+      format: $("format").value,
+      custom: Number($("customSize").value)
+    };
+    if ($("outline").checked)
+      settings.outline = {
         widthPct: Number($("outlineWidth").value),
         colour: $("outlineHex").value
-      }
-    } : {};
+      };
+    return settings;
   }
   var PREVIEW_SIZES = [16, 24, 32, 48, 96];
   var previewGrounds = [
@@ -5364,7 +5750,7 @@ dialog p {
     if (ticket !== previewTicket) return;
     const dpr = window.devicePixelRatio || 1;
     PREVIEW_SIZES.forEach((size, k) => {
-      const canvas = previewCanvases[k], box = Math.round(size * dpr), fit = box / Math.max(base.width, base.height), tw = Math.max(1, Math.round(base.width * fit)), th = Math.max(1, Math.round(base.height * fit));
+      const canvas = previewCanvases[k], box = Math.round(size * dpr), fit2 = box / Math.max(base.width, base.height), tw = Math.max(1, Math.round(base.width * fit2)), th = Math.max(1, Math.round(base.height * fit2));
       canvas.width = canvas.height = box;
       canvas.getContext("2d").putImageData(
         new ImageData(
@@ -5381,6 +5767,7 @@ dialog p {
     const pct = Number($("outlineWidth").value), px = w ? outlineRadius(w, h, pct) : 0;
     $("outlineWidthValue").textContent = pct + "%" + (w ? " \xB7 " + Math.round(px * 10) / 10 + " px here" : "");
     renderPreview();
+    scheduleReadout();
   }
   $("outline").onchange = outlineControls;
   $("outlineWidth").oninput = outlineControls;
@@ -5409,6 +5796,103 @@ dialog p {
       })
     );
   $("previewGround").onchange = renderPreview;
+  var FORMAT_NAMES = {
+    png: "PNG",
+    webp: "WebP",
+    "webp-small": "WebP",
+    zip: "ZIP"
+  };
+  var FORMAT_LABELS = {
+    png: "PNG",
+    webp: "lossless WebP",
+    "webp-small": "small WebP"
+  };
+  for (const preset of PRESETS) {
+    const option = document.createElement("option");
+    option.value = preset.id;
+    option.textContent = preset.label;
+    $("size").append(option);
+  }
+  if (!canEncodeWebP())
+    $("format").querySelector('[value="webp-small"]').textContent += " \xB7 not in this browser";
+  var chosenFormat = "png";
+  function sizeControls() {
+    const preset = presetById($("size").value), allowed = formatsFor(preset).filter(
+      (f) => f !== "webp-small" || canEncodeWebP()
+    ), select = $("format");
+    for (const option of select.options)
+      option.disabled = !allowed.includes(option.value);
+    select.value = !allowed.length ? "zip" : allowed.includes(chosenFormat) ? chosenFormat : allowed[0];
+    select.disabled = allowed.length < 2;
+    $("customSizeGroup").hidden = preset.id !== "custom";
+    $("export").textContent = "Export " + FORMAT_NAMES[select.value] + " \u2197";
+    scheduleReadout();
+  }
+  $("size").onchange = sizeControls;
+  $("format").onchange = () => {
+    chosenFormat = $("format").value;
+    sizeControls();
+  };
+  $("customSize").oninput = (e) => {
+    const v = Number(e.target.value);
+    e.target.setAttribute(
+      "aria-invalid",
+      String(!(Number.isInteger(v) && v >= CUSTOM_MIN && v <= CUSTOM_MAX))
+    );
+    scheduleReadout();
+  };
+  $("svgSize").onchange = async () => {
+    const previous = svgSource;
+    if (!previous) return;
+    if (!await openBlob(previous.blob, previous.name, false, true) && svgSource === previous)
+      $("svgSize").value = String(previous.edge);
+  };
+  var readoutTicket = 0;
+  var readoutTimer = 0;
+  function scheduleReadout() {
+    clearTimeout(readoutTimer);
+    readoutTimer = setTimeout(sizeReadout, 300);
+  }
+  async function sizeReadout() {
+    const ticket = ++readoutTicket, box = $("sizeReadout"), line2 = (text2, over) => {
+      const p = document.createElement("p");
+      p.textContent = text2;
+      if (over) p.className = "over";
+      return p;
+    };
+    if (!pixels) return;
+    const settings = finishSettings();
+    if (settings.size === "original" && w * h > 1048576) {
+      box.replaceChildren(
+        line2("Original size \xB7 the file size is shown when you export.")
+      );
+      return;
+    }
+    let files;
+    try {
+      files = await deliver(result?.pixels || pixels, w, h, settings, pause);
+    } catch (e) {
+      if (ticket === readoutTicket) box.replaceChildren(line2(e.message, true));
+      return;
+    }
+    if (ticket !== readoutTicket) return;
+    const lines = files.map((f) => {
+      const over = f.limit && f.blob.size > f.limit;
+      return line2(
+        f.width + " \xD7 " + f.height + " " + FORMAT_LABELS[f.format] + " \xB7 " + formatBytes(f.blob.size) + (f.limit ? (over ? " \xB7 over the " : " of ") + formatBytes(f.limit) + (over ? " limit" : "") : ""),
+        over
+      );
+    });
+    if (files.length > 1) lines.unshift(line2("Saved together as one ZIP:"));
+    if (files.some((f) => f.enlarged))
+      lines.push(
+        line2(
+          "Enlarged from a smaller image, so it may look soft." + (svgSource ? " Draw the SVG larger for a sharper result." : "")
+        )
+      );
+    box.replaceChildren(...lines);
+  }
+  sizeControls();
   function layout() {
     if (!w) return;
     const pane = after.parentElement;
@@ -5679,7 +6163,6 @@ dialog p {
   $("compare").onchange = draw;
   $("overlay").onchange = draw;
   $("wipe").oninput = draw;
-  $("format").onchange = () => $("export").textContent = "Export " + $("format").value.toUpperCase() + " \u2197";
   function background() {
     const kind = $("background").value;
     $("viewport").classList.toggle("checker", kind === "checker");

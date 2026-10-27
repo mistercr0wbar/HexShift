@@ -7,13 +7,17 @@ import {
 } from "./engine.js";
 import { History } from "./history.js";
 import { decodeBlob } from "./import.js";
-import { encode, outputName } from "./export.js";
+import { canEncodeWebP, formatBytes, outputName } from "./export.js";
+import { deliver } from "./deliver.js";
+import { finish, resize, outlineRadius, shrinkSilhouette } from "./output.js";
 import {
-  finish,
-  resize,
-  outlineRadius,
-  shrinkSilhouette,
-} from "./output.js";
+  PRESETS,
+  presetById,
+  formatsFor,
+  CUSTOM_MIN,
+  CUSTOM_MAX,
+} from "./presets.js";
+import { zip } from "./zip.js";
 import sample from "./sample.js";
 import { makePause } from "./yield.js";
 const $ = (id) => document.getElementById(id),
@@ -28,7 +32,8 @@ let w = 0,
   params = defaults(),
   seeds = [],
   palette = [],
-  recent = [];
+  recent = [],
+  svgSource = null;
 let imageId = 0,
   editId = 0,
   ready = false,
@@ -528,15 +533,30 @@ function cancelProcessing() {
   status(lastError.message);
   buttons();
 }
-async function openBlob(blob, fileName, isSample = false) {
+const dialogText = {
+  open: [
+    "Open another image?",
+    "Your current image has edits. Export it first if you want to keep them.",
+    "Open new image",
+  ],
+  redraw: [
+    "Redraw the SVG at a new size?",
+    "Redrawing starts again from the SVG file, so your edits are cleared. Export first if you want to keep them.",
+    "Redraw",
+  ],
+};
+// Resolves true once the image is open. `redraw` reopens the current SVG at
+// the size chosen under "SVG drawn at".
+async function openBlob(blob, fileName, isSample = false, redraw = false) {
   const ticket = ++importId;
   importAbort?.abort();
   const controller = new AbortController();
   importAbort = controller;
-  status("Checking image…");
+  status(redraw ? "Redrawing SVG…" : "Checking image…");
   try {
-    const decoded = await decodeBlob(blob, controller.signal);
-    if (ticket !== importId) return;
+    const edge = Number($("svgSize").value),
+      decoded = await decodeBlob(blob, controller.signal, { svgEdge: edge });
+    if (ticket !== importId) return false;
     if (!isSample && pixels && (dirty || result?.changed)) {
       const dialog = $("replaceDialog");
       if (dialog.open) {
@@ -546,7 +566,12 @@ async function openBlob(blob, fileName, isSample = false) {
         dialog.close("cancel");
         await closed;
       }
-      if (ticket !== importId) return;
+      if (ticket !== importId) return false;
+      [
+        $("replaceTitle").textContent,
+        $("replaceText").textContent,
+        $("replaceConfirm").textContent,
+      ] = dialogText[redraw ? "redraw" : "open"];
       dialog.showModal();
       const choice = await new Promise((resolve) =>
         dialog.addEventListener("close", () => resolve(dialog.returnValue), {
@@ -554,14 +579,19 @@ async function openBlob(blob, fileName, isSample = false) {
         }),
       );
       if (ticket !== importId || choice !== "replace") {
-        if (ticket === importId) status("Kept the current image.");
-        return;
+        if (ticket === importId)
+          status(
+            redraw ? "Kept the current drawing." : "Kept the current image.",
+          );
+        return false;
       }
     }
     commit("Adjust colour");
     w = decoded.width;
     h = decoded.height;
     name = String(fileName || "image").slice(0, 200);
+    svgSource = decoded.svg ? { blob, name, edge } : null;
+    $("svgSizeGroup").hidden = !svgSource;
     original = decoded.pixels;
     pixels = original.slice();
     overrides = new Int8Array(w * h);
@@ -586,11 +616,15 @@ async function openBlob(blob, fileName, isSample = false) {
     status(
       isSample
         ? "Sample ready. Pick a colour to get started."
-        : "Opened " + name + (decoded.still ? " as a still image." : "."),
+        : redraw
+          ? "Redrew " + name + " at " + edge + " px."
+          : "Opened " + name + (decoded.still ? " as a still image." : "."),
     );
+    return true;
   } catch (e) {
     if (ticket === importId && e.name !== "AbortError")
       status("Could not open image: " + e.message);
+    return false;
   } finally {
     if (ticket === importId) importAbort = null;
   }
@@ -647,23 +681,35 @@ async function save(copy = false) {
       revision = editId,
       iid = imageId;
     status(copy ? "Preparing clipboard image…" : "Encoding image…");
-    const format = copy ? "png" : $("format").value,
-      out = await finish(r.pixels, w, h, finishSettings(), pause),
-      blobPromise = encode(out.pixels, out.width, out.height, format);
+    const settings = finishSettings();
     if (copy) {
       if (!navigator.clipboard?.write || !window.ClipboardItem)
-        throw Error("Clipboard is unavailable here. Use Export PNG.");
+        throw Error("Clipboard is unavailable here. Use Export.");
+      // A pack copies its first (largest) image.
+      const blobPromise = deliver(r.pixels, w, h, settings, pause, {
+        first: true,
+        format: "png",
+      }).then((files) => files[0].blob);
       await navigator.clipboard.write([
         new ClipboardItem({ "image/png": blobPromise }),
       ]);
       status("PNG copied to clipboard.");
     } else {
-      const blob = await blobPromise;
+      const files = await deliver(r.pixels, w, h, settings, pause);
       if (iid !== imageId || revision !== editId)
         throw Error(
           "The image changed during export. Export again to save the latest edit.",
         );
-      const filename = outputName(name, format, params.target),
+      const pack = files.length > 1,
+        named = files.map((f) => ({
+          name: outputName(name, f.format, params.target, f.suffix),
+          blob: f.blob,
+        })),
+        blob = pack ? await zip(named) : named[0].blob,
+        filename = pack
+          ? outputName(name, "zip", params.target, settings.size)
+          : named[0].name,
+        over = files.filter((f) => f.limit && f.blob.size > f.limit),
         url = URL.createObjectURL(blob);
       try {
         const a = document.createElement("a");
@@ -677,7 +723,19 @@ async function save(copy = false) {
         URL.revokeObjectURL(url);
         throw e;
       }
-      status("Prepared " + filename + ". Choose where to save it.");
+      status(
+        "Prepared " +
+          filename +
+          " (" +
+          formatBytes(blob.size) +
+          "). " +
+          (over.length
+            ? "It is over the " +
+              presetById(settings.size).label.split(" · ")[0] +
+              " size limit. "
+            : "") +
+          "Choose where to save it.",
+      );
     }
   } catch (e) {
     status((copy ? "Copy failed: " : "Export failed: ") + e.message);
@@ -731,17 +789,21 @@ function draw() {
   wipeCanvas.style.clipPath =
     "inset(0 " + (100 - Number($("wipe").value)) + "% 0 0)";
   renderPreview();
+  scheduleReadout();
 }
 // Export finishing settings. UI-only: not part of the edit history.
 function finishSettings() {
-  return $("outline").checked
-    ? {
-        outline: {
-          widthPct: Number($("outlineWidth").value),
-          colour: $("outlineHex").value,
-        },
-      }
-    : {};
+  const settings = {
+    size: $("size").value,
+    format: $("format").value,
+    custom: Number($("customSize").value),
+  };
+  if ($("outline").checked)
+    settings.outline = {
+      widthPct: Number($("outlineWidth").value),
+      colour: $("outlineHex").value,
+    };
+  return settings;
 }
 const PREVIEW_SIZES = [16, 24, 32, 48, 96],
   previewGrounds = [
@@ -820,6 +882,7 @@ function outlineControls() {
   $("outlineWidthValue").textContent =
     pct + "%" + (w ? " · " + Math.round(px * 10) / 10 + " px here" : "");
   renderPreview();
+  scheduleReadout();
 }
 $("outline").onchange = outlineControls;
 $("outlineWidth").oninput = outlineControls;
@@ -848,6 +911,130 @@ for (const [label, hex] of [
     }),
   );
 $("previewGround").onchange = renderPreview;
+const FORMAT_NAMES = {
+    png: "PNG",
+    webp: "WebP",
+    "webp-small": "WebP",
+    zip: "ZIP",
+  },
+  FORMAT_LABELS = {
+    png: "PNG",
+    webp: "lossless WebP",
+    "webp-small": "small WebP",
+  };
+for (const preset of PRESETS) {
+  const option = document.createElement("option");
+  option.value = preset.id;
+  option.textContent = preset.label;
+  $("size").append(option);
+}
+if (!canEncodeWebP())
+  $("format").querySelector('[value="webp-small"]').textContent +=
+    " · not in this browser";
+let chosenFormat = "png";
+// The format list follows the size: a platform may accept only some formats,
+// and a pack (several files) sets its own.
+function sizeControls() {
+  const preset = presetById($("size").value),
+    allowed = formatsFor(preset).filter(
+      (f) => f !== "webp-small" || canEncodeWebP(),
+    ),
+    select = $("format");
+  for (const option of select.options)
+    option.disabled = !allowed.includes(option.value);
+  select.value = !allowed.length
+    ? "zip"
+    : allowed.includes(chosenFormat)
+      ? chosenFormat
+      : allowed[0];
+  select.disabled = allowed.length < 2;
+  $("customSizeGroup").hidden = preset.id !== "custom";
+  $("export").textContent = "Export " + FORMAT_NAMES[select.value] + " ↗";
+  scheduleReadout();
+}
+$("size").onchange = sizeControls;
+$("format").onchange = () => {
+  chosenFormat = $("format").value;
+  sizeControls();
+};
+$("customSize").oninput = (e) => {
+  const v = Number(e.target.value);
+  e.target.setAttribute(
+    "aria-invalid",
+    String(!(Number.isInteger(v) && v >= CUSTOM_MIN && v <= CUSTOM_MAX)),
+  );
+  scheduleReadout();
+};
+$("svgSize").onchange = async () => {
+  const previous = svgSource;
+  if (!previous) return;
+  if (
+    !(await openBlob(previous.blob, previous.name, false, true)) &&
+    svgSource === previous
+  )
+    $("svgSize").value = String(previous.edge);
+};
+let readoutTicket = 0,
+  readoutTimer = 0;
+function scheduleReadout() {
+  clearTimeout(readoutTimer);
+  readoutTimer = setTimeout(sizeReadout, 300);
+}
+// Runs the real export pipeline, so the sizes shown are the sizes saved.
+async function sizeReadout() {
+  const ticket = ++readoutTicket,
+    box = $("sizeReadout"),
+    line = (text, over) => {
+      const p = document.createElement("p");
+      p.textContent = text;
+      if (over) p.className = "over";
+      return p;
+    };
+  if (!pixels) return;
+  const settings = finishSettings();
+  if (settings.size === "original" && w * h > 1048576) {
+    box.replaceChildren(
+      line("Original size · the file size is shown when you export."),
+    );
+    return;
+  }
+  let files;
+  try {
+    files = await deliver(result?.pixels || pixels, w, h, settings, pause);
+  } catch (e) {
+    if (ticket === readoutTicket) box.replaceChildren(line(e.message, true));
+    return;
+  }
+  if (ticket !== readoutTicket) return;
+  const lines = files.map((f) => {
+    const over = f.limit && f.blob.size > f.limit;
+    return line(
+      f.width +
+        " × " +
+        f.height +
+        " " +
+        FORMAT_LABELS[f.format] +
+        " · " +
+        formatBytes(f.blob.size) +
+        (f.limit
+          ? (over ? " · over the " : " of ") +
+            formatBytes(f.limit) +
+            (over ? " limit" : "")
+          : ""),
+      over,
+    );
+  });
+  if (files.length > 1) lines.unshift(line("Saved together as one ZIP:"));
+  if (files.some((f) => f.enlarged))
+    lines.push(
+      line(
+        "Enlarged from a smaller image, so it may look soft." +
+          (svgSource ? " Draw the SVG larger for a sharper result." : ""),
+      ),
+    );
+  box.replaceChildren(...lines);
+}
+sizeControls();
 function layout() {
   if (!w) return;
   const pane = after.parentElement;
@@ -1155,9 +1342,6 @@ $("view").onchange = () => {
 $("compare").onchange = draw;
 $("overlay").onchange = draw;
 $("wipe").oninput = draw;
-$("format").onchange = () =>
-  ($("export").textContent =
-    "Export " + $("format").value.toUpperCase() + " ↗");
 function background() {
   const kind = $("background").value;
   $("viewport").classList.toggle("checker", kind === "checker");

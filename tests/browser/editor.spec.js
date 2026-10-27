@@ -11,6 +11,32 @@ const svg = (body, attrs = "") => ({
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 5" ${attrs}>${body}</svg>`,
   ),
 });
+// Reads a stored ZIP back through its central directory.
+function unzip(buffer) {
+  const v = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength),
+    end = buffer.length - 22,
+    files = {};
+  let at = v.getUint32(end + 16, true);
+  for (let i = v.getUint16(end + 10, true); i > 0; i--) {
+    const size = v.getUint32(at + 20, true),
+      nameLength = v.getUint16(at + 28, true),
+      offset = v.getUint32(at + 42, true),
+      name = buffer.subarray(at + 46, at + 46 + nameLength).toString("utf8"),
+      start = offset + 30 + v.getUint16(offset + 26, true);
+    files[name] = buffer.subarray(start, start + size);
+    at += 46 + nameLength;
+  }
+  return files;
+}
+async function exportFile(page) {
+  const download = page.waitForEvent("download");
+  await page.locator("#export").click();
+  const file = await download;
+  return {
+    name: file.suggestedFilename(),
+    bytes: await readFile(await file.path()),
+  };
+}
 async function ready(page) {
   await expect(page.locator("#palette button").first()).toBeVisible();
   await expect(page.locator("#cancel")).toBeHidden();
@@ -144,17 +170,26 @@ test("outline appears in the export and the real-size preview", async ({
   await expect(page.locator("#outlineWidthValue")).toContainText("10%");
   const download = page.waitForEvent("download");
   await page.locator("#export").click();
-  const { data, info } = await sharp(await readFile(await (await download).path()))
+  const { data, info } = await sharp(
+    await readFile(await (await download).path()),
+  )
     .ensureAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true });
   expect(info.width).toBeGreaterThanOrEqual(128);
   let green = 0;
   for (let i = 0; i < data.length; i += 4)
-    if (data[i] === 0 && data[i + 1] === 255 && data[i + 2] === 0 && data[i + 3] === 255)
+    if (
+      data[i] === 0 &&
+      data[i + 1] === 255 &&
+      data[i + 2] === 0 &&
+      data[i + 3] === 255
+    )
       green++;
   expect(green).toBeGreaterThan(200);
-  await page.locator("#previewGround").selectOption({ label: "Primary button" });
+  await page
+    .locator("#previewGround")
+    .selectOption({ label: "Primary button" });
   const tiles = page.locator("#previewTiles canvas");
   await expect(tiles).toHaveCount(5);
   const lit = await tiles.nth(4).evaluate((c) => {
@@ -164,6 +199,139 @@ test("outline appears in the export and the real-size preview", async ({
     return n;
   });
   expect(lit).toBeGreaterThan(100);
+});
+test("platform sizes export at their dimensions and within their limits", async ({
+  page,
+}) => {
+  await pick(page);
+  for (const [id, width, height, limit] of [
+    ["discord-emoji", 128, 128, 256],
+    ["discord-sticker", 320, 320, 512],
+    ["slack-emoji", 128, 128, 128],
+    ["telegram-sticker", 512, 512, 512],
+    ["telegram-emoji", 100, 100, 256],
+    ["youtube-emoji", 48, 48, 1024],
+  ]) {
+    await page.locator("#size").selectOption(id);
+    await expect(page.locator("#sizeReadout")).toContainText(
+      width + " × " + height + " PNG",
+    );
+    const { name, bytes } = await exportFile(page);
+    expect(name).toMatch(new RegExp("-" + id + "\\.png$"));
+    const info = await sharp(bytes).metadata();
+    expect([info.width, info.height]).toEqual([width, height]);
+    expect(bytes.length).toBeLessThanOrEqual(limit * 1024);
+  }
+  await page.locator("#size").selectOption("twitch-emotes");
+  await expect(page.locator("#format")).toBeDisabled();
+  await expect(page.locator("#export")).toHaveText("Export ZIP ↗");
+  const pack = await exportFile(page);
+  expect(pack.name).toMatch(/-twitch-emotes\.zip$/);
+  const entries = unzip(pack.bytes);
+  expect(Object.keys(entries).map((n) => n.replace(/^.*-/, ""))).toEqual([
+    "112px.png",
+    "56px.png",
+    "28px.png",
+  ]);
+  for (const [entry, data] of Object.entries(entries)) {
+    const info = await sharp(data).metadata();
+    expect(info.width + "px.png").toBe(entry.replace(/^.*-/, ""));
+  }
+  await page.locator("#size").selectOption("custom");
+  await page.locator("#customSize").fill("40");
+  await expect(page.locator("#sizeReadout")).toContainText("40 × 40 PNG");
+  const custom = await exportFile(page);
+  expect((await sharp(custom.bytes).metadata()).width).toBe(40);
+});
+test("WhatsApp packs a small WebP sticker and tray icon, or says why not", async ({
+  page,
+  browserName,
+}) => {
+  await pick(page);
+  const webp = await page.evaluate(() =>
+    document
+      .createElement("canvas")
+      .toDataURL("image/webp")
+      .startsWith("data:image/webp"),
+  );
+  if (browserName !== "webkit") expect(webp).toBe(true);
+  await page.locator("#size").selectOption("whatsapp-sticker");
+  if (!webp) {
+    await expect(page.locator("#sizeReadout")).toContainText(
+      "can't be made in this browser",
+    );
+    await page.locator("#export").click();
+    await expect(page.locator("#status")).toContainText(
+      "can't be made in this browser",
+    );
+    return;
+  }
+  await expect(page.locator("#sizeReadout")).toContainText("small WebP");
+  const pack = await exportFile(page),
+    entries = unzip(pack.bytes),
+    names = Object.keys(entries);
+  expect(names.map((n) => n.replace(/^.*-/, ""))).toEqual([
+    "sticker.webp",
+    "tray.png",
+  ]);
+  const sticker = entries[names[0]],
+    tray = entries[names[1]];
+  expect(sticker.length).toBeLessThanOrEqual(100 * 1024);
+  expect(tray.length).toBeLessThanOrEqual(50 * 1024);
+  const a = await sharp(sticker).metadata(),
+    b = await sharp(tray).metadata();
+  expect([a.format, a.width, a.height, a.hasAlpha]).toEqual([
+    "webp",
+    512,
+    512,
+    true,
+  ]);
+  expect([b.format, b.width, b.height]).toEqual(["png", 96, 96]);
+  await page.locator("#size").selectOption("original");
+  await page.locator("#format").selectOption("webp-small");
+  await expect(page.locator("#export")).toHaveText("Export WebP ↗");
+  const small = await exportFile(page);
+  expect((await sharp(small.bytes).metadata()).format).toBe("webp");
+});
+test("SVGs draw at the chosen size and redraw only after confirmation", async ({
+  page,
+}) => {
+  await page
+    .locator("#fileInput")
+    .setInputFiles(
+      svg(
+        '<rect width="10" height="5" fill="#f00"/>',
+        'width="32.5" height="16.25"',
+      ),
+    );
+  await expect(page.locator("#fileDims")).toHaveText("512 × 256");
+  await expect(page.locator("#svgSizeGroup")).toBeVisible();
+  await page.locator("#svgSize").selectOption("256");
+  await expect(page.locator("#fileDims")).toHaveText("256 × 128");
+  await expect(page.locator("#status")).toContainText(
+    "Redrew asset.svg at 256 px",
+  );
+  await ready(page);
+  await pick(page);
+  await page.locator("#mode").selectOption("flat");
+  await expect(page.locator("#editState")).toHaveText("Pending edit");
+  await page.locator("#svgSize").selectOption("1024");
+  await expect(page.locator("#replaceTitle")).toHaveText(
+    "Redraw the SVG at a new size?",
+  );
+  await page.getByRole("button", { name: "Keep editing", exact: true }).click();
+  await expect(page.locator("#svgSize")).toHaveValue("256");
+  await expect(page.locator("#fileDims")).toHaveText("256 × 128");
+  await page.locator("#svgSize").selectOption("1024");
+  await page.getByRole("button", { name: "Redraw", exact: true }).click();
+  await expect(page.locator("#fileDims")).toHaveText("1024 × 512");
+  await page.locator("#fileInput").setInputFiles({
+    name: "sample.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(sample.split(",")[1], "base64"),
+  });
+  await expect(page.locator("#fileDims")).toHaveText("128 × 128");
+  await expect(page.locator("#svgSizeGroup")).toBeHidden();
 });
 test("brush overrides, history and preview background do not alter export alpha", async ({
   page,
@@ -348,7 +516,7 @@ test("Fluent Color SVG filters, mask types and blend modes", async ({
   await page
     .locator("#fileInput")
     .setInputFiles(resolve("tests/fixtures/1st_place_medal_color.svg"));
-  await expect(page.locator("#fileDims")).toContainText("32 × 32");
+  await expect(page.locator("#fileDims")).toContainText("512 × 512");
   await ready(page);
   const shadow = svg(
     '<defs><filter id="s" x="0" y="0" width="10" height="5" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feFlood flood-opacity="0" result="bg"/><feBlend mode="normal" in="SourceGraphic" in2="bg" result="shape"/><feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hard"/><feOffset dx="-0.2" dy="0.2"/><feGaussianBlur stdDeviation="0.2"/><feComposite in2="hard" operator="arithmetic" k2="-1" k3="1"/><feBlend mode="normal" in2="shape"/></filter><mask id="m" mask-type="alpha"><rect width="10" height="5" fill="#000"/></mask></defs><g filter="url(#s)" mask="url(#m)"><rect width="10" height="5" fill="#f00"/><rect width="10" height="5" fill="#00f" style="mix-blend-mode:multiply"/></g>',
@@ -464,13 +632,11 @@ test("JPEG/WebP signatures and animated GIF first-frame import", async ({
     })
       [format]()
       .toBuffer();
-    await page
-      .locator("#fileInput")
-      .setInputFiles({
-        name: "image." + format,
-        mimeType: "application/octet-stream",
-        buffer,
-      });
+    await page.locator("#fileInput").setInputFiles({
+      name: "image." + format,
+      mimeType: "application/octet-stream",
+      buffer,
+    });
     await expect(page.locator("#fileDims")).toHaveText("8 × 4");
     await ready(page);
   }
@@ -480,13 +646,11 @@ test("JPEG/WebP signatures and animated GIF first-frame import", async ({
     249, 4, 0, 1, 0, 0, 0, 44, 0, 0, 0, 0, 1, 0, 1, 0, 0, 2, 2, 68, 1, 0, 33,
     249, 4, 0, 1, 0, 0, 0, 44, 0, 0, 0, 0, 1, 0, 1, 0, 0, 2, 2, 76, 1, 0, 59,
   ]);
-  await page
-    .locator("#fileInput")
-    .setInputFiles({
-      name: "animated.gif",
-      mimeType: "image/gif",
-      buffer: gif,
-    });
+  await page.locator("#fileInput").setInputFiles({
+    name: "animated.gif",
+    mimeType: "image/gif",
+    buffer: gif,
+  });
   await expect(page.locator("#fileDims")).toHaveText("1 × 1 · first frame");
   await ready(page);
   const download = page.waitForEvent("download");
@@ -525,13 +689,11 @@ test("repeated imports release fallback pixel buffers", async ({
       .png()
       .toBuffer();
   async function load() {
-    await page
-      .locator("#fileInput")
-      .setInputFiles({
-        name: "memory.png",
-        mimeType: "image/png",
-        buffer: fixture,
-      });
+    await page.locator("#fileInput").setInputFiles({
+      name: "memory.png",
+      mimeType: "image/png",
+      buffer: fixture,
+    });
     await expect(page.locator("#fileDims")).toHaveText("512 × 512");
     await ready(page);
   }
