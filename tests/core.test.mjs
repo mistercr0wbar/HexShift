@@ -6,8 +6,13 @@ import {
   hslToRgb,
   parseHex,
   hueDistance,
+  rgbToOklch,
+  oklchToRgb,
+  deltasFor,
+  anchorRemap,
+  toHex,
 } from "../src/colour.js";
-import { prepare, processImage, validateImage } from "../src/engine.js";
+import { prepare, processImage, validateImage, unmix } from "../src/engine.js";
 import { History } from "../src/history.js";
 import { inspectRaster, dimensions } from "../src/import.js";
 import { outputName, losslessWebP, losslessPNG } from "../src/export.js";
@@ -57,17 +62,158 @@ test("grey selection cannot leak into colour selection", async () => {
     );
   assert.equal(out.count, 1);
 });
-test("shading protection caps clipping and preserves lightness ordering", async () => {
+test("anchorRemap is monotonic, fixes 0 and 1, and lands the anchor exactly", () => {
+  const values = [0, 0.001, 0.25, 0.5, 0.75, 0.999, 1];
+  for (const a of values)
+    for (const t of values) {
+      if (a > 0 && a < 1) assert.ok(Math.abs(anchorRemap(a, a, t) - t) < 1e-9);
+      if (a > 0) assert.ok(Math.abs(anchorRemap(0, a, t)) < 1e-9 || t === 1);
+      if (a < 1) assert.ok(Math.abs(anchorRemap(1, a, t) - 1) < 1e-9 || t === 0);
+      let last = -Infinity;
+      for (let v = 0; v <= 1.0000001; v += 1 / 64) {
+        const out = anchorRemap(v, a, t);
+        assert.ok(Number.isFinite(out) && out >= 0 && out <= 1, `${v} ${a} ${t}`);
+        assert.ok(out >= last - 1e-9, `monotonic at ${v} ${a} ${t}`);
+        last = out;
+      }
+    }
+});
+test("protected shift lands the sample exactly on the target and keeps shade order", async () => {
+  const data = new Uint8ClampedArray([
+    100, 0, 0, 255, 240, 0, 0, 255, 255, 120, 120, 255,
+  ]);
+  for (const model of ["oklch", "hsl"]) {
+    const im = await prepare(3, 1, data),
+      target = "#3366CC",
+      p = {
+        ...defaults(),
+        model,
+        shadeTol: 100,
+        soft: 0,
+        target,
+        ...deltasFor([240, 0, 0], parseHex(target), model),
+      },
+      out = await processImage(im, p, [{ x: 1, y: 0 }], new Int8Array(3));
+    assert.equal(out.capped, false);
+    const got = parseHex(toHex(...out.pixels.slice(4, 7)));
+    parseHex(target).forEach((v, k) => assert.ok(Math.abs(got[k] - v) <= 1));
+    const L = (i) => rgbToOklch(...out.pixels.slice(i * 4, i * 4 + 3))[0];
+    assert.ok(L(0) < L(1) && L(1) < L(2), model);
+  }
+});
+test("manual lightness past white is flagged and still keeps order", async () => {
   const data = new Uint8ClampedArray([100, 0, 0, 255, 240, 0, 0, 255]),
     im = await prepare(2, 1, data);
   const out = await processImage(
     im,
-    { ...defaults(), dl: 100, ds: -100, shadeTol: 100, soft: 0 },
+    { ...defaults(), model: "hsl", dl: 100, shadeTol: 100, soft: 0 },
     [{ x: 0, y: 0 }],
     new Int8Array(2),
   );
   assert.equal(out.capped, true);
-  assert.ok(out.pixels[0] < out.pixels[4]);
+  assert.ok(out.pixels[0] <= out.pixels[4]);
+});
+test("near-white parts shift to one tint despite noisy hues", async () => {
+  const data = new Uint8ClampedArray([
+      250, 250, 252, 255, 251, 250, 250, 255, 244, 244, 244, 255,
+    ]),
+    im = await prepare(3, 1, data);
+  for (const model of ["oklch", "hsl"]) {
+    const p = {
+        ...defaults(),
+        model,
+        soft: 0,
+        target: "#FF4040",
+        ...deltasFor([250, 250, 252], [255, 64, 64], model),
+      },
+      out = await processImage(im, p, [{ x: 0, y: 0 }], new Int8Array(3)),
+      hues = [0, 1, 2].map((i) => rgbToHsl(...out.pixels.slice(i * 4, i * 4 + 3))[0]);
+    for (const hue of hues) assert.ok(hueDistance(hue, hues[0]) < 4, model + hues);
+  }
+});
+test("OKLCH matches reference values, round-trips and maps out-of-gamut colours", () => {
+  const [L, C, h] = rgbToOklch(255, 0, 0);
+  assert.ok(Math.abs(L - 0.62796) < 1e-3 && Math.abs(C - 0.25768) < 1e-3);
+  assert.ok(Math.abs(h - 29.2339) < 0.05);
+  for (const rgb of [
+    [255, 0, 0],
+    [18, 129, 47],
+    [255, 200, 61],
+    [120, 120, 120],
+    [0, 0, 0],
+    [255, 255, 255],
+  ])
+    assert.deepEqual(oklchToRgb(...rgbToOklch(...rgb)), rgb);
+  const wide = oklchToRgb(0.7, 0.4, 250);
+  assert.ok(wide.every((v) => Number.isInteger(v) && v >= 0 && v <= 255));
+  assert.ok(Math.abs(rgbToOklch(...wide)[0] - 0.7) < 0.01);
+});
+test("perceptual hue rotation keeps brightness where HSL darkens", async () => {
+  const data = new Uint8ClampedArray([255, 200, 61, 255]),
+    im = await prepare(1, 1, data),
+    before = rgbToOklch(255, 200, 61)[0],
+    lightness = {};
+  for (const model of ["oklch", "hsl"]) {
+    const out = await processImage(
+      im,
+      { ...defaults(), model, protect: false, dh: -163, soft: 0 },
+      [{ x: 0, y: 0 }],
+      new Int8Array(1),
+    );
+    lightness[model] = rgbToOklch(...out.pixels.slice(0, 3))[0];
+  }
+  assert.ok(Math.abs(lightness.oklch - before) < 0.02);
+  assert.ok(before - lightness.hsl > 0.1);
+});
+test("clean edges unmix the removed colour", () => {
+  assert.deepEqual(unmix([255, 255, 255], [255, 255, 255]), [0, 0, 0, 0]);
+  const [r, g, b, a] = unmix([255, 128, 128], [255, 255, 255]);
+  assert.deepEqual([r, g, b], [255, 0, 0]);
+  assert.ok(Math.abs(a - 0.5) < 0.01);
+  for (const key of [
+    [0, 255, 0],
+    [0, 0, 0],
+    [255, 255, 255],
+  ]) {
+    const out = unmix([100, 200, 50], key);
+    assert.ok(out.every(Number.isFinite), String(key));
+  }
+  assert.deepEqual(unmix([10, 20, 30], [0, 0, 0]).slice(0, 3), [85, 170, 255]);
+});
+test("clean edges remove a white background without a pale halo", async () => {
+  const data = new Uint8ClampedArray([
+      255, 255, 255, 255, 255, 128, 128, 255, 255, 0, 0, 255,
+    ]),
+    im = await prepare(3, 1, data),
+    p = { ...defaults(), mode: "transparent", soft: 0 };
+  const clean = await processImage(im, p, [{ x: 0, y: 0 }], new Int8Array(3));
+  assert.equal(clean.pixels[3], 0);
+  assert.ok(Math.abs(clean.pixels[7] - 128) <= 1);
+  assert.deepEqual([...clean.pixels.slice(4, 7)], [255, 0, 0]);
+  assert.deepEqual([...clean.pixels.slice(8)], [255, 0, 0, 255]);
+  const plain = await processImage(
+    im,
+    { ...p, cleanEdges: false },
+    [{ x: 0, y: 0 }],
+    new Int8Array(3),
+  );
+  assert.equal(plain.pixels[3], 0);
+  const feathered = await processImage(
+    im,
+    { ...p, feather: 1 },
+    [{ x: 0, y: 0 }],
+    new Int8Array(3),
+  );
+  // Partly removed white stays white (premultiplied blend), not grey.
+  assert.deepEqual([...feathered.pixels.slice(0, 3)], [255, 255, 255]);
+  assert.ok(feathered.pixels[3] > 0 && feathered.pixels[3] < 255);
+  const brushOnly = await processImage(
+    im,
+    p,
+    [],
+    new Int8Array([0, 1, 0]),
+  );
+  assert.equal(brushOnly.pixels[7], 0);
 });
 test("feather blends boundary and preserves alpha", async () => {
   const data = new Uint8ClampedArray([

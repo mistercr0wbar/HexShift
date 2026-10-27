@@ -660,6 +660,35 @@ canvas#wipeCanvas {
   padding: 0;
   border: 0;
 }
+.output-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.output-preview .small-label {
+  margin: 0;
+}
+.output-preview select {
+  width: auto;
+}
+.preview-tiles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.preview-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+}
+.preview-tile canvas {
+  display: block;
+}
 .statusbar {
   display: flex;
   gap: 8px;

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-jPti+wnNqKhodgovAlPRBkX8wR060TKCx+hTEZdFkGg='; style-src 'sha256-rGQ4IVXGqCeu51Cxl9aCKuoVKOoN79zAyF/z6bHXrf4='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-gd6Ryjk5pa5mSyP9CydNungZRgdVxYOQa6nBYZbuGuA='; style-src 'sha256-qR2bEzqFswJOX7hXsOEag0OAilfaHtOUkS44YBOOL3U='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta name="theme-color" content="#6756d6" />
     <title>Hex Shift — colour, with character</title>
@@ -671,6 +671,35 @@ canvas#wipeCanvas {
   padding: 0;
   border: 0;
 }
+.output-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.output-preview .small-label {
+  margin: 0;
+}
+.output-preview select {
+  width: auto;
+}
+.preview-tiles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.preview-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+}
+.preview-tile canvas {
+  display: block;
+}
 .statusbar {
   display: flex;
   gap: 8px;
@@ -1045,15 +1074,24 @@ dialog p {
               Pick a source colour to begin.
             </p>
             <p id="capWarning" class="notice" hidden>
-              Shading protection limits this target. The achieved colour is
-              shown above.
+              These adjustments go past white, black or full colour, so some
+              shading is lost. The achieved colour is shown above.
             </p>
             <label class="check" id="protectLabel"
               ><input type="checkbox" id="protect" checked /> Protect highlights
               and shadows</label
             >
+            <label class="check" id="cleanEdgesLabel" hidden
+              ><input type="checkbox" id="cleanEdges" checked /> Clean edges
+              (remove the colour from blended edges)</label
+            >
             <details open id="fine">
               <summary>Fine adjustment</summary>
+              <label for="model">Colour model</label
+              ><select id="model">
+                <option value="oklch">Perceptual · keeps brightness</option>
+                <option value="hsl">Classic HSL</option>
+              </select>
               <div id="fineControls"></div>
             </details>
             <details class="presets">
@@ -1130,12 +1168,49 @@ dialog p {
               <option value="png">PNG · lossless, transparent</option>
               <option value="webp">WebP · lossless, transparent</option>
             </select>
+            <details id="outlinePanel">
+              <summary>Outline</summary>
+              <label class="check"
+                ><input type="checkbox" id="outline" /> Add an outline</label
+              >
+              <label for="outlineWidth"
+                >Width <span id="outlineWidthValue">4%</span></label
+              ><input
+                id="outlineWidth"
+                type="range"
+                min="0.5"
+                max="15"
+                step="0.5"
+                value="4"
+              />
+              <label for="outlineHex">Outline colour</label>
+              <div class="target-row">
+                <input
+                  type="color"
+                  id="outlineColour"
+                  value="#ffffff"
+                  aria-label="Outline colour picker"
+                /><input
+                  id="outlineHex"
+                  class="hex"
+                  value="#FFFFFF"
+                  maxlength="7"
+                  spellcheck="false"
+                />
+              </div>
+              <div id="outlineSwatches" class="swatches"></div>
+              <p class="help">
+                Keeps an emoji visible on a background of its own colour, such
+                as a Discord button. Check it in the real-size preview. The
+                canvas grows only if the artwork touches its edges.
+              </p>
+            </details>
             <button id="copy" class="button full" disabled>
               Copy PNG to clipboard
             </button>
             <p class="help">
-              Export includes your current preview. Apply is only needed before
-              selecting the next colour.
+              Export includes your current preview and outline. Apply is only
+              needed before selecting the next colour.
             </p>
           </section>
           <div class="privacy">
@@ -1250,6 +1325,11 @@ dialog p {
               />
             </div>
           </div>
+          <section class="output-preview" aria-label="Real-size preview">
+            <label for="previewGround" class="small-label">Real size on</label
+            ><select id="previewGround"></select>
+            <div id="previewTiles" class="preview-tiles"></div>
+          </section>
           <div class="statusbar">
             <p id="status" role="status" aria-live="polite">Loading sample…</p>
             <button id="cancel" class="text-button" hidden>Cancel</button
@@ -1268,10 +1348,12 @@ dialog p {
               remain available.
             </p>
             <p>
-              Static SVG supports shapes, paths, text, gradients, clips, and
-              masks. Active content, external resources, filters, reuse
-              elements, and embedded images are rejected. All exports are still
-              images. Preview backgrounds never change exported transparency.
+              Static SVG supports shapes, paths, text, gradients, clips, masks,
+              blend modes and filter effects. Active content, external
+              resources, reuse elements and embedded images are rejected. All
+              exports are still images. Preview backgrounds never change
+              exported transparency. For a background, Clean edges works best
+              with Only connected regions.
             </p>
           </details>
         </div>
@@ -1322,6 +1404,61 @@ dialog p {
     return /^[\da-f]{6}$/i.test(s) ? [0, 2, 4].map((i) => parseInt(s.slice(i, i + 2), 16)) : null;
   }
   var toHex = (r, g, b) => "#" + [r, g, b].map((v) => clamp(Math.round(v), 0, 255).toString(16).padStart(2, "0")).join("").toUpperCase();
+  var toLinear = Float32Array.from({ length: 256 }, (_, i) => {
+    const c = i / 255;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  var fromLinear = (x) => 255 * (x <= 31308e-7 ? 12.92 * x : 1.055 * Math.max(0, x) ** (1 / 2.4) - 0.055);
+  function rgbToOklch(r, g, b) {
+    const lr = toLinear[r], lg = toLinear[g], lb = toLinear[b];
+    const l = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb), m = Math.cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb), s = Math.cbrt(0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb);
+    const L = 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, A = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, B = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s;
+    return [L, Math.hypot(A, B), (Math.atan2(B, A) * 180 / Math.PI + 360) % 360];
+  }
+  function oklchToLinear(L, C, h2) {
+    const a = C * Math.cos(h2 * Math.PI / 180), b = C * Math.sin(h2 * Math.PI / 180);
+    const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3, m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3, s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
+    return [
+      4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+      -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+      -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s
+    ];
+  }
+  var inGamut = (rgb) => rgb.every((v) => v >= -1e-4 && v <= 1 + 1e-4);
+  function oklchToRgb(L, C, h2) {
+    L = clamp(L, 0, 1);
+    C = Math.max(0, C);
+    let rgb = oklchToLinear(L, C, h2);
+    if (!inGamut(rgb)) {
+      let lo = 0, hi = C;
+      for (let i = 0; i < 16; i++) {
+        const mid = (lo + hi) / 2;
+        if (inGamut(oklchToLinear(L, mid, h2))) lo = mid;
+        else hi = mid;
+      }
+      rgb = oklchToLinear(L, lo, h2);
+    }
+    return rgb.map((v) => clamp(Math.round(fromLinear(v)), 0, 255));
+  }
+  var MAX_CHROMA = 0.4;
+  function toModel(rgb, model) {
+    if (model === "hsl") {
+      const [h3, s, l] = rgbToHsl(...rgb);
+      return [h3, s, l];
+    }
+    const [L, C, h2] = rgbToOklch(...rgb);
+    return [h2, Math.min(1, C / MAX_CHROMA), L];
+  }
+  var fromModel = (h2, s, l, model) => model === "hsl" ? hslToRgb(h2, s, l) : oklchToRgb(l, s * MAX_CHROMA, h2);
+  function deltasFor(sourceRgb, targetRgb, model) {
+    const [sh, ss, sl] = toModel(sourceRgb, model), [th, ts, tl] = toModel(targetRgb, model);
+    return { dh: hueDelta(th, sh), ds: (ts - ss) * 100, dl: (tl - sl) * 100 };
+  }
+  function anchorRemap(v, a, t) {
+    if (v <= a) return a > 0 ? v * t / a : t;
+    return a < 1 ? t + (v - a) * (1 - t) / (1 - a) : t;
+  }
+  var saturationRemap = (v, a, t) => t < a ? v * t / a : anchorRemap(v, a, t);
   var defaults = () => ({
     hueTol: 40,
     shadeTol: 60,
@@ -1332,12 +1469,15 @@ dialog p {
     ds: 0,
     dl: 0,
     protect: true,
+    model: "oklch",
+    cleanEdges: true,
     mode: "shift",
     target: "#00D9FF"
   });
 
   // src/engine.js
   var MAX_PIXELS = 4194304;
+  var NEUTRAL = 0.06;
   function validateImage(w2, h2, data) {
     if (!Number.isInteger(w2) || !Number.isInteger(h2) || w2 < 1 || h2 < 1 || w2 > 8192 || h2 > 8192 || w2 * h2 > MAX_PIXELS || !(data instanceof Uint8ClampedArray) || data.length !== w2 * h2 * 4)
       throw Error("Invalid image dimensions or pixel buffer.");
@@ -1355,7 +1495,7 @@ dialog p {
     for (const [key, [lo, hi]] of Object.entries(ranges))
       if (!Number.isFinite(p[key]) || p[key] < lo || p[key] > hi)
         throw Error("Invalid processing parameter: " + key);
-    if (!["shift", "flat", "transparent"].includes(p.mode) || !parseHex(p.target) || typeof p.protect !== "boolean" || typeof p.connected !== "boolean")
+    if (!["shift", "flat", "transparent"].includes(p.mode) || !["oklch", "hsl"].includes(p.model) || !parseHex(p.target) || typeof p.protect !== "boolean" || typeof p.connected !== "boolean" || typeof p.cleanEdges !== "boolean")
       throw Error("Invalid colour operation.");
     if (!Array.isArray(seeds2) || seeds2.length > 64 || seeds2.some(
       (s) => !Number.isInteger(s.x) || !Number.isInteger(s.y) || s.x < 0 || s.y < 0 || s.x >= w2 || s.y >= h2
@@ -1367,15 +1507,28 @@ dialog p {
   async function prepare(width, height, data, yieldFn = async () => {
   }, cancelled = () => false) {
     validateImage(width, height, data);
-    const n = width * height, hsl = new Float32Array(n * 4), bins = /* @__PURE__ */ new Map();
+    const n = width * height, ids = new Int32Array(n), rgb = [], bins = /* @__PURE__ */ new Map();
+    const big = n > 1 << 20, table = big ? new Int32Array(1 << 24) : /* @__PURE__ */ new Map();
+    let count = 0;
     for (let i = 0; i < n; i++) {
       if ((i & 16383) === 0) {
         await yieldFn();
         if (cancelled()) throw Error("Cancelled");
       }
       const o = i * 4;
-      if (!data[o + 3]) continue;
-      hsl.set(rgbToHsl(data[o], data[o + 1], data[o + 2]), o);
+      if (!data[o + 3]) {
+        ids[i] = -1;
+        continue;
+      }
+      const key = data[o] << 16 | data[o + 1] << 8 | data[o + 2];
+      let id = (big ? table[key] : table.get(key)) || 0;
+      if (!id) {
+        id = ++count;
+        if (big) table[key] = id;
+        else table.set(key, id);
+        rgb.push(data[o], data[o + 1], data[o + 2]);
+      }
+      ids[i] = id - 1;
       const k = (data[o] >> 4) * 256 + (data[o + 1] >> 4) * 16 + (data[o + 2] >> 4);
       const bin = bins.get(k);
       if (bin) bin.weight += data[o + 3];
@@ -1387,42 +1540,57 @@ dialog p {
           hex: toHex(...data.subarray(o, o + 3))
         });
     }
+    const colours = Uint8Array.from(rgb), hsl = new Float32Array(count * 4);
+    for (let c = 0; c < count; c++) {
+      if ((c & 16383) === 0) {
+        await yieldFn();
+        if (cancelled()) throw Error("Cancelled");
+      }
+      hsl.set(rgbToHsl(colours[c * 3], colours[c * 3 + 1], colours[c * 3 + 2]), c * 4);
+    }
     return {
       width,
       height,
       data,
+      ids,
+      colours,
       hsl,
       palette: [...bins.values()].sort((a, b) => b.weight - a.weight).slice(0, 12)
     };
   }
-  async function processImage(image, p, seeds2, overrides2, yieldFn = async () => {
-  }, cancelled = () => false) {
-    const { width: w2, height: h2, data, hsl } = image, n = w2 * h2;
-    validateEdit(p, seeds2, overrides2, w2, h2);
-    const check = async () => {
-      await yieldFn();
-      if (cancelled()) throw Error("Cancelled");
-    };
-    const mask = new Float32Array(n), source = seeds2.map((s) => {
-      const i = s.y * w2 + s.x;
-      return { i, v: hsl.subarray(i * 4, i * 4 + 4) };
-    });
+  async function selectMask(image, p, seeds2, overrides2, check) {
+    const { width: w2, height: h2, data, ids, hsl } = image, n = w2 * h2, colourCount = hsl.length / 4;
+    const source = seeds2.map((s) => ({ i: s.y * w2 + s.x })).filter((s) => ids[s.i] >= 0).map((s) => ({ ...s, c: ids[s.i], v: hsl.subarray(ids[s.i] * 4, ids[s.i] * 4 + 4) }));
+    const weight = new Float32Array(colourCount), nearest = new Uint8Array(colourCount);
+    if (source.length)
+      for (let c = 0; c < colourCount; c++) {
+        if ((c & 16383) === 0) await check();
+        const o = c * 4, achro = hsl[o + 3] < NEUTRAL;
+        let best = Infinity, bestAny = Infinity, match = -1, closest = 0;
+        for (let k = 0; k < source.length; k++) {
+          const v = source[k].v, shade = achro ? Math.abs(hsl[o + 2] - v[2]) : Math.max(Math.abs(hsl[o + 1] - v[1]), Math.abs(hsl[o + 2] - v[2])), any = hueDistance(hsl[o], v[0]) / 180 + shade;
+          if (any < bestAny) {
+            bestAny = any;
+            closest = k;
+          }
+          if (achro !== v[3] < NEUTRAL) continue;
+          const hd = hueDistance(hsl[o], v[0]);
+          const d = Math.max(
+            achro ? 0 : p.hueTol ? hd / p.hueTol : hd < 0.5 ? 0 : Infinity,
+            p.shadeTol ? shade / (p.shadeTol / 100) : shade < 4e-3 ? 0 : Infinity
+          );
+          if (d < best) {
+            best = d;
+            match = k;
+          }
+        }
+        nearest[c] = match >= 0 ? match : closest;
+        if (best <= 1) weight[c] = p.soft ? Math.min(1, (1 - best) / (p.soft / 100)) : 1;
+      }
+    const mask = new Float32Array(n);
     for (let i = 0; i < n; i++) {
       if ((i & 16383) === 0) await check();
-      if (!data[i * 4 + 3]) continue;
-      const o = i * 4, achro = hsl[o + 3] < 0.06;
-      let best = Infinity;
-      for (const { v } of source) {
-        if (achro !== v[3] < 0.06) continue;
-        const hd = hueDistance(hsl[o], v[0]), shade = achro ? Math.abs(hsl[o + 2] - v[2]) : Math.max(Math.abs(hsl[o + 1] - v[1]), Math.abs(hsl[o + 2] - v[2]));
-        const d = Math.max(
-          achro ? 0 : p.hueTol ? hd / p.hueTol : hd < 0.5 ? 0 : Infinity,
-          p.shadeTol ? shade / (p.shadeTol / 100) : shade < 4e-3 ? 0 : Infinity
-        );
-        best = Math.min(best, d);
-      }
-      if (best <= 1)
-        mask[i] = p.soft ? Math.min(1, (1 - best) / (p.soft / 100)) : 1;
+      if (ids[i] >= 0) mask[i] = weight[ids[i]];
     }
     if (p.connected && source.length) {
       const keep = new Uint8Array(n), queue = new Int32Array(n);
@@ -1479,31 +1647,116 @@ dialog p {
         }
       }
     }
-    let minL = 1, maxL = 0, minS = 1, maxS = 0, count = 0, opaque = 0;
+    let count = 0, opaque = 0;
     for (let i = 0; i < n; i++) {
       if ((i & 16383) === 0) await check();
       if (data[i * 4 + 3]) opaque++;
-      if (mask[i] > 0) {
-        count++;
-        minS = Math.min(minS, hsl[i * 4 + 1]);
-        maxS = Math.max(maxS, hsl[i * 4 + 1]);
-        minL = Math.min(minL, hsl[i * 4 + 2]);
-        maxL = Math.max(maxL, hsl[i * 4 + 2]);
-      }
+      if (mask[i] > 0) count++;
     }
-    const ds = p.protect && count ? clamp(p.ds / 100, -minS, 1 - maxS) : p.ds / 100, dl = p.protect && count ? clamp(p.dl / 100, -minL, 1 - maxL) : p.dl / 100;
-    const pixels2 = new Uint8ClampedArray(data), target = parseHex(p.target);
+    return { mask, weight, nearest, source, count, opaque };
+  }
+  function anchorColour(image, sel) {
+    const { colours, data } = image;
+    if (sel.source.length) {
+      const c = sel.source.at(-1).c;
+      return [colours[c * 3], colours[c * 3 + 1], colours[c * 3 + 2]];
+    }
+    const sum = [0, 0, 0];
+    let total = 0;
+    for (let i = 0; i < sel.mask.length; i++)
+      if (sel.mask[i] > 0) {
+        for (let k = 0; k < 3; k++) sum[k] += data[i * 4 + k] * sel.mask[i];
+        total += sel.mask[i];
+      }
+    return total ? sum.map((v) => Math.round(v / total)) : null;
+  }
+  function shifter(p, anchorRgb) {
+    const [ah, as, al] = toModel(anchorRgb, p.model), neutral = rgbToHsl(...anchorRgb)[3] < NEUTRAL, rawS = as + p.ds / 100, rawL = al + p.dl / 100, ts = clamp(rawS, 0, 1), tl = clamp(rawL, 0, 1), th = ah + p.dh;
+    const shift = (rgb) => {
+      const [h2, s, l] = toModel(rgb, p.model);
+      return fromModel(
+        neutral ? th : h2 + p.dh,
+        neutral ? ts : p.protect ? saturationRemap(s, as, ts) : clamp(s + p.ds / 100, 0, 1),
+        p.protect ? anchorRemap(l, al, tl) : clamp(l + p.dl / 100, 0, 1),
+        p.model
+      );
+    };
+    return { shift, capped: rawS !== ts || rawL !== tl };
+  }
+  function unmix(rgb, key) {
+    let a = 0;
+    for (let k = 0; k < 3; k++) {
+      const p = rgb[k] / 255, c = key[k] / 255;
+      if (p > c) a = Math.max(a, (p - c) / (1 - c));
+      else if (p < c) a = Math.max(a, (c - p) / c);
+    }
+    a = Math.round(a * 255) / 255;
+    if (!a) return [0, 0, 0, 0];
+    return [
+      ...[0, 1, 2].map(
+        (k) => clamp(Math.round((rgb[k] - (1 - a) * key[k]) / a), 0, 255)
+      ),
+      a
+    ];
+  }
+  async function processImage(image, p, seeds2, overrides2, yieldFn = async () => {
+  }, cancelled = () => false) {
+    const { width: w2, height: h2, data, ids, colours } = image, n = w2 * h2;
+    validateEdit(p, seeds2, overrides2, w2, h2);
+    const check = async () => {
+      await yieldFn();
+      if (cancelled()) throw Error("Cancelled");
+    };
+    const sel = await selectMask(image, p, seeds2, overrides2, check), { mask } = sel;
+    const pixels2 = new Uint8ClampedArray(data), target = parseHex(p.target), anchor = p.mode === "shift" && sel.count ? anchorColour(image, sel) : null, { shift, capped } = anchor ? shifter(p, anchor) : { capped: false }, unmixing = p.mode === "transparent" && p.cleanEdges && sel.source.length, cache = /* @__PURE__ */ new Map();
+    const transform = (c, seed = sel.nearest[c]) => {
+      const id = c * 64 + seed;
+      let out = cache.get(id);
+      if (!out) {
+        const rgb = [colours[c * 3], colours[c * 3 + 1], colours[c * 3 + 2]];
+        if (p.mode === "flat") out = target;
+        else if (unmixing) {
+          const key = sel.source[seed].c;
+          out = unmix(rgb, [colours[key * 3], colours[key * 3 + 1], colours[key * 3 + 2]]);
+        } else out = shift(rgb);
+        cache.set(id, out);
+      }
+      return out;
+    };
+    const band = new Int8Array(unmixing ? n : 0).fill(-1);
+    if (unmixing)
+      for (let i = 0; i < n; i++) {
+        if ((i & 16383) === 0) await check();
+        if (mask[i] > 0 || ids[i] < 0 || overrides2[i] < 0 || sel.weight[ids[i]] > 0)
+          continue;
+        const x = i % w2, y = (i - x) / w2;
+        for (let dy = -1; dy <= 1 && band[i] < 0; dy++)
+          for (let dx = -1; dx <= 1; dx++) {
+            const xx = x + dx, yy = y + dy, j = yy * w2 + xx;
+            if (xx >= 0 && xx < w2 && yy >= 0 && yy < h2 && mask[j] > 0 && ids[j] >= 0) {
+              band[i] = sel.nearest[ids[j]];
+              break;
+            }
+          }
+      }
     let changed = 0;
     for (let i = 0; i < n; i++) {
       if ((i & 16383) === 0) await check();
-      const weight = mask[i];
+      const edge = unmixing && band[i] >= 0, weight = edge ? 1 : mask[i];
       if (weight <= 0) continue;
       const o = i * 4;
       if (p.mode === "transparent") {
-        pixels2[o + 3] = Math.round(data[o + 3] * (1 - weight));
+        const out = !unmixing || overrides2[i] > 0 ? null : edge ? transform(ids[i], band[i]) : transform(ids[i]);
+        if (out) {
+          const alpha = 1 - weight * (1 - out[3]);
+          if (alpha > 0)
+            for (let c = 0; c < 3; c++)
+              pixels2[o + c] = (data[o + c] * (1 - weight) + out[c] * out[3] * weight) / alpha;
+          pixels2[o + 3] = Math.round(data[o + 3] * alpha);
+        } else pixels2[o + 3] = Math.round(data[o + 3] * (1 - weight));
         if (!pixels2[o + 3]) pixels2.fill(0, o, o + 4);
       } else {
-        const rgb = p.mode === "flat" ? target : hslToRgb(hsl[o] + p.dh, hsl[o + 1] + ds, hsl[o + 2] + dl);
+        const rgb = transform(ids[i]);
         for (let c = 0; c < 3; c++)
           pixels2[o + c] = data[o + c] + (rgb[c] - data[o + c]) * weight;
       }
@@ -1513,10 +1766,10 @@ dialog p {
     return {
       pixels: pixels2,
       mask,
-      count,
-      opaque,
+      count: sel.count,
+      opaque: sel.opaque,
       changed,
-      capped: Math.abs(ds - p.ds / 100) > 1e-6 || Math.abs(dl - p.dl / 100) > 1e-6
+      capped: p.mode === "shift" && capped
     };
   }
 
@@ -4223,12 +4476,186 @@ dialog p {
     );
   }
 
+  // src/output.js
+  var FAR = 1e20;
+  function line(f, n, d, v, z) {
+    let k = 0;
+    v[0] = 0;
+    z[0] = -Infinity;
+    z[1] = Infinity;
+    for (let q = 1; q < n; q++) {
+      let p = v[k], s = (f[q] + q * q - (f[p] + p * p)) / (2 * (q - p));
+      while (s <= z[k]) {
+        p = v[--k];
+        s = (f[q] + q * q - (f[p] + p * p)) / (2 * (q - p));
+      }
+      v[++k] = q;
+      z[k] = s;
+      z[k + 1] = Infinity;
+    }
+    k = 0;
+    for (let q = 0; q < n; q++) {
+      while (z[k + 1] < q) k++;
+      d[q] = (q - v[k]) * (q - v[k]) + f[v[k]];
+    }
+  }
+  async function distanceField(inside, w2, h2, yieldFn = async () => {
+  }) {
+    const out = new Float64Array(w2 * h2), size = Math.max(w2, h2), f = new Float64Array(size), d = new Float64Array(size), v = new Int32Array(size), z = new Float64Array(size + 1);
+    for (let i = 0; i < w2 * h2; i++) out[i] = inside[i] ? 0 : FAR;
+    for (let x = 0; x < w2; x++) {
+      if ((x & 63) === 0) await yieldFn();
+      for (let y = 0; y < h2; y++) f[y] = out[y * w2 + x];
+      line(f, h2, d, v, z);
+      for (let y = 0; y < h2; y++) out[y * w2 + x] = d[y];
+    }
+    for (let y = 0; y < h2; y++) {
+      if ((y & 63) === 0) await yieldFn();
+      for (let x = 0; x < w2; x++) f[x] = out[y * w2 + x];
+      line(f, w2, d, v, z);
+      for (let x = 0; x < w2; x++) out[y * w2 + x] = d[x];
+    }
+    return out;
+  }
+  var outlineRadius = (w2, h2, widthPct) => Math.max(w2, h2) * widthPct / 100;
+  async function outline(pixels2, w2, h2, { widthPct, rgb, silhouette }, yieldFn) {
+    const r = outlineRadius(w2, h2, widthPct);
+    if (!(r > 0)) return { pixels: pixels2, width: w2, height: h2 };
+    let minX = w2, minY = h2, maxX = -1, maxY = -1;
+    for (let y = 0; y < h2; y++)
+      for (let x = 0; x < w2; x++)
+        if (pixels2[(y * w2 + x) * 4 + 3]) {
+          minX = Math.min(minX, x);
+          maxX = Math.max(maxX, x);
+          minY = Math.min(minY, y);
+          maxY = Math.max(maxY, y);
+        }
+    if (maxX < 0) return { pixels: pixels2, width: w2, height: h2 };
+    const reach = Math.ceil(r + 0.5), left = Math.max(0, reach - minX), top = Math.max(0, reach - minY), W = w2 + left + Math.max(0, reach - (w2 - 1 - maxX)), H = h2 + top + Math.max(0, reach - (h2 - 1 - maxY));
+    if (W * H > MAX_PIXELS || W > 8192 || H > 8192)
+      throw Error(
+        "The outline would make the image larger than 4,194,304 pixels or 8,192 pixels on a side. Use a thinner outline or a smaller image."
+      );
+    const art = new Uint8ClampedArray(W * H * 4), inside = new Uint8Array(W * H);
+    for (let y = 0; y < h2; y++)
+      art.set(
+        pixels2.subarray(y * w2 * 4, (y + 1) * w2 * 4),
+        ((y + top) * W + left) * 4
+      );
+    if (silhouette)
+      for (let y = 0; y < h2; y++)
+        inside.set(silhouette.subarray(y * w2, (y + 1) * w2), (y + top) * W + left);
+    else
+      for (let i = 0; i < W * H; i++) inside[i] = art[i * 4 + 3] >= 128 ? 1 : 0;
+    const dist = await distanceField(inside, W, H, yieldFn), out = new Uint8ClampedArray(W * H * 4);
+    for (let i = 0; i < W * H; i++) {
+      const o = i * 4, lineA = clamp(r + 0.5 - Math.sqrt(dist[i]), 0, 1), artA = art[o + 3] / 255, a = artA + lineA * (1 - artA);
+      if (!a) continue;
+      for (let c = 0; c < 3; c++)
+        out[o + c] = Math.round(
+          (art[o + c] * artA + rgb[c] * lineA * (1 - artA)) / a
+        );
+      out[o + 3] = Math.round(a * 255);
+    }
+    return { pixels: out, width: W, height: H };
+  }
+  function taps(from, to) {
+    const scale = from / to, list = [];
+    for (let i = 0; i < to; i++) {
+      const t = [];
+      if (scale >= 1) {
+        const a = i * scale, b = (i + 1) * scale;
+        for (let s = Math.floor(a); s < Math.min(from, Math.ceil(b)); s++) {
+          const cover = Math.min(b, s + 1) - Math.max(a, s);
+          if (cover > 0) t.push(s, cover / scale);
+        }
+      } else {
+        const c = clamp((i + 0.5) * scale - 0.5, 0, from - 1), s = Math.floor(c), f = c - s;
+        t.push(s, 1 - f);
+        if (f > 0) t.push(s + 1, f);
+      }
+      list.push(t);
+    }
+    return list;
+  }
+  function resize(pixels2, w2, h2, ow, oh) {
+    if (ow === w2 && oh === h2) return pixels2;
+    const pre = new Float32Array(w2 * h2 * 4);
+    for (let i = 0; i < w2 * h2; i++) {
+      const a = pixels2[i * 4 + 3] / 255;
+      for (let c = 0; c < 3; c++) pre[i * 4 + c] = pixels2[i * 4 + c] * a;
+      pre[i * 4 + 3] = pixels2[i * 4 + 3];
+    }
+    const tx = taps(w2, ow), ty = taps(h2, oh), mid = new Float32Array(ow * h2 * 4), out = new Uint8ClampedArray(ow * oh * 4);
+    for (let y = 0; y < h2; y++)
+      for (let x = 0; x < ow; x++) {
+        const t = tx[x];
+        for (let k = 0; k < t.length; k += 2)
+          for (let c = 0; c < 4; c++)
+            mid[(y * ow + x) * 4 + c] += pre[(y * w2 + t[k]) * 4 + c] * t[k + 1];
+      }
+    const acc = new Float32Array(4);
+    for (let y = 0; y < oh; y++)
+      for (let x = 0; x < ow; x++) {
+        const t = ty[y];
+        acc.fill(0);
+        for (let k = 0; k < t.length; k += 2)
+          for (let c = 0; c < 4; c++)
+            acc[c] += mid[(t[k] * ow + x) * 4 + c] * t[k + 1];
+        const o = (y * ow + x) * 4, a = Math.round(acc[3]);
+        if (a <= 0) continue;
+        for (let c = 0; c < 3; c++) out[o + c] = Math.round(acc[c] / (acc[3] / 255));
+        out[o + 3] = a;
+      }
+    return out;
+  }
+  function shrinkSilhouette(pixels2, w2, h2, ow, oh) {
+    const out = new Uint8Array(ow * oh);
+    for (let y = 0; y < h2; y++) {
+      const oy = Math.min(oh - 1, Math.floor(y * oh / h2));
+      for (let x = 0; x < w2; x++)
+        if (pixels2[(y * w2 + x) * 4 + 3] >= 128)
+          out[oy * ow + Math.min(ow - 1, Math.floor(x * ow / w2))] = 1;
+    }
+    return out;
+  }
+  async function finish(pixels2, w2, h2, settings = {}, yieldFn, silhouette) {
+    let out = { pixels: pixels2, width: w2, height: h2 };
+    const rgb = settings.outline && parseHex(settings.outline.colour);
+    if (rgb && settings.outline.widthPct > 0)
+      out = await outline(
+        out.pixels,
+        out.width,
+        out.height,
+        { widthPct: settings.outline.widthPct, rgb, silhouette },
+        yieldFn
+      );
+    return out;
+  }
+
   // src/sample.js
   var sample_default = "data:image/png;base64,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";
 
+  // src/yield.js
+  function makePause(budget = 12) {
+    let last = 0;
+    return () => {
+      if (performance.now() - last < budget) return;
+      return new Promise((resolve) => {
+        const channel = new MessageChannel();
+        channel.port1.onmessage = () => {
+          channel.port1.close();
+          last = performance.now();
+          resolve();
+        };
+        channel.port2.postMessage(0);
+      });
+    };
+  }
+
   // src/app.js
   var $ = (id) => document.getElementById(id);
-  var pause = () => new Promise((r) => setTimeout(r, 0));
+  var pause = makePause();
   var w = 0;
   var h = 0;
   var name = "";
@@ -4321,6 +4748,7 @@ dialog p {
     head.className = "slider-head";
     const lab = document.createElement("label");
     lab.htmlFor = key;
+    lab.id = key + "Label";
     lab.textContent = label;
     const number = document.createElement("input");
     number.type = "number";
@@ -4427,12 +4855,13 @@ dialog p {
       )
     );
   }
-  for (const [label, hex] of [
+  var DISCORD_BUTTONS = [
     ["Primary", "#5865F2"],
     ["Secondary", "#4E5058"],
     ["Success", "#248046"],
     ["Danger", "#DA373C"]
-  ]) {
+  ];
+  for (const [label, hex] of DISCORD_BUTTONS) {
     const b = swatch(hex, label + " " + hex, () => setTarget(hex));
     const text2 = document.createElement("span");
     text2.textContent = label;
@@ -4441,16 +4870,26 @@ dialog p {
   }
   function targetDeltas() {
     if (!seeds.length || params.manual) return;
-    const sd = seeds.at(-1), o = (sd.y * w + sd.x) * 4, [sh, ss, sl] = rgbToHsl(...pixels.subarray(o, o + 3)), [th, ts, tl] = rgbToHsl(...parseHex(params.target));
-    params.dh = hueDelta(th, sh);
-    params.ds = (ts - ss) * 100;
-    params.dl = (tl - sl) * 100;
+    const sd = seeds.at(-1), o = (sd.y * w + sd.x) * 4;
+    Object.assign(
+      params,
+      deltasFor(
+        [...pixels.subarray(o, o + 3)],
+        parseHex(params.target),
+        params.model
+      )
+    );
   }
   function syncTarget() {
     const transparent = params.mode === "transparent";
     $("targetControls").hidden = transparent;
     $("fine").hidden = params.mode !== "shift";
     $("protectLabel").hidden = params.mode !== "shift";
+    $("cleanEdgesLabel").hidden = !transparent;
+    const dsName = params.model === "hsl" ? "Saturation" : "Chroma";
+    $("dsLabel").textContent = dsName;
+    $("ds").setAttribute("aria-label", dsName);
+    $("dsNumber").setAttribute("aria-label", dsName + " percent");
     $("targetColour").value = params.target;
     if (document.activeElement !== $("targetHex"))
       $("targetHex").value = params.target;
@@ -4470,8 +4909,10 @@ dialog p {
         $(key + "Number").value = Math.round(params[key] * 100) / 100;
     }
     $("mode").value = params.mode;
+    $("model").value = params.model;
     $("connected").checked = params.connected;
     $("protect").checked = params.protect;
+    $("cleanEdges").checked = params.cleanEdges;
     syncTarget();
     renderSeeds();
     buttons();
@@ -4513,7 +4954,7 @@ dialog p {
     let url;
     try {
       url = URL.createObjectURL(
-        new Blob(['(()=>{var x=(e,t,o)=>Math.min(o,Math.max(t,e)),$=(e,t)=>Math.abs((e-t+540)%360-180);function O(e,t,o){e/=255,t/=255,o/=255;let l=Math.max(e,t,o),u=Math.min(e,t,o),m=l-u,a=(l+u)/2,h=0;return m&&(h=l===e?(t-o)/m%6:l===t?(o-e)/m+2:(e-t)/m+4),[(h*60+360)%360,m?m/(1-Math.abs(2*a-1)):0,a,m]}function _(e,t,o){e=(e%360+360)%360,t=x(t,0,1),o=x(o,0,1);let l=(1-Math.abs(2*o-1))*t,u=l*(1-Math.abs(e/60%2-1)),m=o-l/2,[a,h,d]=e<60?[l,u,0]:e<120?[u,l,0]:e<180?[0,l,u]:e<240?[0,u,l]:e<300?[u,0,l]:[l,0,u];return[a,h,d].map(f=>Math.round((f+m)*255))}function D(e){let t=String(e).trim().replace(/^#/,"");return/^[\\da-f]{3}$/i.test(t)&&(t=[...t].map(o=>o+o).join("")),/^[\\da-f]{6}$/i.test(t)?[0,2,4].map(o=>parseInt(t.slice(o,o+2),16)):null}var z=(e,t,o)=>"#"+[e,t,o].map(l=>x(Math.round(l),0,255).toString(16).padStart(2,"0")).join("").toUpperCase();var Q=4194304;function V(e,t,o){if(!Number.isInteger(e)||!Number.isInteger(t)||e<1||t<1||e>8192||t>8192||e*t>Q||!(o instanceof Uint8ClampedArray)||o.length!==e*t*4)throw Error("Invalid image dimensions or pixel buffer.")}function W(e,t,o,l,u){let m={hueTol:[0,180],shadeTol:[0,100],soft:[0,100],feather:[0,8],dh:[-180,180],ds:[-100,100],dl:[-100,100]};for(let[a,[h,d]]of Object.entries(m))if(!Number.isFinite(e[a])||e[a]<h||e[a]>d)throw Error("Invalid processing parameter: "+a);if(!["shift","flat","transparent"].includes(e.mode)||!D(e.target)||typeof e.protect!="boolean"||typeof e.connected!="boolean")throw Error("Invalid colour operation.");if(!Array.isArray(t)||t.length>64||t.some(a=>!Number.isInteger(a.x)||!Number.isInteger(a.y)||a.x<0||a.y<0||a.x>=l||a.y>=u))throw Error("Invalid colour samples.");if(!(o instanceof Int8Array)||o.length!==l*u)throw Error("Invalid selection buffer.")}async function B(e,t,o,l=async()=>{},u=()=>!1){V(e,t,o);let m=e*t,a=new Float32Array(m*4),h=new Map;for(let d=0;d<m;d++){if((d&16383)===0&&(await l(),u()))throw Error("Cancelled");let f=d*4;if(!o[f+3])continue;a.set(O(o[f],o[f+1],o[f+2]),f);let g=(o[f]>>4)*256+(o[f+1]>>4)*16+(o[f+2]>>4),y=h.get(g);y?y.weight+=o[f+3]:h.set(g,{weight:o[f+3],x:d%e,y:Math.floor(d/e),hex:z(...o.subarray(f,f+3))})}return{width:e,height:t,data:o,hsl:a,palette:[...h.values()].sort((d,f)=>f.weight-d.weight).slice(0,12)}}async function G(e,t,o,l,u=async()=>{},m=()=>!1){let{width:a,height:h,data:d,hsl:f}=e,g=a*h;W(t,o,l,a,h);let y=async()=>{if(await u(),m())throw Error("Cancelled")},p=new Float32Array(g),S=o.map(r=>{let n=r.y*a+r.x;return{i:n,v:f.subarray(n*4,n*4+4)}});for(let r=0;r<g;r++){if((r&16383)===0&&await y(),!d[r*4+3])continue;let n=r*4,i=f[n+3]<.06,s=1/0;for(let{v:c}of S){if(i!==c[3]<.06)continue;let A=$(f[n],c[0]),k=i?Math.abs(f[n+2]-c[2]):Math.max(Math.abs(f[n+1]-c[1]),Math.abs(f[n+2]-c[2])),T=Math.max(i?0:t.hueTol?A/t.hueTol:A<.5?0:1/0,t.shadeTol?k/(t.shadeTol/100):k<.004?0:1/0);s=Math.min(s,T)}s<=1&&(p[r]=t.soft?Math.min(1,(1-s)/(t.soft/100)):1)}if(t.connected&&S.length){let r=new Uint8Array(g),n=new Int32Array(g),i=0,s=0;for(let{i:c}of S)p[c]>0&&!r[c]&&(r[c]=1,n[s++]=c);for(;i<s;){(i&16383)===0&&await y();let c=n[i++],A=c%a,k=Math.floor(c/a);for(let T=-1;T<=1;T++)for(let U=-1;U<=1;U++){let j=A+U,q=k+T,v=q*a+j;j>=0&&j<a&&q>=0&&q<h&&!r[v]&&p[v]>0&&(r[v]=1,n[s++]=v)}}for(let c=0;c<g;c++)(c&16383)===0&&await y(),r[c]||(p[c]=0)}for(let r=0;r<g;r++){if((r&16383)===0&&await y(),l[r]!==0&&l[r]!==1&&l[r]!==-1)throw Error("Invalid brush override.");l[r]&&(p[r]=d[r*4+3]&&l[r]>0?1:0)}let I=Math.round(t.feather);if(I){let r=new Float32Array(g);for(let n=0;n<h;n++){(n&15)===0&&await y();let i=0;for(let s=-I;s<=I;s++)i+=p[n*a+x(s,0,a-1)];for(let s=0;s<a;s++)r[n*a+s]=i/(I*2+1),i+=p[n*a+x(s+I+1,0,a-1)]-p[n*a+x(s-I,0,a-1)]}for(let n=0;n<a;n++){(n&15)===0&&await y();let i=0;for(let s=-I;s<=I;s++)i+=r[x(s,0,h-1)*a+n];for(let s=0;s<h;s++)p[s*a+n]=d[(s*a+n)*4+3]?i/(I*2+1):0,i+=r[x(s+I+1,0,h-1)*a+n]-r[x(s-I,0,h-1)*a+n]}}let N=1,F=0,H=1,C=0,E=0,L=0;for(let r=0;r<g;r++)(r&16383)===0&&await y(),d[r*4+3]&&L++,p[r]>0&&(E++,H=Math.min(H,f[r*4+1]),C=Math.max(C,f[r*4+1]),N=Math.min(N,f[r*4+2]),F=Math.max(F,f[r*4+2]));let P=t.protect&&E?x(t.ds/100,-H,1-C):t.ds/100,R=t.protect&&E?x(t.dl/100,-N,1-F):t.dl/100,M=new Uint8ClampedArray(d),K=D(t.target),X=0;for(let r=0;r<g;r++){(r&16383)===0&&await y();let n=p[r];if(n<=0)continue;let i=r*4;if(t.mode==="transparent")M[i+3]=Math.round(d[i+3]*(1-n)),M[i+3]||M.fill(0,i,i+4);else{let s=t.mode==="flat"?K:_(f[i]+t.dh,f[i+1]+P,f[i+2]+R);for(let c=0;c<3;c++)M[i+c]=d[i+c]+(s[c]-d[i+c])*n}(M[i]!==d[i]||M[i+1]!==d[i+1]||M[i+2]!==d[i+2]||M[i+3]!==d[i+3])&&X++}return{pixels:M,mask:p,count:E,opaque:L,changed:X,capped:Math.abs(P-t.ds/100)>1e-6||Math.abs(R-t.dl/100)>1e-6}}var b=null,w=0,J=()=>new Promise(e=>setTimeout(e,0));self.onmessage=async({data:e})=>{let t=++w;try{if(!Number.isSafeInteger(e.imageId)||!Number.isSafeInteger(e.editId))throw Error("Invalid request identifiers.");if(e.type==="cancel")return;if(e.type==="image"){b=null;let l=await B(e.width,e.height,e.pixels,J,()=>t!==w);if(t!==w)return;b={...l,id:e.imageId},self.postMessage({type:"ready",imageId:e.imageId,editId:e.editId,palette:b.palette});return}if(e.type!=="edit"||!b||b.id!==e.imageId)throw Error("Unknown image or operation.");let o=await G(b,e.params,e.seeds,e.overrides,J,()=>t!==w);t===w&&self.postMessage({type:"result",imageId:e.imageId,editId:e.editId,...o},[o.pixels.buffer,o.mask.buffer])}catch(o){t===w&&self.postMessage({type:"error",imageId:e.imageId,editId:e.editId,message:o.message})}};})();\n'], { type: "text/javascript" })
+        new Blob(['(()=>{var F=(t,e,o)=>Math.min(o,Math.max(e,t)),O=(t,e)=>Math.abs((t-e+540)%360-180);function q(t,e,o){t/=255,e/=255,o/=255;let n=Math.max(t,e,o),s=Math.min(t,e,o),r=n-s,a=(n+s)/2,f=0;return r&&(f=n===t?(e-o)/r%6:n===e?(o-t)/r+2:(t-e)/r+4),[(f*60+360)%360,r?r/(1-Math.abs(2*a-1)):0,a,r]}function Z(t,e,o){t=(t%360+360)%360,e=F(e,0,1),o=F(o,0,1);let n=(1-Math.abs(2*o-1))*e,s=n*(1-Math.abs(t/60%2-1)),r=o-n/2,[a,f,h]=t<60?[n,s,0]:t<120?[s,n,0]:t<180?[0,n,s]:t<240?[0,s,n]:t<300?[s,0,n]:[n,0,s];return[a,f,h].map(g=>Math.round((g+r)*255))}function X(t){let e=String(t).trim().replace(/^#/,"");return/^[\\da-f]{3}$/i.test(e)&&(e=[...e].map(o=>o+o).join("")),/^[\\da-f]{6}$/i.test(e)?[0,2,4].map(o=>parseInt(e.slice(o,o+2),16)):null}var G=(t,e,o)=>"#"+[t,e,o].map(n=>F(Math.round(n),0,255).toString(16).padStart(2,"0")).join("").toUpperCase(),v=Float32Array.from({length:256},(t,e)=>{let o=e/255;return o<=.04045?o/12.92:((o+.055)/1.055)**2.4}),tt=t=>255*(t<=.0031308?12.92*t:1.055*Math.max(0,t)**(1/2.4)-.055);function et(t,e,o){let n=v[t],s=v[e],r=v[o],a=Math.cbrt(.4122214708*n+.5363325363*s+.0514459929*r),f=Math.cbrt(.2119034982*n+.6806995451*s+.1073969566*r),h=Math.cbrt(.0883024619*n+.2817188376*s+.6299787005*r),g=.2104542553*a+.793617785*f-.0040720468*h,x=1.9779984951*a-2.428592205*f+.4505937099*h,N=.0259040371*a+.7827717662*f-.808675766*h;return[g,Math.hypot(x,N),(Math.atan2(N,x)*180/Math.PI+360)%360]}function D(t,e,o){let n=e*Math.cos(o*Math.PI/180),s=e*Math.sin(o*Math.PI/180),r=(t+.3963377774*n+.2158037573*s)**3,a=(t-.1055613458*n-.0638541728*s)**3,f=(t-.0894841775*n-1.291485548*s)**3;return[4.0767416621*r-3.3077115913*a+.2309699292*f,-1.2684380046*r+2.6097574011*a-.3413193965*f,-.0041960863*r-.7034186147*a+1.707614701*f]}var B=t=>t.every(e=>e>=-1e-4&&e<=1+1e-4);function ot(t,e,o){t=F(t,0,1),e=Math.max(0,e);let n=D(t,e,o);if(!B(n)){let s=0,r=e;for(let a=0;a<16;a++){let f=(s+r)/2;B(D(t,f,o))?s=f:r=f}n=D(t,s,o)}return n.map(s=>F(Math.round(tt(s)),0,255))}var z=.4;function _(t,e){if(e==="hsl"){let[r,a,f]=q(...t);return[r,a,f]}let[o,n,s]=et(...t);return[s,Math.min(1,n/z),o]}var J=(t,e,o,n)=>n==="hsl"?Z(t,e,o):ot(o,e*z,t);function L(t,e,o){return t<=e?e>0?t*o/e:o:e<1?o+(t-e)*(1-o)/(1-e):o}var K=(t,e,o)=>o<e?t*o/e:L(t,e,o);var nt=4194304,$=.06;function rt(t,e,o){if(!Number.isInteger(t)||!Number.isInteger(e)||t<1||e<1||t>8192||e>8192||t*e>nt||!(o instanceof Uint8ClampedArray)||o.length!==t*e*4)throw Error("Invalid image dimensions or pixel buffer.")}function at(t,e,o,n,s){let r={hueTol:[0,180],shadeTol:[0,100],soft:[0,100],feather:[0,8],dh:[-180,180],ds:[-100,100],dl:[-100,100]};for(let[a,[f,h]]of Object.entries(r))if(!Number.isFinite(t[a])||t[a]<f||t[a]>h)throw Error("Invalid processing parameter: "+a);if(!["shift","flat","transparent"].includes(t.mode)||!["oklch","hsl"].includes(t.model)||!X(t.target)||typeof t.protect!="boolean"||typeof t.connected!="boolean"||typeof t.cleanEdges!="boolean")throw Error("Invalid colour operation.");if(!Array.isArray(e)||e.length>64||e.some(a=>!Number.isInteger(a.x)||!Number.isInteger(a.y)||a.x<0||a.y<0||a.x>=n||a.y>=s))throw Error("Invalid colour samples.");if(!(o instanceof Int8Array)||o.length!==n*s)throw Error("Invalid selection buffer.")}async function Q(t,e,o,n=async()=>{},s=()=>!1){rt(t,e,o);let r=t*e,a=new Int32Array(r),f=[],h=new Map,g=r>1<<20,x=g?new Int32Array(1<<24):new Map,N=0;for(let p=0;p<r;p++){if((p&16383)===0&&(await n(),s()))throw Error("Cancelled");let l=p*4;if(!o[l+3]){a[p]=-1;continue}let A=o[l]<<16|o[l+1]<<8|o[l+2],C=(g?x[A]:x.get(A))||0;C||(C=++N,g?x[A]=C:x.set(A,C),f.push(o[l],o[l+1],o[l+2])),a[p]=C-1;let P=(o[l]>>4)*256+(o[l+1]>>4)*16+(o[l+2]>>4),i=h.get(P);i?i.weight+=o[l+3]:h.set(P,{weight:o[l+3],x:p%t,y:Math.floor(p/t),hex:G(...o.subarray(l,l+3))})}let T=Uint8Array.from(f),b=new Float32Array(N*4);for(let p=0;p<N;p++){if((p&16383)===0&&(await n(),s()))throw Error("Cancelled");b.set(q(T[p*3],T[p*3+1],T[p*3+2]),p*4)}return{width:t,height:e,data:o,ids:a,colours:T,hsl:b,palette:[...h.values()].sort((p,l)=>l.weight-p.weight).slice(0,12)}}async function it(t,e,o,n,s){let{width:r,height:a,data:f,ids:h,hsl:g}=t,x=r*a,N=g.length/4,T=o.map(i=>({i:i.y*r+i.x})).filter(i=>h[i.i]>=0).map(i=>({...i,c:h[i.i],v:g.subarray(h[i.i]*4,h[i.i]*4+4)})),b=new Float32Array(N),p=new Uint8Array(N);if(T.length)for(let i=0;i<N;i++){(i&16383)===0&&await s();let d=i*4,k=g[d+3]<$,m=1/0,w=1/0,H=-1,u=0;for(let E=0;E<T.length;E++){let M=T[E].v,c=k?Math.abs(g[d+2]-M[2]):Math.max(Math.abs(g[d+1]-M[1]),Math.abs(g[d+2]-M[2])),I=O(g[d],M[0])/180+c;if(I<w&&(w=I,u=E),k!==M[3]<$)continue;let y=O(g[d],M[0]),U=Math.max(k?0:e.hueTol?y/e.hueTol:y<.5?0:1/0,e.shadeTol?c/(e.shadeTol/100):c<.004?0:1/0);U<m&&(m=U,H=E)}p[i]=H>=0?H:u,m<=1&&(b[i]=e.soft?Math.min(1,(1-m)/(e.soft/100)):1)}let l=new Float32Array(x);for(let i=0;i<x;i++)(i&16383)===0&&await s(),h[i]>=0&&(l[i]=b[h[i]]);if(e.connected&&T.length){let i=new Uint8Array(x),d=new Int32Array(x),k=0,m=0;for(let{i:w}of T)l[w]>0&&!i[w]&&(i[w]=1,d[m++]=w);for(;k<m;){(k&16383)===0&&await s();let w=d[k++],H=w%r,u=Math.floor(w/r);for(let E=-1;E<=1;E++)for(let M=-1;M<=1;M++){let c=H+M,I=u+E,y=I*r+c;c>=0&&c<r&&I>=0&&I<a&&!i[y]&&l[y]>0&&(i[y]=1,d[m++]=y)}}for(let w=0;w<x;w++)(w&16383)===0&&await s(),i[w]||(l[w]=0)}for(let i=0;i<x;i++){if((i&16383)===0&&await s(),n[i]!==0&&n[i]!==1&&n[i]!==-1)throw Error("Invalid brush override.");n[i]&&(l[i]=f[i*4+3]&&n[i]>0?1:0)}let A=Math.round(e.feather);if(A){let i=new Float32Array(x);for(let d=0;d<a;d++){(d&15)===0&&await s();let k=0;for(let m=-A;m<=A;m++)k+=l[d*r+F(m,0,r-1)];for(let m=0;m<r;m++)i[d*r+m]=k/(A*2+1),k+=l[d*r+F(m+A+1,0,r-1)]-l[d*r+F(m-A,0,r-1)]}for(let d=0;d<r;d++){(d&15)===0&&await s();let k=0;for(let m=-A;m<=A;m++)k+=i[F(m,0,a-1)*r+d];for(let m=0;m<a;m++)l[m*r+d]=f[(m*r+d)*4+3]?k/(A*2+1):0,k+=i[F(m+A+1,0,a-1)*r+d]-i[F(m-A,0,a-1)*r+d]}}let C=0,P=0;for(let i=0;i<x;i++)(i&16383)===0&&await s(),f[i*4+3]&&P++,l[i]>0&&C++;return{mask:l,weight:b,nearest:p,source:T,count:C,opaque:P}}function st(t,e){let{colours:o,data:n}=t;if(e.source.length){let a=e.source.at(-1).c;return[o[a*3],o[a*3+1],o[a*3+2]]}let s=[0,0,0],r=0;for(let a=0;a<e.mask.length;a++)if(e.mask[a]>0){for(let f=0;f<3;f++)s[f]+=n[a*4+f]*e.mask[a];r+=e.mask[a]}return r?s.map(a=>Math.round(a/r)):null}function lt(t,e){let[o,n,s]=_(e,t.model),r=q(...e)[3]<$,a=n+t.ds/100,f=s+t.dl/100,h=F(a,0,1),g=F(f,0,1),x=o+t.dh;return{shift:T=>{let[b,p,l]=_(T,t.model);return J(r?x:b+t.dh,r?h:t.protect?K(p,n,h):F(p+t.ds/100,0,1),t.protect?L(l,s,g):F(l+t.dl/100,0,1),t.model)},capped:a!==h||f!==g}}function ft(t,e){let o=0;for(let n=0;n<3;n++){let s=t[n]/255,r=e[n]/255;s>r?o=Math.max(o,(s-r)/(1-r)):s<r&&(o=Math.max(o,(r-s)/r))}return o=Math.round(o*255)/255,o?[...[0,1,2].map(n=>F(Math.round((t[n]-(1-o)*e[n])/o),0,255)),o]:[0,0,0,0]}async function V(t,e,o,n,s=async()=>{},r=()=>!1){let{width:a,height:f,data:h,ids:g,colours:x}=t,N=a*f;at(e,o,n,a,f);let T=async()=>{if(await s(),r())throw Error("Cancelled")},b=await it(t,e,o,n,T),{mask:p}=b,l=new Uint8ClampedArray(h),A=X(e.target),C=e.mode==="shift"&&b.count?st(t,b):null,{shift:P,capped:i}=C?lt(e,C):{capped:!1},d=e.mode==="transparent"&&e.cleanEdges&&b.source.length,k=new Map,m=(u,E=b.nearest[u])=>{let M=u*64+E,c=k.get(M);if(!c){let I=[x[u*3],x[u*3+1],x[u*3+2]];if(e.mode==="flat")c=A;else if(d){let y=b.source[E].c;c=ft(I,[x[y*3],x[y*3+1],x[y*3+2]])}else c=P(I);k.set(M,c)}return c},w=new Int8Array(d?N:0).fill(-1);if(d)for(let u=0;u<N;u++){if((u&16383)===0&&await T(),p[u]>0||g[u]<0||n[u]<0||b.weight[g[u]]>0)continue;let E=u%a,M=(u-E)/a;for(let c=-1;c<=1&&w[u]<0;c++)for(let I=-1;I<=1;I++){let y=E+I,U=M+c,j=U*a+y;if(y>=0&&y<a&&U>=0&&U<f&&p[j]>0&&g[j]>=0){w[u]=b.nearest[g[j]];break}}}let H=0;for(let u=0;u<N;u++){(u&16383)===0&&await T();let E=d&&w[u]>=0,M=E?1:p[u];if(M<=0)continue;let c=u*4;if(e.mode==="transparent"){let I=!d||n[u]>0?null:E?m(g[u],w[u]):m(g[u]);if(I){let y=1-M*(1-I[3]);if(y>0)for(let U=0;U<3;U++)l[c+U]=(h[c+U]*(1-M)+I[U]*I[3]*M)/y;l[c+3]=Math.round(h[c+3]*y)}else l[c+3]=Math.round(h[c+3]*(1-M));l[c+3]||l.fill(0,c,c+4)}else{let I=m(g[u]);for(let y=0;y<3;y++)l[c+y]=h[c+y]+(I[y]-h[c+y])*M}(l[c]!==h[c]||l[c+1]!==h[c+1]||l[c+2]!==h[c+2]||l[c+3]!==h[c+3])&&H++}return{pixels:l,mask:p,count:b.count,opaque:b.opaque,changed:H,capped:e.mode==="shift"&&i}}function W(t=12){let e=0;return()=>{if(!(performance.now()-e<t))return new Promise(o=>{let n=new MessageChannel;n.port1.onmessage=()=>{n.port1.close(),e=performance.now(),o()},n.port2.postMessage(0)})}}var R=null,S=0,Y=W();self.onmessage=async({data:t})=>{let e=++S;try{if(!Number.isSafeInteger(t.imageId)||!Number.isSafeInteger(t.editId))throw Error("Invalid request identifiers.");if(t.type==="cancel")return;if(t.type==="image"){R=null;let n=await Q(t.width,t.height,t.pixels,Y,()=>e!==S);if(e!==S)return;R={...n,id:t.imageId},self.postMessage({type:"ready",imageId:t.imageId,editId:t.editId,palette:R.palette});return}if(t.type!=="edit"||!R||R.id!==t.imageId)throw Error("Unknown image or operation.");let o=await V(R,t.params,t.seeds,t.overrides,Y,()=>e!==S);e===S&&self.postMessage({type:"result",imageId:t.imageId,editId:t.editId,...o},[o.pixels.buffer,o.mask.buffer])}catch(o){e===S&&self.postMessage({type:"error",imageId:t.imageId,editId:t.editId,message:o.message})}};})();\n'], { type: "text/javascript" })
       );
       worker = new Worker(url);
       worker.onmessage = ({ data: m }) => receive(m);
@@ -4738,6 +5179,7 @@ dialog p {
       sync();
       prepareCurrent();
       layout();
+      outlineControls();
       status(
         isSample ? "Sample ready. Pick a colour to get started." : "Opened " + name + (decoded.still ? " as a still image." : ".")
       );
@@ -4798,7 +5240,7 @@ dialog p {
       commit("Adjust colour");
       const r = await latest(), revision = editId, iid = imageId;
       status(copy ? "Preparing clipboard image\u2026" : "Encoding image\u2026");
-      const format = copy ? "png" : $("format").value, blobPromise = encode(r.pixels, w, h, format);
+      const format = copy ? "png" : $("format").value, out = await finish(r.pixels, w, h, finishSettings(), pause), blobPromise = encode(out.pixels, out.width, out.height, format);
       if (copy) {
         if (!navigator.clipboard?.write || !window.ClipboardItem)
           throw Error("Clipboard is unavailable here. Use Export PNG.");
@@ -4835,11 +5277,11 @@ dialog p {
     }
   }
   function displayPixels(data, selection) {
-    const out = new Uint8ClampedArray(data);
-    if (selection && result && $("overlay").value !== "normal")
+    const out = new Uint8ClampedArray(data), overlay = $("overlay").value;
+    if (selection && result && overlay !== "normal")
       for (let i = 0; i < w * h; i++) {
         const o = i * 4, t = result.mask[i];
-        if ($("overlay").value === "only") out[o + 3] = out[o + 3] * t;
+        if (overlay === "only") out[o + 3] = out[o + 3] * t;
         else if (t > 0) {
           out[o] = out[o] * (1 - 0.24 * t) + 117 * 0.24 * t;
           out[o + 1] = out[o + 1] * (1 - 0.24 * t) + 83 * 0.24 * t;
@@ -4867,7 +5309,106 @@ dialog p {
     wipeCanvas.getContext("2d").putImageData(new ImageData(source.slice(), w, h), 0, 0);
     $("beforeLabel").textContent = $("compare").selectedOptions[0].textContent;
     wipeCanvas.style.clipPath = "inset(0 " + (100 - Number($("wipe").value)) + "% 0 0)";
+    renderPreview();
   }
+  function finishSettings() {
+    return $("outline").checked ? {
+      outline: {
+        widthPct: Number($("outlineWidth").value),
+        colour: $("outlineHex").value
+      }
+    } : {};
+  }
+  var PREVIEW_SIZES = [16, 24, 32, 48, 96];
+  var previewGrounds = [
+    ["Dark chat", "#313338"],
+    ["Light chat", "#FFFFFF"],
+    ...DISCORD_BUTTONS.map(([label, hex]) => [label + " button", hex])
+  ];
+  for (const [label, hex] of previewGrounds) {
+    const option = document.createElement("option");
+    option.value = hex;
+    option.textContent = label;
+    $("previewGround").append(option);
+  }
+  var previewCanvases = PREVIEW_SIZES.map((size) => {
+    const tile = document.createElement("div"), canvas = document.createElement("canvas");
+    tile.className = "preview-tile";
+    canvas.style.width = canvas.style.height = size + "px";
+    canvas.setAttribute("role", "img");
+    canvas.setAttribute("aria-label", "Result at " + size + " pixels");
+    tile.append(canvas);
+    $("previewTiles").append(tile);
+    return canvas;
+  });
+  var previewTicket = 0;
+  async function renderPreview() {
+    const ticket = ++previewTicket, ground = $("previewGround").value;
+    for (const canvas of previewCanvases)
+      canvas.parentElement.style.backgroundColor = ground;
+    if (!pixels) return;
+    const source = result?.pixels || pixels, scale = Math.min(1, 256 / Math.max(w, h)), bw = Math.max(1, Math.round(w * scale)), bh = Math.max(1, Math.round(h * scale));
+    let base;
+    try {
+      base = await finish(
+        resize(source, w, h, bw, bh),
+        bw,
+        bh,
+        finishSettings(),
+        void 0,
+        scale < 1 ? shrinkSilhouette(source, w, h, bw, bh) : void 0
+      );
+    } catch {
+      return;
+    }
+    if (ticket !== previewTicket) return;
+    const dpr = window.devicePixelRatio || 1;
+    PREVIEW_SIZES.forEach((size, k) => {
+      const canvas = previewCanvases[k], box = Math.round(size * dpr), fit = box / Math.max(base.width, base.height), tw = Math.max(1, Math.round(base.width * fit)), th = Math.max(1, Math.round(base.height * fit));
+      canvas.width = canvas.height = box;
+      canvas.getContext("2d").putImageData(
+        new ImageData(
+          resize(base.pixels, base.width, base.height, tw, th),
+          tw,
+          th
+        ),
+        box - tw >> 1,
+        box - th >> 1
+      );
+    });
+  }
+  function outlineControls() {
+    const pct = Number($("outlineWidth").value), px = w ? outlineRadius(w, h, pct) : 0;
+    $("outlineWidthValue").textContent = pct + "%" + (w ? " \xB7 " + Math.round(px * 10) / 10 + " px here" : "");
+    renderPreview();
+  }
+  $("outline").onchange = outlineControls;
+  $("outlineWidth").oninput = outlineControls;
+  $("outlineColour").oninput = (e) => {
+    $("outlineHex").value = e.target.value.toUpperCase();
+    outlineControls();
+  };
+  $("outlineHex").addEventListener("input", (e) => {
+    const rgb = parseHex(e.target.value);
+    e.target.setAttribute("aria-invalid", String(!rgb));
+    if (rgb) {
+      $("outlineColour").value = toHex(...rgb).toLowerCase();
+      outlineControls();
+    }
+  });
+  for (const [label, hex] of [
+    ["White", "#FFFFFF"],
+    ["Black", "#000000"]
+  ])
+    $("outlineSwatches").append(
+      swatch(hex, label + " outline", () => {
+        $("outlineHex").value = hex;
+        $("outlineColour").value = hex.toLowerCase();
+        $("outline").checked = true;
+        outlineControls();
+      })
+    );
+  $("previewGround").onchange = renderPreview;
   function layout() {
     if (!w) return;
     const pane = after.parentElement;
@@ -5016,7 +5557,7 @@ dialog p {
         drag.last = p;
       }
     });
-    const finish = (e) => {
+    const finish2 = (e) => {
       if (!drag || drag.pointer !== e.pointerId) return;
       const p = point(e, c), d = drag;
       drag = null;
@@ -5029,7 +5570,7 @@ dialog p {
         addSample = old;
       }
     };
-    c.parentElement.addEventListener("pointerup", finish);
+    c.parentElement.addEventListener("pointerup", finish2);
     c.parentElement.addEventListener("pointercancel", (e) => {
       if (drag?.pointer === e.pointerId) {
         drag = null;
@@ -5081,13 +5622,19 @@ dialog p {
   };
   for (const [id, key] of [
     ["connected", "connected"],
-    ["protect", "protect"]
+    ["protect", "protect"],
+    ["cleanEdges", "cleanEdges"]
   ])
     $(id).onchange = (e) => action("Selection / shading option", () => {
       params[key] = e.target.checked;
     });
   $("mode").onchange = (e) => action("Treatment", () => {
     params.mode = e.target.value;
+  });
+  $("model").onchange = (e) => action("Colour model", () => {
+    params.model = e.target.value;
+    params.manual = false;
+    targetDeltas();
   });
   $("clear").onclick = () => action("Clear selection", () => {
     seeds = [];

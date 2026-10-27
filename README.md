@@ -8,10 +8,11 @@ Open [the web app](https://mistercr0wbar.github.io/HexShift/), use the portable 
 
 1. Open, drop or paste an image, or try the built-in Fluent heart.
 2. Click a source colour or choose an image-palette swatch. Use **Add sample** (or Shift-click) to include more shades. Connected regions, hue/shade tolerances and an add/subtract brush refine the selection.
-3. Choose a treatment: **Shift colour** keeps the shading, **Flat colour** uses an exact hex, and **Make transparent** removes selected pixels. Shading protection stays on unless you turn it off; requested and achieved colours are shown separately.
-4. Export the live preview as PNG or lossless WebP, or copy PNG. **Apply & select next colour** commits an edit before selecting the next colour. Undo and Redo also cover selection and brush changes.
+3. Choose a treatment: **Shift colour** keeps the shading, **Flat colour** uses an exact hex, and **Make transparent** removes selected pixels. With shading protection on (the default), the sampled colour lands exactly on your target and the other shades scale around it instead of clipping. The **Perceptual** colour model (default) keeps brightness when the hue changes, so yellow turned blue stays light; **Classic HSL** is still available. **Clean edges** removes the colour from blended edge pixels too, so a white background leaves no pale halo.
+4. Optionally add an **outline** (width as a percentage of the image, any colour) so an emoji stays visible on a background of its own colour, such as a Discord button. The real-size preview shows the result at 16–96 px on chat backgrounds and Discord button colours.
+5. Export the live preview as PNG or lossless WebP, or copy PNG. **Apply & select next colour** commits an edit before selecting the next colour. Undo and Redo also cover selection and brush changes.
 
-Compare with the original or the image before your current edit. Result, side-by-side and wipe views share zoom/pan. Preview backgrounds never change the exported transparency. Export dimensions match the imported raster dimensions.
+Compare with the original or the image before your current edit. Result, side-by-side and wipe views share zoom/pan. Preview backgrounds never change the exported transparency. Export dimensions match the imported raster dimensions, except that an outline grows the canvas where the artwork is too close to an edge.
 
 Keyboard: Ctrl/Cmd O opens, Ctrl/Cmd Z undoes, Ctrl/Cmd Shift Z redoes, F fits, +/− zooms, Space-drag pans, Escape clears selection. Text fields retain their standard editing shortcuts. Colour swatches support keyboard selection.
 

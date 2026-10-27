@@ -101,15 +101,24 @@
               Pick a source colour to begin.
             </p>
             <p id="capWarning" class="notice" hidden>
-              Shading protection limits this target. The achieved colour is
-              shown above.
+              These adjustments go past white, black or full colour, so some
+              shading is lost. The achieved colour is shown above.
             </p>
             <label class="check" id="protectLabel"
               ><input type="checkbox" id="protect" checked /> Protect highlights
               and shadows</label
             >
+            <label class="check" id="cleanEdgesLabel" hidden
+              ><input type="checkbox" id="cleanEdges" checked /> Clean edges
+              (remove the colour from blended edges)</label
+            >
             <details open id="fine">
               <summary>Fine adjustment</summary>
+              <label for="model">Colour model</label
+              ><select id="model">
+                <option value="oklch">Perceptual · keeps brightness</option>
+                <option value="hsl">Classic HSL</option>
+              </select>
               <div id="fineControls"></div>
             </details>
             <details class="presets">
@@ -186,12 +195,49 @@
               <option value="png">PNG · lossless, transparent</option>
               <option value="webp">WebP · lossless, transparent</option>
             </select>
+            <details id="outlinePanel">
+              <summary>Outline</summary>
+              <label class="check"
+                ><input type="checkbox" id="outline" /> Add an outline</label
+              >
+              <label for="outlineWidth"
+                >Width <span id="outlineWidthValue">4%</span></label
+              ><input
+                id="outlineWidth"
+                type="range"
+                min="0.5"
+                max="15"
+                step="0.5"
+                value="4"
+              />
+              <label for="outlineHex">Outline colour</label>
+              <div class="target-row">
+                <input
+                  type="color"
+                  id="outlineColour"
+                  value="#ffffff"
+                  aria-label="Outline colour picker"
+                /><input
+                  id="outlineHex"
+                  class="hex"
+                  value="#FFFFFF"
+                  maxlength="7"
+                  spellcheck="false"
+                />
+              </div>
+              <div id="outlineSwatches" class="swatches"></div>
+              <p class="help">
+                Keeps an emoji visible on a background of its own colour, such
+                as a Discord button. Check it in the real-size preview. The
+                canvas grows only if the artwork touches its edges.
+              </p>
+            </details>
             <button id="copy" class="button full" disabled>
               Copy PNG to clipboard
             </button>
             <p class="help">
-              Export includes your current preview. Apply is only needed before
-              selecting the next colour.
+              Export includes your current preview and outline. Apply is only
+              needed before selecting the next colour.
             </p>
           </section>
           <div class="privacy">
@@ -306,6 +352,11 @@
               />
             </div>
           </div>
+          <section class="output-preview" aria-label="Real-size preview">
+            <label for="previewGround" class="small-label">Real size on</label
+            ><select id="previewGround"></select>
+            <div id="previewTiles" class="preview-tiles"></div>
+          </section>
           <div class="statusbar">
             <p id="status" role="status" aria-live="polite">Loading sample…</p>
             <button id="cancel" class="text-button" hidden>Cancel</button
@@ -324,10 +375,12 @@
               remain available.
             </p>
             <p>
-              Static SVG supports shapes, paths, text, gradients, clips, and
-              masks. Active content, external resources, filters, reuse
-              elements, and embedded images are rejected. All exports are still
-              images. Preview backgrounds never change exported transparency.
+              Static SVG supports shapes, paths, text, gradients, clips, masks,
+              blend modes and filter effects. Active content, external
+              resources, reuse elements and embedded images are rejected. All
+              exports are still images. Preview backgrounds never change
+              exported transparency. For a background, Clean edges works best
+              with Only connected regions.
             </p>
           </details>
         </div>

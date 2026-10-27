@@ -119,6 +119,52 @@ test("lossless WebP export decodes to the exact PNG pixel values", async ({
     b = await sharp(webp).ensureAlpha().raw().toBuffer();
   expect([...b]).toEqual([...a]);
 });
+test("shift lands on the target in both colour models", async ({ page }) => {
+  await pick(page);
+  for (const model of ["oklch", "hsl"]) {
+    await page.locator("#model").selectOption(model);
+    await page.locator("#targetHex").fill("#5865F2");
+    await page.locator("#targetHex").press("Tab");
+    await expect(page.locator("#cancel")).toBeHidden();
+    await expect(page.locator("#targetResult")).toContainText(
+      "Requested #5865F2 · achieved #5865F2",
+    );
+    await expect(page.locator("#capWarning")).toBeHidden();
+  }
+  await expect(page.locator("#dsLabel")).toHaveText("Saturation");
+});
+test("outline appears in the export and the real-size preview", async ({
+  page,
+}) => {
+  await pick(page);
+  await page.locator("#outlinePanel summary").click();
+  await page.locator("#outline").check();
+  await page.locator("#outlineHex").fill("#00FF00");
+  await page.locator("#outlineWidth").fill("10");
+  await expect(page.locator("#outlineWidthValue")).toContainText("10%");
+  const download = page.waitForEvent("download");
+  await page.locator("#export").click();
+  const { data, info } = await sharp(await readFile(await (await download).path()))
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  expect(info.width).toBeGreaterThanOrEqual(128);
+  let green = 0;
+  for (let i = 0; i < data.length; i += 4)
+    if (data[i] === 0 && data[i + 1] === 255 && data[i + 2] === 0 && data[i + 3] === 255)
+      green++;
+  expect(green).toBeGreaterThan(200);
+  await page.locator("#previewGround").selectOption({ label: "Primary button" });
+  const tiles = page.locator("#previewTiles canvas");
+  await expect(tiles).toHaveCount(5);
+  const lit = await tiles.nth(4).evaluate((c) => {
+    const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+    let n = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i]) n++;
+    return n;
+  });
+  expect(lit).toBeGreaterThan(100);
+});
 test("brush overrides, history and preview background do not alter export alpha", async ({
   page,
 }) => {
@@ -256,9 +302,12 @@ test("large images remain cancellable and a new edit resumes processing", async 
   });
   await expect(page.locator("#fileDims")).toContainText("2048 × 2048");
   await ready(page);
-  await page.locator("#palette button").first().click();
-  await expect(page.locator("#cancel")).toBeVisible();
-  await page.locator("#cancel").click();
+  // Edits at this size now finish in well under a second, so cancel in the
+  // same task as the pick instead of racing the worker.
+  await page.evaluate(() => {
+    document.querySelector("#palette button").click();
+    document.getElementById("cancel").click();
+  });
   await expect(page.locator("#status")).toContainText("cancelled");
   await page.locator("#mode").selectOption("flat");
   await expect(page.locator("#cancel")).toBeHidden({ timeout: 60000 });
