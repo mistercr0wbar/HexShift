@@ -1,7 +1,8 @@
 import { prepare, processImage } from "./engine.js";
+import { makePause } from "./yield.js";
 let image = null,
   sequence = 0;
-const pause = () => new Promise((r) => setTimeout(r, 0));
+const pause = makePause();
 self.onmessage = async ({ data: m }) => {
   const ticket = ++sequence;
   try {

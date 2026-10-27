@@ -1,11 +1,4 @@
-import {
-  defaults,
-  parseHex,
-  toHex,
-  rgbToHsl,
-  hueDelta,
-  clamp,
-} from "./colour.js";
+import { defaults, parseHex, toHex, clamp, deltasFor } from "./colour.js";
 import {
   prepare,
   processImage,
@@ -15,9 +8,11 @@ import {
 import { History } from "./history.js";
 import { decodeBlob } from "./import.js";
 import { encode, outputName } from "./export.js";
+import { finish, resize, outlineRadius } from "./output.js";
 import sample from "./sample.js";
+import { makePause } from "./yield.js";
 const $ = (id) => document.getElementById(id),
-  pause = () => new Promise((r) => setTimeout(r, 0));
+  pause = makePause();
 let w = 0,
   h = 0,
   name = "",
@@ -112,6 +107,7 @@ function makeSlider(parent, key, label, min, max, unit) {
   head.className = "slider-head";
   const lab = document.createElement("label");
   lab.htmlFor = key;
+  lab.id = key + "Label";
   lab.textContent = label;
   const number = document.createElement("input");
   number.type = "number";
@@ -219,12 +215,14 @@ function rememberTarget(hex) {
     ),
   );
 }
-for (const [label, hex] of [
+// Discord's button colours: target presets and real-size preview grounds.
+const DISCORD_BUTTONS = [
   ["Primary", "#5865F2"],
   ["Secondary", "#4E5058"],
   ["Success", "#248046"],
   ["Danger", "#DA373C"],
-]) {
+];
+for (const [label, hex] of DISCORD_BUTTONS) {
   const b = swatch(hex, label + " " + hex, () => setTarget(hex));
   const text = document.createElement("span");
   text.textContent = label;
@@ -234,18 +232,26 @@ for (const [label, hex] of [
 function targetDeltas() {
   if (!seeds.length || params.manual) return;
   const sd = seeds.at(-1),
-    o = (sd.y * w + sd.x) * 4,
-    [sh, ss, sl] = rgbToHsl(...pixels.subarray(o, o + 3)),
-    [th, ts, tl] = rgbToHsl(...parseHex(params.target));
-  params.dh = hueDelta(th, sh);
-  params.ds = (ts - ss) * 100;
-  params.dl = (tl - sl) * 100;
+    o = (sd.y * w + sd.x) * 4;
+  Object.assign(
+    params,
+    deltasFor(
+      [...pixels.subarray(o, o + 3)],
+      parseHex(params.target),
+      params.model,
+    ),
+  );
 }
 function syncTarget() {
   const transparent = params.mode === "transparent";
   $("targetControls").hidden = transparent;
   $("fine").hidden = params.mode !== "shift";
   $("protectLabel").hidden = params.mode !== "shift";
+  $("cleanEdgesLabel").hidden = !transparent;
+  const dsName = params.model === "hsl" ? "Saturation" : "Chroma";
+  $("dsLabel").textContent = dsName;
+  $("ds").setAttribute("aria-label", dsName);
+  $("dsNumber").setAttribute("aria-label", dsName + " percent");
   $("targetColour").value = params.target;
   if (document.activeElement !== $("targetHex"))
     $("targetHex").value = params.target;
@@ -265,8 +271,10 @@ function sync() {
       $(key + "Number").value = Math.round(params[key] * 100) / 100;
   }
   $("mode").value = params.mode;
+  $("model").value = params.model;
   $("connected").checked = params.connected;
   $("protect").checked = params.protect;
+  $("cleanEdges").checked = params.cleanEdges;
   syncTarget();
   renderSeeds();
   buttons();
@@ -569,6 +577,7 @@ async function openBlob(blob, fileName, isSample = false) {
     sync();
     prepareCurrent();
     layout();
+    outlineControls();
     status(
       isSample
         ? "Sample ready. Pick a colour to get started."
@@ -634,7 +643,8 @@ async function save(copy = false) {
       iid = imageId;
     status(copy ? "Preparing clipboard image…" : "Encoding image…");
     const format = copy ? "png" : $("format").value,
-      blobPromise = encode(r.pixels, w, h, format);
+      out = await finish(r.pixels, w, h, finishSettings(), pause),
+      blobPromise = encode(out.pixels, out.width, out.height, format);
     if (copy) {
       if (!navigator.clipboard?.write || !window.ClipboardItem)
         throw Error("Clipboard is unavailable here. Use Export PNG.");
@@ -672,12 +682,13 @@ async function save(copy = false) {
   }
 }
 function displayPixels(data, selection) {
-  const out = new Uint8ClampedArray(data);
-  if (selection && result && $("overlay").value !== "normal")
+  const out = new Uint8ClampedArray(data),
+    overlay = $("overlay").value;
+  if (selection && result && overlay !== "normal")
     for (let i = 0; i < w * h; i++) {
       const o = i * 4,
         t = result.mask[i];
-      if ($("overlay").value === "only") out[o + 3] = out[o + 3] * t;
+      if (overlay === "only") out[o + 3] = out[o + 3] * t;
       else if (t > 0) {
         out[o] = out[o] * (1 - 0.24 * t) + 117 * 0.24 * t;
         out[o + 1] = out[o + 1] * (1 - 0.24 * t) + 83 * 0.24 * t;
@@ -714,7 +725,117 @@ function draw() {
   $("beforeLabel").textContent = $("compare").selectedOptions[0].textContent;
   wipeCanvas.style.clipPath =
     "inset(0 " + (100 - Number($("wipe").value)) + "% 0 0)";
+  renderPreview();
 }
+// Export finishing settings. UI-only: not part of the edit history.
+function finishSettings() {
+  return $("outline").checked
+    ? {
+        outline: {
+          widthPct: Number($("outlineWidth").value),
+          colour: $("outlineHex").value,
+        },
+      }
+    : {};
+}
+const PREVIEW_SIZES = [16, 24, 32, 48, 96],
+  previewGrounds = [
+    ["Dark chat", "#313338"],
+    ["Light chat", "#FFFFFF"],
+    ...DISCORD_BUTTONS.map(([label, hex]) => [label + " button", hex]),
+  ];
+for (const [label, hex] of previewGrounds) {
+  const option = document.createElement("option");
+  option.value = hex;
+  option.textContent = label;
+  $("previewGround").append(option);
+}
+const previewCanvases = PREVIEW_SIZES.map((size) => {
+  const tile = document.createElement("div"),
+    canvas = document.createElement("canvas");
+  tile.className = "preview-tile";
+  canvas.style.width = canvas.style.height = size + "px";
+  canvas.setAttribute("role", "img");
+  canvas.setAttribute("aria-label", "Result at " + size + " pixels");
+  tile.append(canvas);
+  $("previewTiles").append(tile);
+  return canvas;
+});
+let previewTicket = 0;
+// The preview runs the export pipeline on a copy capped at 256 px (the outline
+// width is relative, so it matches), then box-filters it to each tile size.
+async function renderPreview() {
+  const ticket = ++previewTicket,
+    ground = $("previewGround").value;
+  for (const canvas of previewCanvases)
+    canvas.parentElement.style.backgroundColor = ground;
+  if (!pixels) return;
+  const source = result?.pixels || pixels,
+    scale = Math.min(1, 256 / Math.max(w, h)),
+    bw = Math.max(1, Math.round(w * scale)),
+    bh = Math.max(1, Math.round(h * scale));
+  let base;
+  try {
+    base = await finish(resize(source, w, h, bw, bh), bw, bh, finishSettings());
+  } catch {
+    return;
+  }
+  if (ticket !== previewTicket) return;
+  const dpr = window.devicePixelRatio || 1;
+  PREVIEW_SIZES.forEach((size, k) => {
+    const canvas = previewCanvases[k],
+      box = Math.round(size * dpr),
+      fit = box / Math.max(base.width, base.height),
+      tw = Math.max(1, Math.round(base.width * fit)),
+      th = Math.max(1, Math.round(base.height * fit));
+    canvas.width = canvas.height = box;
+    canvas
+      .getContext("2d")
+      .putImageData(
+        new ImageData(
+          resize(base.pixels, base.width, base.height, tw, th),
+          tw,
+          th,
+        ),
+        (box - tw) >> 1,
+        (box - th) >> 1,
+      );
+  });
+}
+function outlineControls() {
+  const pct = Number($("outlineWidth").value),
+    px = w ? outlineRadius(w, h, pct) : 0;
+  $("outlineWidthValue").textContent =
+    pct + "%" + (w ? " · " + Math.round(px * 10) / 10 + " px here" : "");
+  renderPreview();
+}
+$("outline").onchange = outlineControls;
+$("outlineWidth").oninput = outlineControls;
+$("outlineColour").oninput = (e) => {
+  $("outlineHex").value = e.target.value.toUpperCase();
+  outlineControls();
+};
+$("outlineHex").addEventListener("input", (e) => {
+  const rgb = parseHex(e.target.value);
+  e.target.setAttribute("aria-invalid", String(!rgb));
+  if (rgb) {
+    $("outlineColour").value = toHex(...rgb).toLowerCase();
+    outlineControls();
+  }
+});
+for (const [label, hex] of [
+  ["White", "#FFFFFF"],
+  ["Black", "#000000"],
+])
+  $("outlineSwatches").append(
+    swatch(hex, label + " outline", () => {
+      $("outlineHex").value = hex;
+      $("outlineColour").value = hex.toLowerCase();
+      $("outline").checked = true;
+      outlineControls();
+    }),
+  );
+$("previewGround").onchange = renderPreview;
 function layout() {
   if (!w) return;
   const pane = after.parentElement;
@@ -959,6 +1080,7 @@ $("targetColour").onchange = () => {
 for (const [id, key] of [
   ["connected", "connected"],
   ["protect", "protect"],
+  ["cleanEdges", "cleanEdges"],
 ])
   $(id).onchange = (e) =>
     action("Selection / shading option", () => {
@@ -967,6 +1089,14 @@ for (const [id, key] of [
 $("mode").onchange = (e) =>
   action("Treatment", () => {
     params.mode = e.target.value;
+  });
+// Deltas are measured in the active model, so a model change re-derives them
+// from the target (manual slider offsets would mean something else).
+$("model").onchange = (e) =>
+  action("Colour model", () => {
+    params.model = e.target.value;
+    params.manual = false;
+    targetDeltas();
   });
 $("clear").onclick = () =>
   action("Clear selection", () => {
