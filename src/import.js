@@ -275,7 +275,30 @@ const styleOnly = new Map([
   ],
   ["isolation", new Set(["auto", "isolate"])],
 ]);
-export function guardSvg(text) {
+// Absolute CSS lengths in pixels; percentages and font-relative units have no
+// fixed size, so the viewBox decides.
+const UNITS = {
+  px: 1,
+  pt: 4 / 3,
+  pc: 16,
+  in: 96,
+  cm: 96 / 2.54,
+  mm: 96 / 25.4,
+};
+export function svgLength(value) {
+  const m =
+    /^\s*(\d+\.?\d*|\.\d+)(?:e([+-]?\d+))?\s*(px|pt|pc|in|cm|mm)?\s*$/i.exec(
+      value || "",
+    );
+  if (!m) return NaN;
+  const v =
+    Number(m[1] + (m[2] ? "e" + m[2] : "")) *
+    UNITS[(m[3] || "px").toLowerCase()];
+  return Number.isFinite(v) ? v : NaN;
+}
+export const SVG_EDGES = [256, 512, 1024, 2048];
+export function guardSvg(text, edge = 512) {
+  if (!SVG_EDGES.includes(edge)) throw Error("Unsupported SVG size.");
   if (new TextEncoder().encode(text).length > 2 * 1024 * 1024)
     throw Error("SVG files must be 2 MiB or smaller.");
   if (
@@ -405,23 +428,30 @@ export function guardSvg(text) {
   }
   for (const el of all) visit(el);
   const box = (root.getAttribute("viewBox") || "")
-    .trim()
-    .split(/[\s,]+/)
-    .map(Number);
-  let w = Number(root.getAttribute("width")?.replace(/px$/, "")),
-    h = Number(root.getAttribute("height")?.replace(/px$/, ""));
-  if (!w || !h) {
-    if (
-      box.length !== 4 ||
-      !box.every(Number.isFinite) ||
-      box[2] <= 0 ||
-      box[3] <= 0
-    )
+      .trim()
+      .split(/[\s,]+/)
+      .map(Number),
+    hasBox =
+      box.length === 4 &&
+      box.every(Number.isFinite) &&
+      box[2] > 0 &&
+      box[3] > 0;
+  // The stated size gives the shape; the drawing is rendered at `edge` pixels
+  // on its longest side, so small icons (Fluent Color is 32 × 32) stay sharp.
+  let sw = svgLength(root.getAttribute("width")),
+    sh = svgLength(root.getAttribute("height"));
+  if (!(sw > 0 && sh > 0)) {
+    if (!hasBox)
       throw Error("SVG needs positive dimensions or a valid viewBox.");
-    const scale = 512 / Math.max(box[2], box[3]);
-    w = Math.max(1, Math.round(box[2] * scale));
-    h = Math.max(1, Math.round(box[3] * scale));
-  }
+    sw = box[2];
+    sh = box[3];
+  } else if (!hasBox) root.setAttribute("viewBox", "0 0 " + sw + " " + sh);
+  const scale = Math.min(
+      edge / Math.max(sw, sh),
+      Math.sqrt(MAX_PIXELS / (sw * sh)),
+    ),
+    w = Math.min(8192, Math.max(1, Math.round(sw * scale))),
+    h = Math.min(8192, Math.max(1, Math.round(sh * scale)));
   dimensions(w, h);
   root.setAttribute("width", String(w));
   root.setAttribute("height", String(h));
@@ -455,7 +485,7 @@ export function guardSvg(text) {
     type: "image/svg+xml",
   };
 }
-export async function decodeBlob(blob, signal) {
+export async function decodeBlob(blob, signal, { svgEdge = 512 } = {}) {
   if (!(blob instanceof Blob) || !blob.size) throw Error("The file is empty.");
   if (blob.size > 16 * 1024 * 1024)
     throw Error("Image files must be 16 MiB or smaller.");
@@ -470,7 +500,7 @@ export async function decodeBlob(blob, signal) {
       prefix,
     ) || prefix.startsWith("<");
   let info = svg
-    ? guardSvg(new TextDecoder("utf-8", { fatal: true }).decode(bytes))
+    ? guardSvg(new TextDecoder("utf-8", { fatal: true }).decode(bytes), svgEdge)
     : inspectRaster(bytes);
   const source = info.blob || new Blob([bytes], { type: info.type });
   let bitmap, url;
@@ -520,7 +550,13 @@ export async function decodeBlob(blob, signal) {
     ctx.drawImage(bitmap, 0, 0);
     const pixels = ctx.getImageData(0, 0, w, h).data;
     canvas.width = canvas.height = 1;
-    return { width: w, height: h, pixels, still: info.still };
+    return {
+      width: w,
+      height: h,
+      pixels,
+      still: info.still,
+      svg: info.type === "image/svg+xml",
+    };
   } finally {
     bitmap?.close?.();
     if (url) URL.revokeObjectURL(url);

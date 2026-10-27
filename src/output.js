@@ -1,5 +1,6 @@
 import { clamp, parseHex } from "./colour.js";
 import { MAX_PIXELS } from "./engine.js";
+import { fitted } from "./presets.js";
 // Finite stand-in for "no inside pixel yet": Infinity - Infinity would be NaN
 // in the parabola intersections below.
 const FAR = 1e20;
@@ -171,7 +172,8 @@ export function resize(pixels, w, h, ow, oh) {
       const o = (y * ow + x) * 4,
         a = Math.round(acc[3]);
       if (a <= 0) continue;
-      for (let c = 0; c < 3; c++) out[o + c] = Math.round(acc[c] / (acc[3] / 255));
+      for (let c = 0; c < 3; c++)
+        out[o + c] = Math.round(acc[c] / (acc[3] / 255));
       out[o + 3] = a;
     }
   return out;
@@ -188,6 +190,23 @@ export function shrinkSilhouette(pixels, w, h, ow, oh) {
         out[oy * ow + Math.min(ow - 1, Math.floor((x * ow) / w))] = 1;
   }
   return out;
+}
+// Scales the image so its longest side is `box`, then (with `pad`) centres it
+// on a transparent box × box square. Matches `fitted()` in presets.js.
+export function fit(pixels, w, h, box, pad) {
+  const { width, height } = fitted(w, h, box, false),
+    scaled = resize(pixels, w, h, width, height);
+  if (!pad || (width === box && height === box))
+    return { pixels: scaled, width, height };
+  const out = new Uint8ClampedArray(box * box * 4),
+    left = (box - width) >> 1,
+    top = (box - height) >> 1;
+  for (let y = 0; y < height; y++)
+    out.set(
+      scaled.subarray(y * width * 4, (y + 1) * width * 4),
+      ((y + top) * box + left) * 4,
+    );
+  return { pixels: out, width: box, height: box };
 }
 // The export pipeline: what is saved, copied and shown in the output preview.
 // `silhouette` lets a reduced preview keep the full-size outline shape.

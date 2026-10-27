@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -143,9 +144,17 @@ namespace HexShift
                 && (uri.AbsolutePath == "/" || uri.AbsolutePath == "/index.html" || uri.AbsolutePath == "/HexShift.html");
         }
 
-        internal static bool IsImageDownload(string document, string url, string mime)
+        // Every file the page may save: MIME type -> extension, Save As filter and dialog title.
+        static readonly Dictionary<string, string[]> ExportTypes = new Dictionary<string, string[]>(StringComparer.Ordinal)
         {
-            return IsAppDocument(document) && IsAppBlob(url) && (mime == "image/png" || mime == "image/webp");
+            { "image/png", new[] { ".png", "PNG image (*.png)|*.png", "Save the shifted image" } },
+            { "image/webp", new[] { ".webp", "WebP image (*.webp)|*.webp", "Save the shifted image" } },
+            { "application/zip", new[] { ".zip", "ZIP archive (*.zip)|*.zip", "Save the emoji pack" } },
+        };
+
+        internal static bool IsExportDownload(string document, string url, string mime)
+        {
+            return IsAppDocument(document) && IsAppBlob(url) && mime != null && ExportTypes.ContainsKey(mime);
         }
 
         internal static bool IsAppBlob(string url)
@@ -155,9 +164,11 @@ namespace HexShift
             return url != null && url.StartsWith(prefix, StringComparison.Ordinal) && Guid.TryParse(url.Substring(prefix.Length), out identifier);
         }
 
-        internal static bool HasImageExtension(string path, string extension)
+        internal static bool HasExportExtension(string path, string extension)
         {
-            try { return (extension == ".png" || extension == ".webp") && string.Equals(Path.GetExtension(path), extension, StringComparison.OrdinalIgnoreCase); }
+            bool known = false;
+            foreach (string[] type in ExportTypes.Values) known |= type[0] == extension;
+            try { return known && string.Equals(Path.GetExtension(path), extension, StringComparison.OrdinalIgnoreCase); }
             catch (ArgumentException) { return false; }
         }
 
@@ -182,10 +193,10 @@ namespace HexShift
         void OnDownloadStarting(object sender, CoreWebView2DownloadStartingEventArgs e)
         {
             string mime = e.DownloadOperation.MimeType;
-            bool png = mime == "image/png", webp = mime == "image/webp";
-            if (!IsImageDownload(web.CoreWebView2.Source, e.DownloadOperation.Uri, mime))
+            if (!IsExportDownload(web.CoreWebView2.Source, e.DownloadOperation.Uri, mime))
             { e.Cancel = true; e.Handled = true; return; }
-            string extension = webp ? ".webp" : ".png";
+            string[] type = ExportTypes[mime];
+            string extension = type[0];
             CoreWebView2Deferral deferral = e.GetDeferral();
             e.Handled = true;
             string suggested = "";
@@ -196,9 +207,9 @@ namespace HexShift
                 {
                     using (SaveFileDialog dlg = new SaveFileDialog())
                     {
-                        dlg.Title = "Save the shifted image";
+                        dlg.Title = type[2];
                         dlg.FileName = string.IsNullOrEmpty(suggested) ? "emoji-shifted" + extension : suggested;
-                        dlg.Filter = webp ? "WebP image (*.webp)|*.webp" : "PNG image (*.png)|*.png";
+                        dlg.Filter = type[1];
                         dlg.DefaultExt = extension.Substring(1);
                         dlg.AddExtension = true;
                         dlg.OverwritePrompt = true;
@@ -206,7 +217,7 @@ namespace HexShift
                         // would bypass its overwrite prompt for the actual destination.
                         dlg.FileOk += delegate(object s, System.ComponentModel.CancelEventArgs args)
                         {
-                            if (!HasImageExtension(dlg.FileName, extension))
+                            if (!HasExportExtension(dlg.FileName, extension))
                             {
                                 args.Cancel = true;
                                 MessageBox.Show(this, "Choose a filename ending in " + extension + ".", "Hex Shift", MessageBoxButtons.OK, MessageBoxIcon.Information);

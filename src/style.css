@@ -303,6 +303,24 @@ label {
 .inspector select {
   width: 100%;
 }
+#customSize {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--subtle);
+  padding: 7px 8px;
+  font-size: 12px;
+}
+#customSize[aria-invalid="true"] {
+  outline: 2px solid var(--warn);
+}
+#sizeReadout p + p {
+  margin-top: 2px;
+}
+#sizeReadout .over {
+  color: var(--warn);
+  font-weight: 600;
+}
 .target-row {
   display: flex;
   gap: 9px;

@@ -23,7 +23,7 @@ A wider pass covered icon libraries (Icons8, Flaticon, Noun Project, Iconify, St
 | Hue rotation in a perceptual space keeps brightness | ImageMagick LCHab, GIMP LCh, oklch.com | 2.2: Perceptual (OKLCH) model, default |
 | Colour-to-alpha unmixing leaves clean edges | GIMP, Krita, Affinity matte removal, ezgif edge clean-up | 2.2: Clean edges |
 | Outline/backing so stickers read on any background | Icons8, Noun Project, WhatsApp guidance | 2.2: Outline and real-size preview |
-| Platform sizes, packs and file-size limits | MakeEmoji, Eklipse, Kapwing, Flaticon | Planned: export presets, ZIP packs |
+| Platform sizes, packs and file-size limits | MakeEmoji, Eklipse, Kapwing, Flaticon | 2.3: size presets with limit readout, ZIP packs, small WebP |
 | Colourways, palettes and skin tones | Firefly, LottieFiles, Lospec, Canva; no raster skin-tone tool exists | Planned: variants, palette files, skin-tone ramps |
 | Current→New colour tables and reusable recipes | Illustrator, Figma, Penpot, Actions, XnConvert | Planned: colour map, recipe files and batch |
 
