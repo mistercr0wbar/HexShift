@@ -464,6 +464,8 @@ namespace HexShift
         }
 
         // The last word before anything is installed. The default answer is always the safe one.
+        internal bool Installing { get; private set; }
+
         void ConfirmInstall()
         {
             if (offer == null || stagedPath == null) return;
@@ -491,7 +493,7 @@ namespace HexShift
             // Anything else (a locked-down folder, no memory to check the file) is reported the same
             // plain way, never left to the unhandled-exception dialog.
             catch (Exception ex) { Info("The update was not installed (" + ex.GetType().Name + ")."); return; }
-            if (installedCopy) owner.Close();
+            if (installedCopy) { Installing = true; owner.Close(); }
             else bar.Dismiss();
         }
 

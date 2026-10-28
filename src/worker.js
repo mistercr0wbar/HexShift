@@ -1,9 +1,21 @@
 import { prepare, processEdit } from "./engine.js";
 import { makePause } from "./yield.js";
 let image = null,
+  currentKey = null,
   sequence = 0;
 const pause = makePause();
+const preparedImages = new Map();
 self.onmessage = async ({ data: m }) => {
+  if (m.type === "release") {
+    for (const key of preparedImages.keys())
+      if (key.startsWith(m.documentId + ":")) preparedImages.delete(key);
+    if (currentKey?.startsWith(m.documentId + ":")) {
+      sequence++;
+      image = null;
+      currentKey = null;
+    }
+    return;
+  }
   const ticket = ++sequence;
   try {
     if (!Number.isSafeInteger(m.imageId) || !Number.isSafeInteger(m.editId))
@@ -11,14 +23,26 @@ self.onmessage = async ({ data: m }) => {
     if (m.type === "cancel") return;
     if (m.type === "image") {
       image = null;
-      const next = await prepare(
-        m.width,
-        m.height,
-        m.pixels,
-        pause,
-        () => ticket !== sequence,
-      );
+      currentKey = m.cacheKey;
+      let next = preparedImages.get(m.cacheKey);
+      if (!next)
+        next = await prepare(
+          m.width,
+          m.height,
+          m.pixels,
+          pause,
+          () => ticket !== sequence,
+        );
       if (ticket !== sequence) return;
+      if (typeof m.cacheKey === "string") {
+        const prefix = m.cacheKey.split(":")[0] + ":";
+        for (const key of preparedImages.keys())
+          if (key.startsWith(prefix)) preparedImages.delete(key);
+        preparedImages.delete(m.cacheKey);
+        preparedImages.set(m.cacheKey, next);
+        while (preparedImages.size > 3)
+          preparedImages.delete(preparedImages.keys().next().value);
+      }
       image = { ...next, id: m.imageId };
       self.postMessage({
         type: "ready",

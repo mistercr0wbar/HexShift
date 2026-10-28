@@ -1,11 +1,16 @@
 # Hex Shift privacy
 
-Updated 28 October 2026 for version 3.3.0 (browser and Windows).
+Updated 28 October 2026 for version 3.4.0 (browser and Windows).
 
 Images are processed on your device. Images, selections, edits and undo history
 stay in memory and are lost when the page closes or reloads. They are never
 stored in localStorage or sent to the developer. Hex Shift has no accounts,
 advertising, analytics, tracking or cloud image processing.
+
+Up to 20 image tabs can be open in one session, with separate edits and views.
+Their undo history shares a 96 MB budget, with background history trimmed first.
+Tab order, images and batch work are not saved between sessions. Export the
+images you want to keep before closing or reloading.
 
 The theme preference is kept as `hexshift-theme`. Colours you explicitly save
 and palettes you keep in My palettes are stored locally as `hexshift-colours`:
