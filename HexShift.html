@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-0pu3MWzlusBueL5CXdA4FqETrStWwI5/2aucjUqIq90='; style-src 'sha256-b/Rk/kGsIVr4ZkeKVKO33Cv3PszVN0HAmwUTqOlrgKs='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-0pu3MWzlusBueL5CXdA4FqETrStWwI5/2aucjUqIq90='; style-src 'sha256-PHPN0jXLqxpBXYBOfA8ljJ/0iBN18OGguGA+8I+9Xqg='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta
       name="theme-color"
@@ -1502,9 +1502,12 @@ canvas#outlineCanvas {
 #cancel.shown {
   visibility: visible;
 }
+/* The readout and the privacy note give way first when the bar is short of room (a
+   narrow window, a wide font, a zoom), so the bar never spills past the window.
+   They are 39 characters and their natural width when there is room. */
 #pixelReadout {
-  flex: none;
-  width: 39ch;
+  flex: 0 4 39ch;
+  min-width: 0;
   overflow: hidden;
   text-align: right;
   text-overflow: ellipsis;
@@ -1517,7 +1520,9 @@ canvas#outlineCanvas {
 }
 .privacy {
   display: inline-flex;
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
   align-items: center;
   gap: 5px;
   white-space: nowrap;
