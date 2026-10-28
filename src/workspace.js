@@ -15,6 +15,7 @@ import {
   LAYOUT_KEY,
   PANELS,
   SPAN_LIMITS,
+  fitSavedSizes,
   applyPreset,
   defaultLayout,
   hidePanel,
@@ -392,11 +393,30 @@ export function createWorkspace(main, opts = {}) {
       main.style.gridTemplateAreas = `"${top.join(" ")}"`;
     }
   }
-  function applySizes() {
+  function applySizes({ replace = true } = {}) {
     const names = { left: "--col-left", right: "--col-right", dock: "--dock-h" };
+    if (preset === "phone") {
+      if (replace)
+        for (const cssName of Object.values(names))
+          app.style.removeProperty(cssName);
+      return;
+    }
+    // Hidden regions do not spend the picture's reserve. Preferred sizes stay
+    // in `layout.sizes`; only the variables on the page change.
+    const fitted = fitSavedSizes(layout.sizes, {
+      width: main.clientWidth,
+      height: main.clientHeight,
+      left: !regions.left.hidden,
+      right: !regions.right.hidden,
+      bottom: !regions.bottom.hidden,
+    });
     for (const [key, cssName] of Object.entries(names)) {
-      if (layout.sizes[key] == null) app.style.removeProperty(cssName);
-      else app.style.setProperty(cssName, layout.sizes[key] + "px");
+      const value = fitted[key];
+      if (layout.sizes[key] == null || value == null) {
+        if (replace) app.style.removeProperty(cssName);
+        continue;
+      }
+      app.style.setProperty(cssName, value + "px");
     }
   }
   function syncPhoneTabs() {
@@ -446,7 +466,6 @@ export function createWorkspace(main, opts = {}) {
     preset = next;
     main.dataset.preset = next;
     clearInlineGrid();
-    applySizes();
     if (next === "phone") {
       const ids = phoneOrder();
       place({ left: [], right: [], bottom: ids.length ? [ids] : [] });
@@ -460,6 +479,7 @@ export function createWorkspace(main, opts = {}) {
     syncPhoneTabs();
     refreshSplits();
     syncLocks();
+    applySizes({ replace: true });
   }
   const overflowing = () =>
     [...main.querySelectorAll(".region:not([hidden]) .stack")].some(
@@ -990,7 +1010,12 @@ export function createWorkspace(main, opts = {}) {
     reset,
     refresh() {
       const next = presented();
-      if (next === preset) return false;
+      if (next === preset) {
+        // The preset name did not change, so folds stay put. Saved column
+        // sizes still have to fit the window that is on screen now.
+        applySizes({ replace: false });
+        return false;
+      }
       applyCurrent();
       fit();
       onPreset?.(next);

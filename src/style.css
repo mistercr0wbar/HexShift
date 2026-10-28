@@ -877,7 +877,23 @@ summary::marker {
 .panel {
   flex: none;
   min-width: 0;
+  min-height: 0;
   border-bottom: 1px solid var(--line);
+}
+/* A chosen panel height is a limit, not a suggestion. The header stays put
+   and the body scrolls, so a short panel cannot paint over the one below it. */
+.panel[style*="height:"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.panel[style*="height:"] > .panel-head {
+  flex: none;
+}
+.panel[style*="height:"] > .panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }
 .panel-head {
   display: flex;
@@ -1258,12 +1274,16 @@ summary::marker {
   margin-top: 6px;
 }
 
-/* Stage: the canvas with floating tools */
+/* Stage: the canvas with floating tools. The tools are taken out of the flow,
+   but a wide one would still widen the page. The stage stays the width of the
+   picture and clips anything that cannot wrap into that width. */
 .stage {
   position: relative;
   display: flex;
   flex-direction: column;
+  min-width: 0;
   min-height: 0;
+  overflow: hidden;
   background: var(--ground);
 }
 .stage-tools {
@@ -1283,7 +1303,13 @@ summary::marker {
 }
 .float {
   display: flex;
+  flex: none;
+  flex-wrap: wrap;
   align-items: center;
+  /* A bar keeps its own width on a wide picture, and wraps inside the picture
+     when the columns leave it a narrow one. It never grows the page. */
+  max-width: 100%;
+  min-width: 0;
   gap: 3px;
   padding: 3px;
   border: 1px solid var(--line);
@@ -1513,12 +1539,14 @@ canvas#outlineCanvas {
   transform: translate(-50%, -50%);
 }
 
-/* Colour map strip. Nothing in it wraps or changes width as numbers change. */
+/* Colour map strip. One line while the picture has room, so a changing number
+   does not move it. A narrow picture wraps the strip instead of widening the page. */
 .mapbar {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   min-height: 40px;
   padding: 4px 10px;
   background: var(--surface);
@@ -2059,6 +2087,9 @@ dialog details {
   }
   .stage {
     height: max(320px, 58svh);
+    /* The phone page scrolls. The picture is in normal flow here, so the
+       desktop clip must not cut it off. */
+    overflow: visible;
   }
   .stage-tools {
     position: static;

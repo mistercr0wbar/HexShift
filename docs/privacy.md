@@ -1,6 +1,6 @@
 # Hex Shift privacy
 
-Updated 28 October 2026 for version 3.5.0 (browser and Windows).
+Updated 28 October 2026 for version 3.5.1 (browser and Windows).
 
 Images are processed on your device. Images, selections, edits and undo history
 stay in memory and are lost when the page closes or reloads. They are never
@@ -14,7 +14,7 @@ images you want to keep before closing or reloading.
 
 The theme preference is kept as `hexshift-theme`. The workspace arrangement is
 kept as `hexshift-layout`: where the panels sit, which you have folded or
-hidden, the column sizes, and the order of the phone sheet's tabs. It does not
+hidden, the column sizes you chose, and the order of the phone sheet's tabs. A narrower window may show those columns smaller; the stored sizes are the ones you chose. It does not
 store images, selections, or edits. An unreadable arrangement is ignored and
 left as it is. Colours you explicitly save
 and palettes you keep in My palettes are stored locally as `hexshift-colours`:
