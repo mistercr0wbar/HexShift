@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-0pu3MWzlusBueL5CXdA4FqETrStWwI5/2aucjUqIq90='; style-src 'sha256-PHPN0jXLqxpBXYBOfA8ljJ/0iBN18OGguGA+8I+9Xqg='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-3K174BHOQd/T9RO+kVm0SanSv122VZNyx8DZEK6bNUg='; style-src 'sha256-HgIS9kR4SLupPHnAaqMjzrRBjXHiIfd67Sugtpf0k6Q='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta
       name="theme-color"
@@ -291,7 +291,8 @@ input[type="range"] {
   margin: 0;
   accent-color: var(--accent);
 }
-input[type="color"] {
+input[type="color"],
+.colour-trigger {
   width: var(--ctl);
   height: var(--ctl);
   flex: none;
@@ -1328,7 +1329,7 @@ canvas#outlineCanvas {
 .custom-chip {
   background: conic-gradient(#e8802e, #6ef0ff, #e8802e);
 }
-.backgrounds input[type="color"] {
+.backgrounds .colour-trigger {
   width: var(--ctl-sm);
   height: var(--ctl-sm);
 }
@@ -1607,6 +1608,191 @@ dialog {
 }
 dialog::backdrop {
   background: #0008;
+}
+/* The picker floats above the workspace; changing a colour never resizes it. */
+.colour-trigger {
+  min-width: var(--ctl);
+  min-height: var(--ctl);
+  /* A colour readout must show the chosen colour immediately. */
+  transition: none;
+  box-shadow: inset 0 0 0 3px var(--surface);
+}
+.colour-picker {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  width: min(316px, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+  padding: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: 0 8px 32px #0005;
+  font-variant-numeric: tabular-nums;
+}
+.colour-picker:popover-open {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.picker-head h2 {
+  margin: 0;
+  font-size: 14px;
+}
+.picker-head .small-label {
+  margin: 0;
+}
+.picker-square {
+  position: relative;
+  flex: none;
+  height: 148px;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  touch-action: none;
+  cursor: crosshair;
+  background:
+    linear-gradient(to top, #000, transparent),
+    linear-gradient(to right, #fff, transparent), var(--picker-hue, #f00);
+}
+.picker-marker {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 2px solid white;
+  outline: 1px solid black;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.picker-hue {
+  appearance: none;
+  height: 20px;
+  padding: 0;
+  width: 100%;
+  accent-color: var(--ink);
+  border-radius: 5px;
+  background: linear-gradient(to right, red, #ff0, lime, cyan, blue, #f0f, red);
+}
+.picker-hue::-webkit-slider-thumb {
+  appearance: none;
+  width: 10px;
+  height: 20px;
+  border: 2px solid #fff;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: 0 0 0 1px #000;
+}
+.picker-hue::-moz-range-thumb {
+  width: 8px;
+  height: 18px;
+  border: 2px solid #fff;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: 0 0 0 1px #000;
+}
+.picker-hue::-moz-range-track {
+  background: transparent;
+}
+.picker-fields {
+  display: grid;
+  grid-template-columns: 1.7fr repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.picker-fields label {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.picker-fields input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 0 5px;
+  color: var(--ink);
+  background: var(--raised);
+  min-height: var(--ctl);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  font: inherit;
+}
+.picker-fields [aria-invalid="true"] {
+  outline: 2px solid var(--warn);
+}
+.saved-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 4px;
+}
+.saved-grid:empty {
+  display: none;
+}
+.saved-grid .saved-slot {
+  width: 100%;
+  min-width: 0;
+  height: 24px;
+  min-height: 24px;
+}
+.saved-slot:disabled {
+  border: 1px dashed var(--line-strong);
+  outline: none;
+  background: var(--ground);
+  opacity: 1;
+}
+.saved-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 160px;
+  padding: 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+.saved-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+.saved-menu button:hover {
+  background: var(--hover);
+}
+.picker-recent {
+  min-height: 24px;
+}
+.picker-message {
+  min-height: 1.4em;
+  margin: 0;
+}
+#paletteName {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+}
+#paletteNameError {
+  min-height: 1.4em;
+  max-width: 34em;
+}
+@media (pointer: coarse) {
+  .saved-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .saved-grid .saved-slot {
+    height: 44px;
+    min-height: 44px;
+  }
+  .colour-picker .text-button,
+  .saved-menu button {
+    min-height: 44px;
+  }
 }
 dialog h2 {
   font-size: 17px;
@@ -2427,13 +2613,16 @@ dialog details {
                   ><span class="sr-only">Custom</span></label
                 >
               </fieldset>
-              <input
-                type="color"
+              <button
+                type="button"
+                class="colour-trigger"
                 id="backgroundColour"
                 value="#808080"
                 aria-label="Custom preview background"
+                aria-haspopup="dialog"
+                aria-expanded="false"
                 hidden
-              />
+              ></button>
             </div>
           </section>
           <section class="mapbar" aria-labelledby="colourMapLabel">
@@ -2523,12 +2712,16 @@ dialog details {
                   </fieldset>
                   <div id="targetControls" class="target-row">
                     <label for="targetHex">Target</label>
-                    <input
-                      type="color"
+                    <button
+                      type="button"
+                      class="colour-trigger"
                       id="targetColour"
                       value="#00d9ff"
                       aria-label="Target colour picker"
-                    /><input
+                      aria-haspopup="dialog"
+                      aria-expanded="false"
+                    ></button
+                    ><input
                       id="targetHex"
                       class="hex"
                       value="#00D9FF"
@@ -2634,6 +2827,20 @@ dialog details {
                   </h2>
                 </div>
                 <div class="panel-body" id="swatchesBody">
+                  <div class="picker-head">
+                    <span class="small-label">Saved colours</span>
+                    <button
+                      id="saveCurrentColour"
+                      class="text-button"
+                      type="button"
+                    >
+                      Save current colour
+                    </button>
+                  </div>
+                  <div id="savedColours"></div>
+                  <p id="savedEmpty" class="readout">
+                    Save colours to keep them between launches.
+                  </p>
                   <label class="sr-only" for="paletteSet">Palette</label
                   ><select id="paletteSet"></select>
                   <div id="presets" class="swatches named"></div>
@@ -2642,6 +2849,21 @@ dialog details {
                       Open palette…</button
                     ><button id="savePalette" class="text-button" type="button">
                       Save as .gpl
+                    </button>
+                    <button
+                      id="saveMyPalette"
+                      class="text-button"
+                      type="button"
+                    >
+                      Save as palette…
+                    </button>
+                    <button
+                      id="removeMyPalette"
+                      class="text-button"
+                      type="button"
+                      hidden
+                    >
+                      Remove from My palettes
                     </button>
                   </div>
                   <input
@@ -2717,12 +2939,16 @@ dialog details {
                   </div>
                   <div class="target-row">
                     <label for="outlineHex">Colour</label>
-                    <input
-                      type="color"
+                    <button
+                      type="button"
+                      class="colour-trigger"
                       id="outlineColour"
                       value="#ffffff"
                       aria-label="Outline colour picker"
-                    /><input
+                      aria-haspopup="dialog"
+                      aria-expanded="false"
+                    ></button
+                    ><input
                       id="outlineHex"
                       class="hex"
                       value="#FFFFFF"
@@ -3006,6 +3232,26 @@ dialog details {
         </div>
       </form>
     </dialog>
+    <dialog id="paletteDialog" aria-labelledby="paletteDialogTitle">
+      <form id="paletteForm" method="dialog">
+        <h2 id="paletteDialogTitle">Keep in My palettes</h2>
+        <label for="paletteName">Palette name</label>
+        <input
+          id="paletteName"
+          maxlength="60"
+          required
+          autocomplete="off"
+          aria-describedby="paletteNameError"
+        />
+        <p id="paletteNameError" role="status"></p>
+        <div class="dialog-actions">
+          <button class="button" type="button" id="cancelPalette">
+            Cancel
+          </button>
+          <button class="button primary" type="submit">Save palette</button>
+        </div>
+      </form>
+    </dialog>
     <dialog id="aboutDialog" aria-labelledby="aboutTitle">
       <form method="dialog">
         <h2 id="aboutTitle">Hex Shift</h2>
@@ -3063,8 +3309,8 @@ dialog details {
   }
   function parseColour(value) {
     const s = String(value).trim().toLowerCase();
-    const hex2 = parseHex(s);
-    if (hex2) return hex2;
+    const hex3 = parseHex(s);
+    if (hex3) return hex3;
     const m = /^(rgba?|hsla?)\(\s*([^)]*?)\s*\)$/.exec(s);
     if (!m) return null;
     const parts = m[2].split(/\s*[,/]\s*|\s+/);
@@ -3262,7 +3508,7 @@ dialog details {
     };
   }
   function rampShift(p, samples, single) {
-    const ramp = p.ramp.map((hex2) => toModel(parseHex(hex2), p.model)).sort((a, b) => a[2] - b[2]), groups = shadeGroups(samples, ramp.length);
+    const ramp = p.ramp.map((hex3) => toModel(parseHex(hex3), p.model)).sort((a, b) => a[2] - b[2]), groups = shadeGroups(samples, ramp.length);
     const anchors = [];
     for (const g of groups)
       if (anchors.length && g.l - anchors.at(-1).l < 1 / 255)
@@ -3989,7 +4235,7 @@ dialog details {
       this.redoEntries = [];
       this.bytes = 0;
     }
-    record(before2, after2, label) {
+    record(before2, after2, label2) {
       const pixels2 = before2.pixels === after2.pixels ? { runs: [], bytes: 0 } : diff(before2.pixels, after2.pixels), mask = diff(before2.overrides, after2.overrides);
       const oldMeta = JSON.stringify(before2.meta), newMeta = JSON.stringify(after2.meta);
       if (!pixels2.runs.length && !mask.runs.length && oldMeta === newMeta) return;
@@ -3998,7 +4244,7 @@ dialog details {
         mask,
         before: before2.meta,
         after: after2.meta,
-        label,
+        label: label2,
         bytes: pixels2.bytes + mask.bytes + oldMeta.length * 2 + newMeta.length * 2
       };
       for (const e of this.redoEntries) this.bytes -= e.bytes;
@@ -5037,11 +5283,11 @@ dialog details {
     const getNodeType = Node && Node.prototype ? lookupGetter(Node.prototype, "nodeType") : null;
     const getNodeName = Node && Node.prototype ? lookupGetter(Node.prototype, "nodeName") : null;
     const getOwnerDocument = Node && Node.prototype ? lookupGetter(Node.prototype, "ownerDocument") : null;
-    const _readNodeType = function _readNodeType2(node) {
-      return getNodeType ? getNodeType(node) : node.nodeType;
+    const _readNodeType = function _readNodeType2(node2) {
+      return getNodeType ? getNodeType(node2) : node2.nodeType;
     };
-    const _readNodeName = function _readNodeName2(node) {
-      return getNodeName ? getNodeName(node) : node.nodeName;
+    const _readNodeName = function _readNodeName2(node2) {
+      return getNodeName ? getNodeName(node2) : node2.nodeName;
     };
     const getNamespaceURI = lookupAccessor(ElementPrototype, "namespaceURI");
     const _readNamespaceURI = function _readNamespaceURI2(element) {
@@ -5418,13 +5664,13 @@ dialog details {
       if (PARSER_MEDIA_TYPE === "application/xhtml+xml" && ALLOWED_NAMESPACES[elementNamespace]) return true;
       return false;
     };
-    const _forceRemove = function _forceRemove2(node) {
-      arrayPush(DOMPurify.removed, { element: node });
+    const _forceRemove = function _forceRemove2(node2) {
+      arrayPush(DOMPurify.removed, { element: node2 });
       try {
-        getParentNode(node).removeChild(node);
+        getParentNode(node2).removeChild(node2);
       } catch (_) {
-        remove(node);
-        if (!getParentNode(node)) throw typeErrorCreate("a node selected for removal could not be detached from its tree and cannot be safely returned; refusing to sanitize in place");
+        remove(node2);
+        if (!getParentNode(node2)) throw typeErrorCreate("a node selected for removal could not be detached from its tree and cannot be safely returned; refusing to sanitize in place");
       }
     };
     const _stripAttributeNode = function _stripAttributeNode2(element, attribute, name2) {
@@ -5497,35 +5743,35 @@ dialog details {
       let intoShadow = arguments.length > 2 && arguments[2] !== void 0 ? arguments[2] : false;
       const stack = [root];
       while (stack.length > 0) {
-        const node = stack.pop();
-        if (visit(node) === false) continue;
-        if (intoShadow && _readNodeType(node) === NODE_TYPE.element) {
-          const shadowRoot = getShadowRoot(node);
+        const node2 = stack.pop();
+        if (visit(node2) === false) continue;
+        if (intoShadow && _readNodeType(node2) === NODE_TYPE.element) {
+          const shadowRoot = getShadowRoot(node2);
           if (_isDocumentFragment(shadowRoot)) stack.push(shadowRoot);
         }
-        const childNodes = getChildNodes(node);
+        const childNodes = getChildNodes(node2);
         if (childNodes) for (let i = childNodes.length - 1; i >= 0; --i) stack.push(childNodes[i]);
       }
     };
     const _neutralizeSubtree = function _neutralizeSubtree2(root) {
-      _walkTree(root, (node) => {
-        if (_readNodeType(node) === NODE_TYPE.element) _stripDisallowedAttributes(node);
+      _walkTree(root, (node2) => {
+        if (_readNodeType(node2) === NODE_TYPE.element) _stripDisallowedAttributes(node2);
       });
     };
     const _collectLiveNodes = function _collectLiveNodes2(root) {
       const nodes = [];
-      _walkTree(root, (node) => {
-        nodes.push(node);
+      _walkTree(root, (node2) => {
+        nodes.push(node2);
       }, true);
       return nodes;
     };
     const _neutralizeEscapedElements = function _neutralizeEscapedElements2(root, before2) {
       const reachable = setCreate();
-      arrayForEach(_collectLiveNodes(root), (node) => {
-        if (_readNodeType(node) === NODE_TYPE.element) setAdd(reachable, node);
+      arrayForEach(_collectLiveNodes(root), (node2) => {
+        if (_readNodeType(node2) === NODE_TYPE.element) setAdd(reachable, node2);
       });
-      arrayForEach(before2, (node) => {
-        if (_readNodeType(node) === NODE_TYPE.element && !setHas(reachable, node)) _stripDisallowedAttributes(node);
+      arrayForEach(before2, (node2) => {
+        if (_readNodeType(node2) === NODE_TYPE.element && !setHas(reachable, node2)) _stripDisallowedAttributes(node2);
       });
     };
     const _neutralizeDiscarded = function _neutralizeDiscarded2(root, before2) {
@@ -5556,9 +5802,9 @@ dialog details {
         const live = _collectLiveNodes(root);
         const containers = [root];
         let pending = false;
-        arrayForEach(live, (node) => {
-          if (_readNodeType(node) === NODE_TYPE.documentFragment) arrayPush(containers, node);
-          else if (!pending && !setHas(visited, node)) pending = setHas(getOriginal(), node);
+        arrayForEach(live, (node2) => {
+          if (_readNodeType(node2) === NODE_TYPE.documentFragment) arrayPush(containers, node2);
+          else if (!pending && !setHas(visited, node2)) pending = setHas(getOriginal(), node2);
         });
         if (!pending) return;
         if (round >= MAX_UNVISITED_ROUNDS) throw typeErrorCreate("the tree kept changing during in-place sanitization; refusing to return it");
@@ -5569,17 +5815,17 @@ dialog details {
     };
     const _sanitizeUnvisitedIn = function _sanitizeUnvisitedIn2(container, inShadow, root, original2) {
       const iterator = _createNodeIterator(container);
-      let node;
-      while (node = iterator.nextNode()) {
-        if (!setHas(original2, node) || setHas(IN_PLACE_VISITED, node)) continue;
-        if (inShadow) _executeHooks(hooks.uponSanitizeShadowNode, node, null);
-        _sanitizeElements(node, root);
-        _sanitizeAttributes(node, root);
-        if (_isDocumentFragment(node.content)) _sanitizeShadowDOM2(node.content);
+      let node2;
+      while (node2 = iterator.nextNode()) {
+        if (!setHas(original2, node2) || setHas(IN_PLACE_VISITED, node2)) continue;
+        if (inShadow) _executeHooks(hooks.uponSanitizeShadowNode, node2, null);
+        _sanitizeElements(node2, root);
+        _sanitizeAttributes(node2, root);
+        if (_isDocumentFragment(node2.content)) _sanitizeShadowDOM2(node2.content);
       }
     };
-    const _markVisited = function _markVisited2(node) {
-      if (IN_PLACE_VISITED) setAdd(IN_PLACE_VISITED, node);
+    const _markVisited = function _markVisited2(node2) {
+      if (IN_PLACE_VISITED) setAdd(IN_PLACE_VISITED, node2);
     };
     const _isPatchLinkageAttribute = function _isPatchLinkageAttribute2(lcName, lcTag) {
       if (!SAFE_FOR_XML) return false;
@@ -5588,18 +5834,18 @@ dialog details {
     };
     const _neutralizePatchLinkage = function _neutralizePatchLinkage2(root) {
       if (!SAFE_FOR_XML) return;
-      _walkTree(root, (node) => {
-        const nodeType = _readNodeType(node);
-        if (nodeType === NODE_TYPE.processingInstruction || nodeType === NODE_TYPE.comment && regExpTest(COMMENT_MARKUP_PROBE, node.data)) {
+      _walkTree(root, (node2) => {
+        const nodeType = _readNodeType(node2);
+        if (nodeType === NODE_TYPE.processingInstruction || nodeType === NODE_TYPE.comment && regExpTest(COMMENT_MARKUP_PROBE, node2.data)) {
           try {
-            remove(node);
+            remove(node2);
           } catch (_) {
           }
           return false;
         }
         if (nodeType === NODE_TYPE.element) {
-          const element = node;
-          const lcTag = transformCaseFunc(_readNodeName(node));
+          const element = node2;
+          const lcTag = transformCaseFunc(_readNodeName(node2));
           try {
             if (element.hasAttribute && element.hasAttribute("patchsrc")) element.removeAttribute("patchsrc");
             if (element.hasAttribute && element.hasAttribute("for") && _isPatchLinkageAttribute("for", lcTag)) element.removeAttribute("for");
@@ -5645,18 +5891,18 @@ dialog details {
       value = stringReplace(value, TMPLIT_EXPR$1, " ");
       return value;
     };
-    const _scrubTemplateExpressions2 = function _scrubTemplateExpressions(node) {
+    const _scrubTemplateExpressions2 = function _scrubTemplateExpressions(node2) {
       var _node$querySelectorAl;
-      _scrubOwnCharacterData(node);
-      const templates = (_node$querySelectorAl = node.querySelectorAll) === null || _node$querySelectorAl === void 0 ? void 0 : _node$querySelectorAl.call(node, "template");
+      _scrubOwnCharacterData(node2);
+      const templates = (_node$querySelectorAl = node2.querySelectorAll) === null || _node$querySelectorAl === void 0 ? void 0 : _node$querySelectorAl.call(node2, "template");
       if (templates) arrayForEach(templates, (tmpl) => {
         if (_isDocumentFragment(tmpl.content)) _scrubTemplateExpressions2(tmpl.content);
       });
     };
-    const _scrubOwnCharacterData = function _scrubOwnCharacterData2(node) {
-      node.normalize();
-      const doc = getOwnerDocument ? getOwnerDocument(node) : node.ownerDocument;
-      const walker = createNodeIterator.call(doc || node, node, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_COMMENT | NodeFilter.SHOW_CDATA_SECTION | NodeFilter.SHOW_PROCESSING_INSTRUCTION, null);
+    const _scrubOwnCharacterData = function _scrubOwnCharacterData2(node2) {
+      node2.normalize();
+      const doc = getOwnerDocument ? getOwnerDocument(node2) : node2.ownerDocument;
+      const walker = createNodeIterator.call(doc || node2, node2, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_COMMENT | NodeFilter.SHOW_CDATA_SECTION | NodeFilter.SHOW_PROCESSING_INSTRUCTION, null);
       let currentNode = walker.nextNode();
       while (currentNode) {
         currentNode.data = _stripTemplateExpressions(currentNode.data);
@@ -5920,17 +6166,17 @@ dialog details {
           _sanitizeShadowDOM2(item.shadow);
           continue;
         }
-        const node = item.node;
-        const isElement = _readNodeType(node) === NODE_TYPE.element;
-        const childNodes = getChildNodes(node);
+        const node2 = item.node;
+        const isElement = _readNodeType(node2) === NODE_TYPE.element;
+        const childNodes = getChildNodes(node2);
         if (childNodes) for (let i = childNodes.length - 1; i >= 0; --i) stack.push({
           node: childNodes[i],
           shadow: null
         });
         if (isElement) {
-          const rootName = getNodeName ? getNodeName(node) : null;
+          const rootName = getNodeName ? getNodeName(node2) : null;
           if (typeof rootName === "string" && transformCaseFunc(rootName) === "template") {
-            const content = node.content;
+            const content = node2.content;
             if (_isDocumentFragment(content)) stack.push({
               node: content,
               shadow: null
@@ -5938,7 +6184,7 @@ dialog details {
           }
         }
         if (isElement) {
-          const sr = getShadowRoot(node);
+          const sr = getShadowRoot(node2);
           if (_isDocumentFragment(sr)) stack.push({
             node: null,
             shadow: sr
@@ -7382,8 +7628,8 @@ dialog details {
     id: "skin-" + name2.toLowerCase(),
     label: "Skin tones \xB7 " + name2,
     entries: ["Light", "Medium-light", "Medium", "Medium-dark", "Dark"].map(
-      (label, i) => ({
-        label,
+      (label2, i) => ({
+        label: label2,
         hex: "#" + rows[i][0],
         ramp: rows[i].map((v) => "#" + v)
       })
@@ -7404,8 +7650,8 @@ dialog details {
       id: "rainbow",
       label: "Rainbow \xB7 equal brightness",
       entries: Array.from({ length: 12 }, (_, i) => {
-        const hex2 = toHex(...oklchToRgb(0.7, 0.15, i * 30 + 25));
-        return { label: hex2, hex: hex2 };
+        const hex3 = toHex(...oklchToRgb(0.7, 0.15, i * 30 + 25));
+        return { label: hex3, hex: hex3 };
       })
     },
     tones("Fluent", [
@@ -7448,15 +7694,15 @@ dialog details {
     if (new TextEncoder().encode(text2).length > MAX_PALETTE_BYTES)
       throw Error("Palette files must be 256 KB or smaller.");
     const lines = text2.replace(/^﻿/, "").split(/\r\n|\r|\n/), out = [], seen = /* @__PURE__ */ new Set();
-    const add = (rgb, label = "") => {
+    const add = (rgb, label2 = "") => {
       if (rgb.some((v) => !Number.isInteger(v)))
         throw Error("Invalid colour in palette.");
-      const hex2 = toHex(...rgb);
-      if (seen.has(hex2)) return;
-      seen.add(hex2);
+      const hex3 = toHex(...rgb);
+      if (seen.has(hex3)) return;
+      seen.add(hex3);
       if (out.length >= MAX_PALETTE_COLOURS)
         throw Error("Palettes can have at most 1,024 colours.");
-      out.push({ hex: hex2, label: label.trim().slice(0, 60) || hex2 });
+      out.push({ hex: hex3, label: label2.trim().slice(0, 60) || hex3 });
     };
     const first = lines[0].trim();
     if (first === "GIMP Palette") {
@@ -7508,11 +7754,11 @@ dialog details {
   }
   function writeGpl(name2, entries2) {
     const clean = (s) => String(s).replace(/[\x00-\x1f\x7f]/g, " ").trim();
-    return "GIMP Palette\nName: " + (clean(name2) || "Hex Shift") + "\nColumns: 0\n#\n" + entries2.map(({ hex: hex2, label }) => {
+    return "GIMP Palette\nName: " + (clean(name2) || "Hex Shift") + "\nColumns: 0\n#\n" + entries2.map(({ hex: hex3, label: label2 }) => {
       const [r, g, b] = [1, 3, 5].map(
-        (i) => parseInt(hex2.slice(i, i + 2), 16)
+        (i) => parseInt(hex3.slice(i, i + 2), 16)
       );
-      return [r, g, b].map((v) => String(v).padStart(3)).join(" ") + "	" + clean(label || hex2);
+      return [r, g, b].map((v) => String(v).padStart(3)).join(" ") + "	" + clean(label2 || hex3);
     }).join("\n") + "\n";
   }
   var isPaletteFile = (file) => /\.(gpl|hex|pal|txt)$/i.test(file.name || "") || file.type === "text/plain";
@@ -7723,38 +7969,38 @@ dialog details {
 
   // src/menu.js
   var make = (tag, className, text2) => {
-    const node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text2 !== void 0) node.textContent = text2;
-    return node;
+    const node2 = document.createElement(tag);
+    if (className) node2.className = className;
+    if (text2 !== void 0) node2.textContent = text2;
+    return node2;
   };
   var ariaKeys = (shortcut) => shortcut.replace(/Ctrl/g, "Control").replace(/\bEsc\b/g, "Escape").replace(/\s+/g, "").replace(/−/g, "-");
-  function createMenubar({ root, menus, label = "Application menu" }) {
+  function createMenubar({ root, menus, label: label2 = "Application menu" }) {
     root.setAttribute("role", "menubar");
-    root.setAttribute("aria-label", label);
+    root.setAttribute("aria-label", label2);
     let open = [], opener = null, returnTo = null, altAlone = false;
     const tops = menus.map((menu) => {
-      const button = make("button", "menu-top");
-      button.type = "button";
-      button.setAttribute("role", "menuitem");
-      button.setAttribute("aria-haspopup", "menu");
-      button.setAttribute("aria-expanded", "false");
-      button.tabIndex = -1;
+      const button2 = make("button", "menu-top");
+      button2.type = "button";
+      button2.setAttribute("role", "menuitem");
+      button2.setAttribute("aria-haspopup", "menu");
+      button2.setAttribute("aria-expanded", "false");
+      button2.tabIndex = -1;
       const at = menu.label.toLowerCase().indexOf(menu.mnemonic);
-      if (at < 0) button.textContent = menu.label;
+      if (at < 0) button2.textContent = menu.label;
       else
-        button.append(
+        button2.append(
           menu.label.slice(0, at),
           make("u", "mnemonic", menu.label[at]),
           menu.label.slice(at + 1)
         );
-      button.setAttribute("aria-label", menu.label);
-      button.setAttribute(
+      button2.setAttribute("aria-label", menu.label);
+      button2.setAttribute(
         "aria-keyshortcuts",
         "Alt+" + menu.mnemonic.toUpperCase()
       );
-      root.append(button);
-      return { menu, button };
+      root.append(button2);
+      return { menu, button: button2 };
     }), fold = make("button", "menu-fold", "Menu");
     fold.type = "button";
     fold.setAttribute("role", "menuitem");
@@ -7763,9 +8009,9 @@ dialog details {
     fold.tabIndex = -1;
     root.append(fold);
     const visibleTops = () => getComputedStyle(fold).display !== "none" ? [fold] : tops.map((t) => t.button);
-    function setStop(button) {
+    function setStop(button2) {
       for (const b of [...tops.map((t) => t.button), fold])
-        b.tabIndex = b === button ? 0 : -1;
+        b.tabIndex = b === button2 ? 0 : -1;
     }
     setStop(tops[0].button);
     const narrow = () => innerWidth < 600;
@@ -7902,20 +8148,20 @@ dialog details {
         returnTo.focus({ preventScroll: true });
       returnTo = null;
     }
-    function openMenu(button, items, name2, via) {
-      if (opener === button && open.length) return;
+    function openMenu(button2, items, name2, via) {
+      if (opener === button2 && open.length) return;
       const wasOpen = open.length > 0;
       closeFrom(0);
       if (opener) opener.setAttribute("aria-expanded", "false");
       if (!wasOpen && !root.contains(document.activeElement))
         returnTo = document.activeElement;
-      opener = button;
-      setStop(button);
-      button.setAttribute("aria-expanded", "true");
+      opener = button2;
+      setStop(button2);
+      button2.setAttribute("aria-expanded", "true");
       const popup = build(items, name2);
       popup._from = null;
       open.push(popup);
-      place(popup, button, false);
+      place(popup, button2, false);
       if (via === "keyboard") {
         root.classList.add("show-keys");
         focusItem(popup, "first");
@@ -7949,8 +8195,8 @@ dialog details {
       closeAll(true);
       item.run?.();
     }
-    function barKey(e, button) {
-      const list = visibleTops(), at = list.indexOf(button), move = (step) => {
+    function barKey(e, button2) {
+      const list = visibleTops(), at = list.indexOf(button2), move = (step) => {
         const next = list[(at + step + list.length) % list.length];
         setStop(next);
         next.focus();
@@ -7967,10 +8213,10 @@ dialog details {
         case "Enter":
         case " ":
           e.preventDefault();
-          return openFor(button, "keyboard");
+          return openFor(button2, "keyboard");
         case "ArrowUp":
           e.preventDefault();
-          openFor(button, "keyboard");
+          openFor(button2, "keyboard");
           return focusItem(open[0], "last");
         case "Home":
           e.preventDefault();
@@ -7990,16 +8236,16 @@ dialog details {
           }
       }
     }
-    function openFor(button, via) {
-      if (button === fold)
+    function openFor(button2, via) {
+      if (button2 === fold)
         return openMenu(
           fold,
           menus.map((m) => ({ type: "sub", label: m.label, items: m.items })),
-          label,
+          label2,
           via
         );
-      const top = tops.find((t) => t.button === button);
-      return openMenu(button, top.menu.items, top.menu.label, via);
+      const top = tops.find((t) => t.button === button2);
+      return openMenu(button2, top.menu.items, top.menu.label, via);
     }
     function keyInPopup(e, popup) {
       const depth2 = open.indexOf(popup), focused = document.activeElement, item = itemsOf(popup).includes(focused) ? focused : null;
@@ -8075,15 +8321,15 @@ dialog details {
         }
       }
     }
-    for (const { button } of tops) {
-      button.addEventListener("click", () => {
-        if (opener === button && open.length) closeAll(true);
-        else openFor(button, "pointer");
+    for (const { button: button2 } of tops) {
+      button2.addEventListener("click", () => {
+        if (opener === button2 && open.length) closeAll(true);
+        else openFor(button2, "pointer");
       });
-      button.addEventListener("pointerenter", () => {
-        if (open.length && opener !== button) openFor(button, "pointer");
+      button2.addEventListener("pointerenter", () => {
+        if (open.length && opener !== button2) openFor(button2, "pointer");
       });
-      button.addEventListener("keydown", (e) => barKey(e, button));
+      button2.addEventListener("keydown", (e) => barKey(e, button2));
     }
     fold.addEventListener("click", () => {
       if (opener === fold && open.length) closeAll(true);
@@ -8118,6 +8364,10 @@ dialog details {
     document.addEventListener(
       "keydown",
       (e) => {
+        if (document.querySelector("dialog[open],.colour-picker:popover-open")) {
+          altAlone = false;
+          return;
+        }
         if (e.key === "Alt") {
           altAlone = !e.ctrlKey && !e.shiftKey && !e.metaKey;
           return;
@@ -8133,11 +8383,11 @@ dialog details {
           const letter = e.key.toLowerCase(), hit = tops.find((t) => t.menu.mnemonic === letter);
           if (hit) {
             e.preventDefault();
-            const button = getComputedStyle(fold).display !== "none" ? fold : hit.button;
+            const button2 = getComputedStyle(fold).display !== "none" ? fold : hit.button;
             if (!root.contains(document.activeElement))
               returnTo = document.activeElement;
-            const popup = openFor(button, "keyboard");
-            if (button === fold && popup) {
+            const popup = openFor(button2, "keyboard");
+            if (button2 === fold && popup) {
               const row = itemsOf(popup).find(
                 (i) => i.textContent.trim().toLowerCase().startsWith(hit.menu.label.toLowerCase())
               );
@@ -8149,6 +8399,10 @@ dialog details {
       true
     );
     document.addEventListener("keyup", (e) => {
+      if (document.querySelector(".colour-picker:popover-open")) {
+        altAlone = false;
+        return;
+      }
       if (e.key === "Alt" && altAlone) {
         altAlone = false;
         if (open.length) closeAll(true);
@@ -8345,12 +8599,616 @@ dialog details {
     return api;
   }
 
+  // src/colours.js
+  var COLOURS_KEY = "hexshift-colours";
+  var MAX_SAVED = 48;
+  var MAX_MY_PALETTES = 50;
+  var MAX_MY_COLOURS = 256;
+  var MAX_COLOURS_BYTES = 256 * 1024;
+  var empty = () => ({ v: 1, saved: [], palettes: [] });
+  var hex = (value) => {
+    if (typeof value !== "string" || !/^#[\da-f]{6}$/i.test(value))
+      throw Error("Saved colours must be #RRGGBB.");
+    return value.toUpperCase();
+  };
+  var label = (value, required = false) => {
+    if (typeof value !== "string" || value.length > 60 || /[\x00-\x1f\x7f]/.test(value))
+      throw Error("Palette names and labels must be at most 60 characters.");
+    const text2 = value.trim();
+    if (required && !text2) throw Error("Give the palette a name.");
+    return text2;
+  };
+  function validateColours(source) {
+    if (source?.v !== 1 || !Array.isArray(source.saved) || !Array.isArray(source.palettes))
+      throw Error("This saved-colour format is not supported.");
+    if (source.saved.length > MAX_SAVED)
+      throw Error("You can save up to 48 colours.");
+    if (source.palettes.length > MAX_MY_PALETTES)
+      throw Error("You can keep up to 50 palettes.");
+    const names = /* @__PURE__ */ new Set();
+    const data = {
+      v: 1,
+      saved: [...new Set(source.saved.map(hex))],
+      palettes: source.palettes.map((palette2) => {
+        const name2 = label(palette2?.name, true), key = name2.toLowerCase();
+        if (names.has(key))
+          throw Error("A palette with that name already exists.");
+        names.add(key);
+        if (!Array.isArray(palette2.colours) || !palette2.colours.length || palette2.colours.length > MAX_MY_COLOURS)
+          throw Error("A saved palette has 1 to 256 colours.");
+        return {
+          name: name2,
+          colours: palette2.colours.map((entry) => {
+            const out = { hex: hex(entry?.hex) };
+            if (entry.label !== void 0) out.label = label(entry.label);
+            return out;
+          })
+        };
+      })
+    };
+    if (new TextEncoder().encode(JSON.stringify(data)).length > MAX_COLOURS_BYTES)
+      throw Error("Saved colours and palettes must fit within 256 KB.");
+    return data;
+  }
+  function parseColours(text2) {
+    if (typeof text2 !== "string" || new TextEncoder().encode(text2).length > MAX_COLOURS_BYTES)
+      throw Error("Saved colours and palettes must fit within 256 KB.");
+    return validateColours(JSON.parse(text2));
+  }
+  function createColourStore(storage, notify = () => {
+  }) {
+    let data = empty();
+    const listeners = /* @__PURE__ */ new Set();
+    const api = {
+      error: "",
+      get: () => structuredClone(data),
+      saved: () => data.saved.slice(),
+      palette: (index) => structuredClone(data.palettes[index] ?? null),
+      subscribe(fn) {
+        listeners.add(fn);
+        return () => listeners.delete(fn);
+      },
+      add(value) {
+        return change((next) => {
+          const colour = hex(value);
+          if (next.saved.includes(colour))
+            throw Error("That colour is already saved.");
+          if (next.saved.length >= MAX_SAVED)
+            throw Error(
+              "All 48 saved-colour slots are full. Remove a colour first."
+            );
+          next.saved.push(colour);
+        }, "Colour saved.");
+      },
+      remove(index) {
+        return change((next) => {
+          if (!Number.isInteger(index) || index < 0 || index >= next.saved.length)
+            throw Error("Choose a saved colour.");
+          next.saved.splice(index, 1);
+        }, "Saved colour removed.");
+      },
+      move(from, to) {
+        return change((next) => {
+          if (![from, to].every(
+            (n) => Number.isInteger(n) && n >= 0 && n < next.saved.length
+          ))
+            throw Error("Choose a saved colour.");
+          next.saved.splice(to, 0, next.saved.splice(from, 1)[0]);
+        }, "Saved colour moved.");
+      },
+      savePalette(name2, entries2) {
+        return change((next) => {
+          next.palettes.push({
+            name: name2,
+            colours: entries2.map((entry) => ({
+              hex: entry.hex,
+              ...entry.label === void 0 ? {} : { label: entry.label }
+            }))
+          });
+        }, "Palette kept in My palettes.");
+      },
+      removePalette(index) {
+        return change((next) => {
+          next.palettes.splice(index, 1);
+        }, "Palette removed from My palettes.");
+      }
+    };
+    try {
+      const text2 = storage()?.getItem(COLOURS_KEY);
+      if (text2 !== null && text2 !== void 0) data = parseColours(text2);
+    } catch {
+      notify("Saved colours could not be read and were ignored.");
+    }
+    function change(fn, message) {
+      try {
+        const next = structuredClone(data);
+        fn(next);
+        const clean = validateColours(next);
+        const target = storage();
+        if (!target) throw Error("Local colour storage is unavailable.");
+        target.setItem(COLOURS_KEY, JSON.stringify(clean));
+        data = clean;
+        api.error = "";
+      } catch (error) {
+        api.error = "Could not save colours: " + error.message;
+        notify(api.error);
+        return false;
+      }
+      for (const listener of listeners) listener();
+      notify(message);
+      return true;
+    }
+    return api;
+  }
+
+  // src/picker.js
+  var node = (tag, className, text2) => {
+    const el = document.createElement(tag);
+    if (className) el.className = className;
+    if (text2 !== void 0) el.textContent = text2;
+    return el;
+  };
+  var button = (text2, fn, className = "text-button") => {
+    const el = node("button", className, text2);
+    el.type = "button";
+    el.onclick = fn;
+    return el;
+  };
+  function rgbToHsv(rgb) {
+    const [r, g, b] = rgb.map((v) => v / 255), max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+    let h2 = 0;
+    if (d)
+      h2 = max === r ? (g - b) / d % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return [(h2 * 60 + 360) % 360, max ? d / max : 0, max];
+  }
+  function hsvToHex(h2, s, v) {
+    const f = (n) => {
+      const k = (n + h2 / 60) % 6;
+      return Math.round(255 * (v - v * s * Math.max(0, Math.min(k, 4 - k, 1))));
+    };
+    return toHex(f(5), f(3), f(1));
+  }
+  function createSavedGrid(box, { store, onUse, slots = false }) {
+    box.classList.add("saved-grid");
+    box.setAttribute("role", "group");
+    box.setAttribute("aria-label", "Saved colours");
+    const menu = node("div", "saved-menu");
+    menu.hidden = true;
+    menu.setAttribute("role", "menu");
+    menu.setAttribute("aria-label", "Saved colour actions");
+    box.after(menu);
+    let dragging = null, timer = 0, held = false, start = null, returnTo = null;
+    const close = (focus = false) => {
+      menu.hidden = true;
+      if (focus) returnTo?.focus();
+    };
+    function focusIndex(index) {
+      box.querySelectorAll("button")[Math.max(0, Math.min(index, store.saved().length - 1))]?.focus();
+    }
+    function context(index, anchor) {
+      clearTimeout(timer);
+      returnTo = anchor;
+      const length = store.saved().length;
+      const actions = [
+        ["Move left", index - 1],
+        ["Move right", index + 1],
+        ["Move to start", 0],
+        ["Move to end", length - 1],
+        ["Remove colour", null]
+      ];
+      menu.replaceChildren(
+        ...actions.map(([text2, to]) => {
+          const item = button(text2, () => {
+            close();
+            if (to === null) store.remove(index);
+            else store.move(index, to);
+            focusIndex(to === null ? index : to);
+          });
+          item.setAttribute("role", "menuitem");
+          item.disabled = to !== null && (to < 0 || to >= length || to === index);
+          return item;
+        })
+      );
+      menu.hidden = false;
+      const rect = anchor.getBoundingClientRect();
+      menu.style.left = Math.max(8, Math.min(rect.left, innerWidth - menu.offsetWidth - 8)) + "px";
+      menu.style.top = Math.max(8, Math.min(rect.bottom, innerHeight - menu.offsetHeight - 8)) + "px";
+      menu.querySelector("button:not(:disabled)")?.focus();
+    }
+    menu.onkeydown = (e) => {
+      e.stopPropagation();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        close(true);
+      }
+      const list = [...menu.querySelectorAll("button:not(:disabled)")];
+      if (["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) {
+        e.preventDefault();
+        const at = list.indexOf(document.activeElement), direction = e.key === "ArrowUp" ? -1 : 1;
+        list[e.key === "Home" ? 0 : e.key === "End" ? list.length - 1 : (at + direction + list.length) % list.length]?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", (e) => {
+      if (!menu.contains(e.target)) close();
+    });
+    function render() {
+      close();
+      const saved = store.saved();
+      box.replaceChildren(
+        ...Array.from({ length: slots ? MAX_SAVED : saved.length }, (_, i) => {
+          const hex3 = saved[i], el = button(
+            "",
+            () => {
+              if (!held) onUse(hex3);
+            },
+            "swatch saved-slot"
+          );
+          el.disabled = !hex3;
+          el.setAttribute(
+            "aria-label",
+            hex3 ? "Use " + hex3 + ", saved colour " + (i + 1) : "Empty saved colour slot " + (i + 1)
+          );
+          el.title = hex3 ? hex3 + " \xB7 Right-click or hold for actions; Alt+arrows moves; Delete removes" : "Empty slot";
+          if (!hex3) return el;
+          el.style.backgroundColor = hex3;
+          el.draggable = true;
+          el.oncontextmenu = (e) => {
+            e.preventDefault();
+            context(i, el);
+          };
+          el.onkeydown = (e) => {
+            if (e.key === "ContextMenu" || e.shiftKey && e.key === "F10") {
+              e.preventDefault();
+              e.stopPropagation();
+              context(i, el);
+            } else if (e.key === "Delete") {
+              e.preventDefault();
+              store.remove(i);
+              focusIndex(i);
+            } else if (e.altKey && ["ArrowLeft", "ArrowRight"].includes(e.key)) {
+              e.preventDefault();
+              e.stopPropagation();
+              const to = clamp(
+                i + (e.key === "ArrowLeft" ? -1 : 1),
+                0,
+                saved.length - 1
+              );
+              store.move(i, to);
+              focusIndex(to);
+            } else if ([
+              "ArrowLeft",
+              "ArrowRight",
+              "ArrowUp",
+              "ArrowDown",
+              "Home",
+              "End"
+            ].includes(e.key)) {
+              e.preventDefault();
+              const columns = getComputedStyle(box).gridTemplateColumns.split(" ").length;
+              focusIndex(
+                e.key === "Home" ? 0 : e.key === "End" ? saved.length - 1 : i + {
+                  ArrowLeft: -1,
+                  ArrowRight: 1,
+                  ArrowUp: -columns,
+                  ArrowDown: columns
+                }[e.key]
+              );
+            }
+          };
+          el.onpointerdown = (e) => {
+            held = false;
+            start = [e.clientX, e.clientY];
+            if (e.pointerType !== "mouse")
+              timer = setTimeout(() => {
+                held = true;
+                context(i, el);
+              }, 550);
+          };
+          el.onpointermove = (e) => {
+            if (start && Math.hypot(e.clientX - start[0], e.clientY - start[1]) > 6)
+              clearTimeout(timer);
+          };
+          el.onpointerup = el.onpointercancel = () => clearTimeout(timer);
+          el.ondragstart = (e) => {
+            clearTimeout(timer);
+            dragging = i;
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData("text/plain", hex3);
+          };
+          el.ondragend = () => {
+            dragging = null;
+          };
+          el.ondragover = (e) => {
+            if (dragging !== null) {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+            }
+          };
+          el.ondrop = (e) => {
+            if (dragging !== null) {
+              e.preventDefault();
+              e.stopPropagation();
+              const from = dragging;
+              dragging = null;
+              store.move(from, i);
+              focusIndex(i);
+            }
+          };
+          return el;
+        })
+      );
+    }
+    store.subscribe(render);
+    render();
+    return { render, close };
+  }
+  function createPicker({ store, recent: recent2, pickScreen }) {
+    const pop = node("div", "colour-picker");
+    pop.id = "colourPicker";
+    pop.setAttribute("popover", "auto");
+    pop.setAttribute("role", "dialog");
+    pop.setAttribute("aria-labelledby", "pickerTitle");
+    const head = node("div", "picker-head"), title = node("h2", "", "Colour");
+    title.id = "pickerTitle";
+    const done = button("Done", () => pop.hidePopover());
+    head.append(title, done);
+    const square = node("div", "picker-square"), marker = node("span", "picker-marker");
+    square.tabIndex = 0;
+    square.setAttribute("role", "slider");
+    square.setAttribute("aria-label", "Saturation and brightness");
+    square.setAttribute("aria-valuemin", "0");
+    square.setAttribute("aria-valuemax", "100");
+    square.setAttribute("aria-describedby", "pickerKeys");
+    square.append(marker);
+    const keys = node(
+      "p",
+      "sr-only",
+      "Left and right change saturation; up and down change brightness. Shift makes larger changes."
+    );
+    keys.id = "pickerKeys";
+    const hue = node("input", "picker-hue");
+    hue.type = "range";
+    hue.min = "0";
+    hue.max = "360";
+    hue.step = "1";
+    hue.setAttribute("aria-label", "Hue");
+    const fields = node("div", "picker-fields");
+    const hexLabel = node("label", "", "Hex"), hexInput = node("input", "hex");
+    hexInput.id = "pickerHex";
+    hexInput.maxLength = 7;
+    hexInput.spellcheck = false;
+    hexInput.autocomplete = "off";
+    hexLabel.append(hexInput);
+    const channels = ["Red", "Green", "Blue"].map((name2) => {
+      const label2 = node("label", "", name2[0]), input = node("input");
+      input.type = "number";
+      input.min = "0";
+      input.max = "255";
+      input.step = "1";
+      input.setAttribute("aria-label", name2);
+      label2.append(input);
+      fields.append(label2);
+      return input;
+    });
+    fields.prepend(hexLabel);
+    const screen = button("\u25CE Pick from screen", () => {
+      const destination = active;
+      pickScreen((hex3) => {
+        if (active === destination && pop.matches(":popover-open"))
+          applyHex(hex3, true);
+        else {
+          destination.input(hex3);
+          destination.commit();
+        }
+      });
+    });
+    screen.id = "pickerScreen";
+    screen.hidden = !pickScreen;
+    const savedHead = node("div", "picker-head"), savedLabel = node("span", "small-label", "Saved colours"), save2 = button("+ Save", () => store.add(value));
+    save2.id = "pickerSave";
+    savedHead.append(savedLabel, save2);
+    const saved = node("div"), recentsHead = node("p", "small-label", "Recent"), recents = node("div", "swatches picker-recent");
+    const message = node("p", "readout picker-message");
+    message.setAttribute("role", "status");
+    pop.append(
+      head,
+      square,
+      keys,
+      hue,
+      fields,
+      screen,
+      savedHead,
+      saved,
+      recentsHead,
+      recents,
+      message
+    );
+    document.body.append(pop);
+    const grid = createSavedGrid(saved, {
+      store,
+      slots: true,
+      onUse: (hex3) => applyHex(hex3, true)
+    });
+    let active = null, opener = null, value = "#000000", hsv = [0, 0, 0];
+    function paint() {
+      const [h2, s, v] = hsv;
+      square.style.setProperty("--picker-hue", hsvToHex(h2, 1, 1));
+      marker.style.left = s * 100 + "%";
+      marker.style.top = (1 - v) * 100 + "%";
+      square.setAttribute("aria-valuenow", String(Math.round(s * 100)));
+      square.setAttribute(
+        "aria-valuetext",
+        Math.round(s * 100) + "% saturation, " + Math.round(v * 100) + "% brightness"
+      );
+      hue.value = String(h2);
+      if (document.activeElement !== hexInput) hexInput.value = value;
+      const rgb = parseHex(value);
+      channels.forEach((input, i) => {
+        if (document.activeElement !== input) input.value = rgb[i];
+      });
+      save2.disabled = store.saved().includes(value) || store.saved().length >= MAX_SAVED;
+    }
+    function applyHex(hex3, commit2 = false, fromHsv = false) {
+      const rgb = parseHex(hex3);
+      if (!rgb || !active) return;
+      value = toHex(...rgb);
+      if (!fromHsv) {
+        const next = rgbToHsv(rgb);
+        if (!next[1]) next[0] = hsv[0];
+        hsv = next;
+      }
+      paint();
+      active.input(value);
+      if (commit2) active.commit();
+    }
+    function fromSquare(e) {
+      const r = square.getBoundingClientRect();
+      hsv[1] = clamp((e.clientX - r.left) / r.width, 0, 1);
+      hsv[2] = 1 - clamp((e.clientY - r.top) / r.height, 0, 1);
+      applyHex(hsvToHex(...hsv), false, true);
+    }
+    square.onpointerdown = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      square.focus();
+      square.setPointerCapture(e.pointerId);
+      fromSquare(e);
+    };
+    square.onpointermove = (e) => {
+      if (square.hasPointerCapture(e.pointerId)) fromSquare(e);
+    };
+    square.onpointerup = square.onpointercancel = (e) => {
+      if (square.hasPointerCapture(e.pointerId)) {
+        square.releasePointerCapture(e.pointerId);
+        active?.commit();
+      }
+    };
+    square.onkeydown = (e) => {
+      const step = e.shiftKey ? 0.1 : 0.01;
+      if (e.key === "ArrowLeft") hsv[1] -= step;
+      else if (e.key === "ArrowRight") hsv[1] += step;
+      else if (e.key === "ArrowUp") hsv[2] += step;
+      else if (e.key === "ArrowDown") hsv[2] -= step;
+      else if (e.key === "Home") hsv[1] = 0;
+      else if (e.key === "End") hsv[1] = 1;
+      else return;
+      e.preventDefault();
+      hsv[1] = clamp(hsv[1], 0, 1);
+      hsv[2] = clamp(hsv[2], 0, 1);
+      applyHex(hsvToHex(...hsv), true, true);
+    };
+    hue.oninput = () => {
+      hsv[0] = Number(hue.value);
+      applyHex(hsvToHex(...hsv), false, true);
+    };
+    hue.onchange = () => active?.commit();
+    hexInput.oninput = () => {
+      const rgb = parseHex(hexInput.value);
+      hexInput.setAttribute("aria-invalid", String(!rgb));
+      if (rgb) applyHex(toHex(...rgb));
+    };
+    hexInput.onchange = () => {
+      active?.commit();
+      if (parseHex(hexInput.value)) hexInput.value = value;
+    };
+    const rgbInput = () => {
+      const rgb = channels.map(
+        (input) => input.value === "" ? NaN : Number(input.value)
+      );
+      const valid = rgb.every((n) => Number.isInteger(n) && n >= 0 && n <= 255);
+      channels.forEach(
+        (input) => input.setAttribute("aria-invalid", String(!valid))
+      );
+      if (valid) applyHex(toHex(...rgb));
+    };
+    for (const input of channels) {
+      input.oninput = rgbInput;
+      input.onchange = () => active?.commit();
+    }
+    pop.onkeydown = (e) => {
+      e.stopPropagation();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        pop.hidePopover();
+      }
+      if (e.key === "Tab") {
+        const list = [
+          ...pop.querySelectorAll("button:not(:disabled),input,[tabindex='0']")
+        ].filter((el) => el.getClientRects().length && !el.closest("[hidden]"));
+        if (e.shiftKey && document.activeElement === list[0]) {
+          e.preventDefault();
+          list.at(-1).focus();
+        } else if (!e.shiftKey && document.activeElement === list.at(-1)) {
+          e.preventDefault();
+          list[0].focus();
+        }
+      }
+    };
+    pop.addEventListener("beforetoggle", (e) => {
+      if (e.newState === "closed") {
+        active?.commit();
+        grid.close();
+        opener?.setAttribute("aria-expanded", "false");
+      }
+    });
+    pop.addEventListener("toggle", (e) => {
+      if (e.newState === "closed" && (pop.contains(document.activeElement) || document.activeElement === document.body))
+        opener?.focus();
+    });
+    store.subscribe(paint);
+    function position() {
+      const r = opener.getBoundingClientRect();
+      pop.style.left = Math.max(8, Math.min(r.left, innerWidth - pop.offsetWidth - 8)) + "px";
+      pop.style.top = Math.max(8, Math.min(r.bottom + 4, innerHeight - pop.offsetHeight - 8)) + "px";
+    }
+    window.addEventListener("resize", () => {
+      if (pop.matches(":popover-open")) position();
+    });
+    return {
+      open(anchor, config) {
+        if (pop.matches(":popover-open")) {
+          pop.hidePopover();
+          if (opener === anchor) return;
+        }
+        active = config;
+        opener = anchor;
+        value = config.get();
+        hsv = rgbToHsv(parseHex(value));
+        title.textContent = config.title;
+        for (const input of [hexInput, ...channels])
+          input.removeAttribute("aria-invalid");
+        hexInput.value = value;
+        channels.forEach((input, i) => {
+          input.value = parseHex(value)[i];
+        });
+        recents.replaceChildren(
+          ...recent2().map((hex3) => {
+            const el = button("", () => applyHex(hex3, true), "swatch");
+            el.style.backgroundColor = hex3;
+            el.setAttribute("aria-label", "Use recent " + hex3);
+            return el;
+          })
+        );
+        recentsHead.hidden = recents.hidden = !recent2().length;
+        message.textContent = "Right-click or hold a saved colour for actions.";
+        paint();
+        pop.showPopover();
+        anchor.setAttribute("aria-expanded", "true");
+        position();
+        square.focus();
+      },
+      message(text2) {
+        if (pop.matches(":popover-open")) message.textContent = text2;
+      }
+    };
+  }
+
   // src/themes.js
-  var hex = (h2) => h2.match(/[0-9a-f]{2}/gi).map((v) => parseInt(v, 16));
+  var hex2 = (h2) => h2.match(/[0-9a-f]{2}/gi).map((v) => parseInt(v, 16));
   var toHex2 = (rgb) => "#" + rgb.map((v) => Math.round(v).toString(16).padStart(2, "0")).join("");
-  var mix = (a, b, t) => toHex2(hex(a).map((v, i) => v + (hex(b)[i] - v) * t));
+  var mix = (a, b, t) => toHex2(hex2(a).map((v, i) => v + (hex2(b)[i] - v) * t));
   function luminance(h2) {
-    const [r, g, b] = hex(h2).map((v) => {
+    const [r, g, b] = hex2(h2).map((v) => {
       v /= 255;
       return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
     });
@@ -8375,7 +9233,7 @@ dialog details {
     return best || (worst("#000000") > worst("#ffffff") ? "#000000" : "#ffffff");
   }
   function toHsl(h2) {
-    const [r, g, b] = hex(h2).map((v) => v / 255), max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min;
+    const [r, g, b] = hex2(h2).map((v) => v / 255), max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min;
     if (!d) return [0, 0, l];
     const s = d / (1 - Math.abs(2 * l - 1)), hue = max === r ? ((g - b) / d + 6) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
     return [hue * 60, s, l];
@@ -8583,7 +9441,7 @@ dialog details {
   // src/app.js
   var $ = (id) => document.getElementById(id);
   var pause = makePause();
-  var VERSION = "3.2.0";
+  var VERSION = "3.3.0";
   var w = 0;
   var h = 0;
   var name = "";
@@ -8644,6 +9502,20 @@ dialog details {
   function newRow(id, base = defaults()) {
     return { id, params: base, seeds: [] };
   }
+  var picker = null;
+  var coloursLoaded = false;
+  var coloursWarning = "";
+  var colourStore = createColourStore(
+    () => localStorage,
+    (message) => {
+      if (!coloursLoaded) coloursWarning = message;
+      else {
+        status(message);
+        picker?.message(message);
+      }
+    }
+  );
+  coloursLoaded = true;
   function freshEdit(base, outline2 = { on: false, widthPct: 4, colour: "#FFFFFF" }) {
     return {
       rows: [newRow(1, base)],
@@ -8666,19 +9538,19 @@ dialog details {
   function begin() {
     if (pixels && !gesture) gesture = snapshot();
   }
-  function commit(label) {
+  function commit(label2) {
     if (gesture) {
-      history.record(gesture, snapshot(), label);
+      history.record(gesture, snapshot(), label2);
       gesture = null;
       buttons();
     }
   }
-  function action(label, fn) {
+  function action(label2, fn) {
     if (!pixels) return;
     commit("Adjust colour");
     const old = snapshot();
     fn();
-    history.record(old, snapshot(), label);
+    history.record(old, snapshot(), label2);
     sync();
     schedule();
   }
@@ -8717,28 +9589,28 @@ dialog details {
     $("editState").textContent = result?.changed ? "Pending edit" : "No pending edit";
     $("editState").classList.toggle("pending", !!result?.changed);
   }
-  function makeSlider(parent, key, label, min, max, unit, short = label) {
+  function makeSlider(parent, key, label2, min, max, unit, short = label2) {
     const box = document.createElement("div");
     box.className = "slider";
     const lab = document.createElement("label");
     lab.htmlFor = key;
     lab.id = key + "Label";
     lab.textContent = short;
-    lab.title = label;
+    lab.title = label2;
     const number = document.createElement("input");
     number.type = "number";
     number.min = min;
     number.max = max;
     number.step = ["dh", "ds", "dl"].includes(key) ? ".01" : "1";
     number.id = key + "Number";
-    number.setAttribute("aria-label", label + " " + unit);
+    number.setAttribute("aria-label", label2 + " " + unit);
     const range = document.createElement("input");
     range.type = "range";
     range.id = key;
     range.min = min;
     range.max = max;
     range.step = number.step;
-    range.setAttribute("aria-label", label);
+    range.setAttribute("aria-label", label2);
     box.append(lab, range, number);
     $(parent).append(box);
     const update = (value) => {
@@ -8756,7 +9628,7 @@ dialog details {
     number.addEventListener("input", () => update(number.value));
     for (const input of [range, number])
       input.addEventListener("change", () => {
-        commit(label);
+        commit(label2);
         sync();
       });
   }
@@ -8773,15 +9645,15 @@ dialog details {
     ["feather", "Spatial feather", 0, 8, "pixels", "Feather"]
   ])
     makeSlider("selectionSliders", ...args);
-  function swatch(hex2, label, fn) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "swatch";
-    button.style.backgroundColor = hex2;
-    button.title = label;
-    button.setAttribute("aria-label", label);
-    button.addEventListener("click", fn);
-    return button;
+  function swatch(hex3, label2, fn) {
+    const button2 = document.createElement("button");
+    button2.type = "button";
+    button2.className = "swatch";
+    button2.style.backgroundColor = hex3;
+    button2.title = label2;
+    button2.setAttribute("aria-label", label2);
+    button2.addEventListener("click", fn);
+    return button2;
   }
   function renderPalette() {
     const box = $("palette");
@@ -8793,10 +9665,10 @@ dialog details {
     const box = $("seeds");
     box.replaceChildren();
     if (!seeds.length) {
-      const empty = document.createElement("span");
-      empty.className = "muted";
-      empty.textContent = "Nothing picked yet";
-      box.append(empty);
+      const empty2 = document.createElement("span");
+      empty2.className = "muted";
+      empty2.textContent = "Nothing picked yet";
+      box.append(empty2);
       return;
     }
     seeds.forEach((s, index) => {
@@ -8829,9 +9701,9 @@ dialog details {
   }
   function buildMapRow(k) {
     const item = document.createElement("div"), select = document.createElement("button"), part = (tag, className) => {
-      const node = document.createElement(tag);
-      node.className = className;
-      return node;
+      const node2 = document.createElement(tag);
+      node2.className = className;
+      return node2;
     };
     item.className = "map-row";
     select.type = "button";
@@ -8941,9 +9813,9 @@ dialog details {
       status("Could not map the colours: " + e.message);
     }
   }
-  function rememberTarget(hex2) {
-    if (!parseHex(hex2)) return;
-    recent = [hex2, ...recent.filter((v) => v !== hex2)].slice(0, 8);
+  function rememberTarget(hex3) {
+    if (!parseHex(hex3)) return;
+    recent = [hex3, ...recent.filter((v) => v !== hex3)].slice(0, 8);
     $("recentGroup").hidden = false;
     $("recent").replaceChildren(
       ...recent.map(
@@ -8966,13 +9838,67 @@ dialog details {
     $("paletteSet").append(option);
   }
   for (const set of paletteSets) addSetOption(set);
-  var currentSet = () => paletteSets.find((set) => set.id === $("paletteSet").value) || paletteSets[0];
+  var keptSets = () => colourStore.get().palettes.map((set, i) => ({
+    id: "my-" + i,
+    label: set.name,
+    entries: set.colours.map((entry) => ({
+      ...entry,
+      label: entry.label || entry.hex
+    }))
+  }));
+  var savedSet = () => ({
+    id: "saved",
+    label: "Saved colours",
+    entries: colourStore.saved().map((hex3) => ({ hex: hex3, label: hex3 }))
+  });
+  var currentSet = () => {
+    const id = $("paletteSet").value;
+    if (id === "saved") return savedSet();
+    const set = paletteSets.find((set2) => set2.id === id);
+    if (set) return set;
+    const kept = id.startsWith("my-") ? colourStore.palette(Number(id.slice(3))) : null;
+    return kept ? {
+      id,
+      label: kept.name,
+      entries: kept.colours.map((entry) => ({
+        ...entry,
+        label: entry.label || entry.hex
+      }))
+    } : paletteSets[0];
+  };
+  var renderedPalette = "";
+  function renderSavedSets() {
+    const selected = $("paletteSet").value;
+    $("paletteSet").replaceChildren();
+    for (const set of [...paletteSets, savedSet()]) addSetOption(set);
+    const group = document.createElement("optgroup");
+    group.label = "My palettes";
+    for (const set of keptSets()) {
+      const option = document.createElement("option");
+      option.value = set.id;
+      option.textContent = set.label;
+      group.append(option);
+    }
+    if (group.children.length) $("paletteSet").append(group);
+    if ([...$("paletteSet").options].some((option) => option.value === selected))
+      $("paletteSet").value = selected;
+    $("savedEmpty").hidden = !!colourStore.saved().length;
+    if (JSON.stringify(currentSet()) !== renderedPalette) renderSet();
+  }
+  createSavedGrid($("savedColours"), { store: colourStore, onUse: setTarget });
+  colourStore.subscribe(renderSavedSets);
+  $("saveCurrentColour").onclick = () => colourStore.add(params.target);
   function useEntry(entry) {
     if (entry.ramp) setRamp(entry.ramp);
     else setTarget(entry.hex);
   }
   function renderSet() {
     const set = currentSet(), named = set.entries.length <= 8 && set.entries.some((e) => e.label !== e.hex), box = $("presets");
+    renderedPalette = JSON.stringify(set);
+    $("makeVariants").disabled = !pixels || params.mode === "transparent" || !set.entries.length;
+    $("saveMyPalette").textContent = set.id.startsWith("user-") ? "Keep in My palettes\u2026" : "Save as palette\u2026";
+    $("removeMyPalette").hidden = !set.id.startsWith("my-");
+    $("saveMyPalette").disabled = $("savePalette").disabled = !set.entries.length;
     box.className = "swatches" + (named ? " named" : "");
     box.replaceChildren(
       ...set.entries.map((entry) => {
@@ -9008,10 +9934,10 @@ dialog details {
     const [r, g, b, a] = probe.getImageData(0, 0, 1, 1).data;
     return a === 255 ? [r, g, b] : null;
   }
-  function deltasTo(hex2, model) {
+  function deltasTo(hex3, model) {
     if (!seeds.length) return null;
     const sd = seeds.at(-1), o = (sd.y * w + sd.x) * 4;
-    return deltasFor([...pixels.subarray(o, o + 3)], parseHex(hex2), model);
+    return deltasFor([...pixels.subarray(o, o + 3)], parseHex(hex3), model);
   }
   function targetDeltas() {
     if (params.manual) return;
@@ -9029,6 +9955,7 @@ dialog details {
     $("ds").setAttribute("aria-label", dsName);
     $("dsNumber").setAttribute("aria-label", dsName + " percent");
     $("targetColour").value = params.target;
+    $("targetColour").style.backgroundColor = params.target;
     if (document.activeElement !== $("targetHex"))
       $("targetHex").value = params.target;
   }
@@ -9057,8 +9984,8 @@ dialog details {
     renderMap();
     buttons();
   }
-  function setTarget(hex2) {
-    const rgb = parseHex(hex2);
+  function setTarget(hex3) {
+    const rgb = parseHex(hex3);
     if (!rgb) return;
     action("Target colour", () => {
       params.target = toHex(...rgb);
@@ -9422,9 +10349,9 @@ dialog details {
     status("Original restored. Undo is available.");
   }
   async function save(copy = false) {
-    const button = copy ? $("copy") : $("export");
-    if (button.dataset.busy) return;
-    button.dataset.busy = "true";
+    const button2 = copy ? $("copy") : $("export");
+    if (button2.dataset.busy) return;
+    button2.dataset.busy = "true";
     try {
       commit("Adjust colour");
       const r = await latest(), revision = editId, iid = imageId;
@@ -9459,7 +10386,7 @@ dialog details {
     } catch (e) {
       status((copy ? "Copy failed: " : "Export failed: ") + e.message);
     } finally {
-      delete button.dataset.busy;
+      delete button2.dataset.busy;
       buttons();
     }
   }
@@ -9545,12 +10472,12 @@ dialog details {
   var previewGrounds = [
     ["Dark chat", "#313338"],
     ["Light chat", "#FFFFFF"],
-    ...DISCORD_BUTTONS.map(([label, hex2]) => [label + " button", hex2])
+    ...DISCORD_BUTTONS.map(([label2, hex3]) => [label2 + " button", hex3])
   ];
-  for (const [label, hex2] of previewGrounds) {
+  for (const [label2, hex3] of previewGrounds) {
     const option = document.createElement("option");
-    option.value = hex2;
-    option.textContent = label;
+    option.value = hex3;
+    option.textContent = label2;
     $("previewGround").append(option);
   }
   var previewCanvases = PREVIEW_SIZES.map((size) => {
@@ -9620,6 +10547,7 @@ dialog details {
       $("outlineHex").removeAttribute("aria-invalid");
     }
     $("outlineColour").value = o.colour.toLowerCase();
+    $("outlineColour").style.backgroundColor = o.colour;
     outlineControls();
     layout();
   }
@@ -9632,11 +10560,11 @@ dialog details {
     scheduleOutline();
     markVariants();
   }
-  function outlineAction(label, fn) {
+  function outlineAction(label2, fn) {
     commit("Adjust colour");
     const old = snapshot();
     fn();
-    history.record(old, snapshot(), label);
+    history.record(old, snapshot(), label2);
     buttons();
     syncOutline();
     refreshOutline();
@@ -9672,6 +10600,7 @@ dialog details {
       begin();
       edit.outline.colour = toHex(...rgb);
       $("outlineColour").value = edit.outline.colour.toLowerCase();
+      $("outlineColour").style.backgroundColor = edit.outline.colour;
       outlineControls();
       refreshOutline();
     }
@@ -9682,16 +10611,16 @@ dialog details {
     if (readColour($("outlineHex").value))
       $("outlineHex").value = edit.outline.colour;
   });
-  for (const [label, hex2] of [
+  for (const [label2, hex3] of [
     ["White", "#FFFFFF"],
     ["Black", "#000000"]
   ])
     $("outlineSwatches").append(
       swatch(
-        hex2,
-        label + " outline",
+        hex3,
+        label2 + " outline",
         () => outlineAction("Outline colour", () => {
-          edit.outline.colour = hex2;
+          edit.outline.colour = hex3;
           edit.outline.on = true;
         })
       )
@@ -9873,7 +10802,7 @@ dialog details {
     box.replaceChildren(...lines);
   }
   sizeControls();
-  async function openPalette(source, label) {
+  async function openPalette(source, label2) {
     try {
       if (typeof source !== "string" && source.size > MAX_PALETTE_BYTES)
         throw Error("Palette files must be 256 KB or smaller.");
@@ -9881,7 +10810,7 @@ dialog details {
         typeof source === "string" ? source : await source.text()
       ), set = {
         id: "user-" + ++userSets,
-        label: String(label || "Palette").replace(/\.[^.]*$/, "").slice(0, 60) || "Palette",
+        label: String(label2 || "Palette").replace(/\.[^.]*$/, "").slice(0, 60) || "Palette",
         entries: entries2
       };
       paletteSets.push(set);
@@ -9902,10 +10831,38 @@ dialog details {
     if (f) openPalette(f, f.name);
     e.target.value = "";
   };
+  var paletteEntries = (set) => set.entries.flatMap(
+    (entry) => entry.ramp ? entry.ramp.map((hex3, i) => ({
+      hex: hex3,
+      label: entry.label + (i ? " shade " + i : "")
+    })) : [entry]
+  );
+  var paletteToKeep = [];
+  $("saveMyPalette").onclick = () => {
+    const set = currentSet();
+    paletteToKeep = paletteEntries(set);
+    $("paletteName").value = set.label;
+    $("paletteNameError").textContent = "";
+    $("paletteDialog").showModal();
+    $("paletteName").select();
+  };
+  $("cancelPalette").onclick = () => $("paletteDialog").close();
+  $("paletteForm").onsubmit = (e) => {
+    e.preventDefault();
+    if (colourStore.savePalette($("paletteName").value, paletteToKeep)) {
+      $("paletteSet").value = "my-" + (colourStore.get().palettes.length - 1);
+      renderSet();
+      $("paletteDialog").close();
+    } else $("paletteNameError").textContent = colourStore.error;
+  };
+  $("removeMyPalette").onclick = () => {
+    const id = currentSet().id;
+    if (id.startsWith("my-")) colourStore.removePalette(Number(id.slice(3)));
+  };
   $("savePalette").onclick = () => {
     const set = currentSet(), entries2 = set.entries.flatMap(
-      (e) => e.ramp ? e.ramp.map((hex2, i) => ({
-        hex: hex2,
+      (e) => e.ramp ? e.ramp.map((hex3, i) => ({
+        hex: hex3,
         label: e.label + (i ? " shade " + i : "")
       })) : [e]
     ), filename = safeStem(set.label.replace(/ · /g, " ")) + ".gpl";
@@ -9917,10 +10874,12 @@ dialog details {
     );
     status("Prepared " + filename + ". Choose where to save it.");
   };
-  function screenPicked(hex2) {
-    const rgb = typeof hex2 === "string" ? readColour(hex2) : null;
-    if (rgb) setTarget(toHex(...rgb));
+  var screenPickApply = setTarget;
+  function screenPicked(hex3) {
+    const rgb = typeof hex3 === "string" ? readColour(hex3) : null;
+    if (rgb) screenPickApply(toHex(...rgb));
     else status("No colour was picked.");
+    screenPickApply = setTarget;
   }
   var pickFromScreen = screenPicker(
     screenPicked,
@@ -9928,7 +10887,10 @@ dialog details {
   );
   if (pickFromScreen) {
     $("eyeDropper").hidden = false;
-    $("eyeDropper").onclick = pickFromScreen;
+    $("eyeDropper").onclick = () => {
+      screenPickApply = setTarget;
+      pickFromScreen();
+    };
   }
   var MAX_VARIANTS = 64;
   var variantRun = 0;
@@ -9969,7 +10931,7 @@ dialog details {
     $("variants").replaceChildren();
   }
   function markVariants() {
-    $("makeVariants").disabled = !pixels || params.mode === "transparent";
+    $("makeVariants").disabled = !pixels || params.mode === "transparent" || !currentSet().entries.length;
     if (variantsKey === null) return;
     const stale = selectionKey() !== variantsKey;
     $("variants").classList.toggle("stale", stale);
@@ -9983,14 +10945,14 @@ dialog details {
       const image = await variantImage(), key = selectionKey(), settings = finishSettings(), dpr = window.devicePixelRatio || 1, box = Math.round(56 * dpr), fit2 = box / Math.max(w, h), tw = Math.max(1, Math.round(w * fit2)), th = Math.max(1, Math.round(h * fit2));
       if (run !== variantRun) return;
       const tiles = entries2.map((entry) => {
-        const tile = document.createElement("button"), canvas = document.createElement("canvas"), label = document.createElement("span");
+        const tile = document.createElement("button"), canvas = document.createElement("canvas"), label2 = document.createElement("span");
         tile.type = "button";
         tile.className = "variant";
         tile.title = "Use " + entry.label;
         canvas.width = canvas.height = box;
         canvas.setAttribute("aria-hidden", "true");
-        label.textContent = entry.label;
-        tile.append(canvas, label);
+        label2.textContent = entry.label;
+        tile.append(canvas, label2);
         tile.onclick = () => useEntry(entry);
         return { tile, canvas, entry };
       });
@@ -10029,9 +10991,9 @@ dialog details {
     }
   }
   async function exportVariants() {
-    const button = $("exportVariants");
-    if (button.dataset.busy) return;
-    button.dataset.busy = "true";
+    const button2 = $("exportVariants");
+    if (button2.dataset.busy) return;
+    button2.dataset.busy = "true";
     try {
       const set = currentSet(), entries2 = set.entries.slice(0, MAX_VARIANTS), image = await variantImage(), settings = finishSettings(), files = [];
       for (const [i, entry] of entries2.entries()) {
@@ -10057,12 +11019,12 @@ dialog details {
     } catch (e) {
       status("Could not export variants: " + e.message);
     } finally {
-      delete button.dataset.busy;
+      delete button2.dataset.busy;
     }
   }
   $("makeVariants").onclick = makeVariants;
   $("exportVariants").onclick = exportVariants;
-  renderSet();
+  renderSavedSets();
   async function currentSteps() {
     commit("Adjust colour");
     let preview = null;
@@ -10569,6 +11531,7 @@ dialog details {
     const kind = choice("background");
     $("viewport").classList.toggle("checker", kind === "checker");
     $("backgroundColour").hidden = kind !== "custom";
+    $("backgroundColour").style.backgroundColor = $("backgroundColour").value;
     for (const el of document.querySelectorAll(".canvas-space"))
       el.style.backgroundColor = kind === "white" ? "#fff" : kind === "dark" ? "#1c1c1c" : kind === "custom" ? $("backgroundColour").value : "";
   }
@@ -10581,6 +11544,31 @@ dialog details {
   $("background").onchange = background;
   $("backgroundColour").oninput = background;
   $("dismissTip").onclick = () => $("firstUse").hidden = true;
+  picker = createPicker({
+    store: colourStore,
+    recent: () => recent,
+    pickScreen: pickFromScreen ? (apply4) => {
+      screenPickApply = apply4;
+      pickFromScreen();
+    } : null
+  });
+  for (const [id, title] of [
+    ["targetColour", "Target colour"],
+    ["outlineColour", "Outline colour"],
+    ["backgroundColour", "Preview background"]
+  ]) {
+    const control = $(id);
+    control.onclick = () => picker.open(control, {
+      title,
+      get: () => control.value,
+      input: (hex3) => {
+        control.value = hex3;
+        control.style.backgroundColor = hex3;
+        control.dispatchEvent(new Event("input", { bubbles: true }));
+      },
+      commit: () => control.dispatchEvent(new Event("change", { bubbles: true }))
+    });
+  }
   var uiTheme = DEFAULT_THEME;
   var modifier = null;
   try {
@@ -10595,23 +11583,23 @@ dialog details {
     theme();
   });
   for (const m of MODIFIERS) {
-    const label = document.createElement("label"), input = document.createElement("input");
+    const label2 = document.createElement("label"), input = document.createElement("input");
     input.type = "radio";
     input.name = "theme";
     input.value = m.id;
-    label.append(input, m.name);
-    $("theme").append(label);
+    label2.append(input, m.name);
+    $("theme").append(label2);
   }
   for (const t of THEMES) {
-    const label = document.createElement("label"), input = document.createElement("input"), swatch2 = document.createElement("span");
+    const label2 = document.createElement("label"), input = document.createElement("input"), swatch2 = document.createElement("span");
     input.type = "radio";
     input.name = "uiTheme";
     input.value = t.id;
     swatch2.className = "theme-swatch";
     swatch2.setAttribute("aria-hidden", "true");
     swatch2.dataset.theme = t.id;
-    label.append(input, swatch2, t.name);
-    $("uiTheme").append(label);
+    label2.append(input, swatch2, t.name);
+    $("uiTheme").append(label2);
   }
   function theme() {
     const root = document.documentElement, { dark, contrast: contrast2, tokens } = resolveTheme(uiTheme, modifier, system);
@@ -10675,7 +11663,8 @@ dialog details {
     ), typing = field && !field.matches(
       "input[type=range],input[type=checkbox],input[type=radio],input[type=color]"
     );
-    if (typing || document.querySelector("dialog[open]")) return;
+    if (typing || document.querySelector("dialog[open],.colour-picker:popover-open"))
+      return;
     const key = e.key.toLowerCase();
     if (e.ctrlKey || e.metaKey) {
       if (e.altKey) return;
@@ -10809,7 +11798,7 @@ dialog details {
     list.querySelector("summary").focus();
   }
   document.addEventListener("click", (e) => {
-    const fromMenu = e.composedPath().some((node) => node.classList?.contains("menu-pop"));
+    const fromMenu = e.composedPath().some((node2) => node2.classList?.contains("menu-pop"));
     if (!fromMenu && !$("shortcuts").contains(e.target))
       $("shortcuts").open = false;
   });
@@ -10885,9 +11874,9 @@ dialog details {
   updates?.request();
   var have = () => !!pixels;
   var press = (id, value) => $(id).querySelector(`input[value="${value}"]`).click();
-  var radio = (group, label, value) => ({
+  var radio = (group, label2, value) => ({
     type: "radio",
-    label,
+    label: label2,
     checked: () => choice(group) === value,
     run: () => press(group, value)
   });
@@ -11014,9 +12003,9 @@ dialog details {
             items: [
               ["working", "Before current edit"],
               ["original", "Original"]
-            ].map(([value, label]) => ({
+            ].map(([value, label2]) => ({
               type: "radio",
-              label,
+              label: label2,
               checked: () => $("compare").value === value,
               run: () => {
                 $("compare").value = value;
@@ -11107,6 +12096,11 @@ dialog details {
         mnemonic: "i",
         items: [
           {
+            type: "item",
+            label: "Save colour to swatches",
+            run: () => colourStore.add(params.target)
+          },
+          {
             type: "check",
             label: "Outline",
             checked: () => edit.outline.on,
@@ -11166,7 +12160,13 @@ dialog details {
     atob(sample_default.split(",")[1]),
     (c) => c.charCodeAt(0)
   );
-  openBlob(new Blob([sampleBytes], { type: "image/png" }), "red_heart.png", true);
+  openBlob(
+    new Blob([sampleBytes], { type: "image/png" }),
+    "red_heart.png",
+    true
+  ).then(() => {
+    if (coloursWarning) status(coloursWarning);
+  });
 })();
 </script>
     <template id="licence-notices"><pre># Third-party notices
@@ -11441,6 +12441,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 Original C# port and code by Christian Winnerlein (CodesInChaos), public domain, https://github.com/CodesInChaos/Chaos.NaCl . Poly1305 by Andrew M. (floodyberry), MIT or public domain. Curve25519, Ed25519, Salsa20 and HSalsa20 from SUPERCOP ref10 by Dan Bernstein, public domain (http://bench.cr.yp.to/supercop.html). SHA512 by Christian Winnerlein, public domain.</pre></template>
     <template id="release-notes"><pre># Hex Shift 3
+
+**New in 3.3.0:** Saved colours and an in-app colour picker. Click the target, outline or custom preview background colour box for a saturation/brightness square, hue strip, hex and RGB fields, screen picker and Recent row. **+ Save** keeps up to **48 colours** between launches, also shown in Swatches. Click a saved colour to use it, drag to reorder, or right-click/hold for move and remove actions; arrows, Alt+Left/Right, Delete and Shift+F10 provide the keyboard equivalents. **Save as palette…** keeps a named set in **My palettes**; opened palettes offer **Keep in My palettes…**, and `.gpl` import/export still works. Saved data is validated and bounded (48 colours, 50 palettes of 256 colours, 256 KB overall); unreadable data is ignored with a status message. Only colours you explicitly save, palette names/labels and your theme preference are stored. Images and recent targets stay in memory.
 
 A recolouring tool for emoji, icons, stickers and transparent assets: the image in the middle with a menu bar, a colour map, and Selection, Colour, Adjust, Swatches, Outline and Export panels around it, colour themes, magnified picking, image palette, selection brushes, comparison views, exact-colour and transparency modes, palettes, variants, recipes, batch, and ship-ready PNG/WebP/ZIP exports.
 

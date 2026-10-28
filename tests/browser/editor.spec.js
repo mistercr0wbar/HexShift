@@ -738,7 +738,10 @@ test("responsive workspace, keyboard palette and theme persist without image sto
   await page.locator("#palette button").first().focus();
   await page.keyboard.press("Enter");
   await expect(page.locator("#seeds .seed")).toHaveCount(1);
-  expect(await page.evaluate(() => Object.keys(localStorage))).toEqual([
+  await openPanel(page, "swatches");
+  await page.locator("#saveCurrentColour").click();
+  expect(await page.evaluate(() => Object.keys(localStorage).sort())).toEqual([
+    "hexshift-colours",
     "hexshift-theme",
   ]);
 });

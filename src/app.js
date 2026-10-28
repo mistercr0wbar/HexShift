@@ -52,6 +52,8 @@ import {
 import { screenPicker, systemColours, updateChannel } from "./host.js";
 import { createMenubar } from "./menu.js";
 import { createWorkspace } from "./workspace.js";
+import { createColourStore } from "./colours.js";
+import { createPicker, createSavedGrid } from "./picker.js";
 import {
   THEMES,
   MODIFIERS,
@@ -128,6 +130,20 @@ function status(message, { fade = 0 } = {}) {
 function newRow(id, base = defaults()) {
   return { id, params: base, seeds: [] };
 }
+let picker = null,
+  coloursLoaded = false,
+  coloursWarning = "";
+const colourStore = createColourStore(
+  () => localStorage,
+  (message) => {
+    if (!coloursLoaded) coloursWarning = message;
+    else {
+      status(message);
+      picker?.message(message);
+    }
+  },
+);
+coloursLoaded = true;
 // The outline is part of the edit (it is undone, redone and saved in recipes with the
 // colours), but not of the image: it is drawn behind the artwork and added on export.
 function freshEdit(
@@ -503,8 +519,7 @@ const DISCORD_BUTTONS = [
   ["Success", "#248046"],
   ["Danger", "#DA373C"],
 ];
-// Palettes: the built-in sets plus any opened or pasted this session (kept in
-// memory only, like images).
+// Built-ins, session imports, and explicitly saved sets. Images stay in memory.
 const paletteSets = SETS.map((set) => ({ ...set }));
 let userSets = 0;
 function addSetOption(set) {
@@ -514,8 +529,62 @@ function addSetOption(set) {
   $("paletteSet").append(option);
 }
 for (const set of paletteSets) addSetOption(set);
-const currentSet = () =>
-  paletteSets.find((set) => set.id === $("paletteSet").value) || paletteSets[0];
+const keptSets = () =>
+  colourStore.get().palettes.map((set, i) => ({
+    id: "my-" + i,
+    label: set.name,
+    entries: set.colours.map((entry) => ({
+      ...entry,
+      label: entry.label || entry.hex,
+    })),
+  }));
+const savedSet = () => ({
+  id: "saved",
+  label: "Saved colours",
+  entries: colourStore.saved().map((hex) => ({ hex, label: hex })),
+});
+const currentSet = () => {
+  const id = $("paletteSet").value;
+  if (id === "saved") return savedSet();
+  const set = paletteSets.find((set) => set.id === id);
+  if (set) return set;
+  const kept = id.startsWith("my-")
+    ? colourStore.palette(Number(id.slice(3)))
+    : null;
+  return kept
+    ? {
+        id,
+        label: kept.name,
+        entries: kept.colours.map((entry) => ({
+          ...entry,
+          label: entry.label || entry.hex,
+        })),
+      }
+    : paletteSets[0];
+};
+let renderedPalette = "";
+function renderSavedSets() {
+  const selected = $("paletteSet").value;
+  $("paletteSet").replaceChildren();
+  for (const set of [...paletteSets, savedSet()]) addSetOption(set);
+  const group = document.createElement("optgroup");
+  group.label = "My palettes";
+  for (const set of keptSets()) {
+    const option = document.createElement("option");
+    option.value = set.id;
+    option.textContent = set.label;
+    group.append(option);
+  }
+  if (group.children.length) $("paletteSet").append(group);
+  if ([...$("paletteSet").options].some((option) => option.value === selected))
+    $("paletteSet").value = selected;
+  $("savedEmpty").hidden = !!colourStore.saved().length;
+  // Saving an unrelated colour must not discard the current variant previews.
+  if (JSON.stringify(currentSet()) !== renderedPalette) renderSet();
+}
+createSavedGrid($("savedColours"), { store: colourStore, onUse: setTarget });
+colourStore.subscribe(renderSavedSets);
+$("saveCurrentColour").onclick = () => colourStore.add(params.target);
 function useEntry(entry) {
   if (entry.ramp) setRamp(entry.ramp);
   else setTarget(entry.hex);
@@ -525,6 +594,14 @@ function renderSet() {
     named =
       set.entries.length <= 8 && set.entries.some((e) => e.label !== e.hex),
     box = $("presets");
+  renderedPalette = JSON.stringify(set);
+  $("makeVariants").disabled =
+    !pixels || params.mode === "transparent" || !set.entries.length;
+  $("saveMyPalette").textContent = set.id.startsWith("user-")
+    ? "Keep in My palettes…"
+    : "Save as palette…";
+  $("removeMyPalette").hidden = !set.id.startsWith("my-");
+  $("saveMyPalette").disabled = $("savePalette").disabled = !set.entries.length;
   box.className = "swatches" + (named ? " named" : "");
   box.replaceChildren(
     ...set.entries.map((entry) => {
@@ -599,6 +676,7 @@ function syncTarget() {
   $("ds").setAttribute("aria-label", dsName);
   $("dsNumber").setAttribute("aria-label", dsName + " percent");
   $("targetColour").value = params.target;
+  $("targetColour").style.backgroundColor = params.target;
   if (document.activeElement !== $("targetHex"))
     $("targetHex").value = params.target;
 }
@@ -1308,6 +1386,7 @@ function syncOutline() {
     $("outlineHex").removeAttribute("aria-invalid");
   }
   $("outlineColour").value = o.colour.toLowerCase();
+  $("outlineColour").style.backgroundColor = o.colour;
   outlineControls();
   // Turning the outline on or off changes how much room the fitted image leaves.
   layout();
@@ -1367,6 +1446,7 @@ $("outlineHex").addEventListener("input", (e) => {
     begin();
     edit.outline.colour = toHex(...rgb);
     $("outlineColour").value = edit.outline.colour.toLowerCase();
+    $("outlineColour").style.backgroundColor = edit.outline.colour;
     outlineControls();
     refreshOutline();
   }
@@ -1649,6 +1729,37 @@ $("paletteInput").onchange = (e) => {
   e.target.value = "";
 };
 // Skin tones are saved with every colour of each tone.
+const paletteEntries = (set) =>
+  set.entries.flatMap((entry) =>
+    entry.ramp
+      ? entry.ramp.map((hex, i) => ({
+          hex,
+          label: entry.label + (i ? " shade " + i : ""),
+        }))
+      : [entry],
+  );
+let paletteToKeep = [];
+$("saveMyPalette").onclick = () => {
+  const set = currentSet();
+  paletteToKeep = paletteEntries(set);
+  $("paletteName").value = set.label;
+  $("paletteNameError").textContent = "";
+  $("paletteDialog").showModal();
+  $("paletteName").select();
+};
+$("cancelPalette").onclick = () => $("paletteDialog").close();
+$("paletteForm").onsubmit = (e) => {
+  e.preventDefault();
+  if (colourStore.savePalette($("paletteName").value, paletteToKeep)) {
+    $("paletteSet").value = "my-" + (colourStore.get().palettes.length - 1);
+    renderSet();
+    $("paletteDialog").close();
+  } else $("paletteNameError").textContent = colourStore.error;
+};
+$("removeMyPalette").onclick = () => {
+  const id = currentSet().id;
+  if (id.startsWith("my-")) colourStore.removePalette(Number(id.slice(3)));
+};
 $("savePalette").onclick = () => {
   const set = currentSet(),
     entries = set.entries.flatMap((e) =>
@@ -1671,17 +1782,22 @@ $("savePalette").onclick = () => {
 // Picking a colour from the screen. The Windows app shows its own picker, because
 // WebView2 cancels the browser's EyeDropper before it opens; elsewhere EyeDropper
 // does it. A cancel is reported too, so the button never seems to do nothing.
+let screenPickApply = setTarget;
 function screenPicked(hex) {
   const rgb = typeof hex === "string" ? readColour(hex) : null;
-  if (rgb) setTarget(toHex(...rgb));
+  if (rgb) screenPickApply(toHex(...rgb));
   else status("No colour was picked.");
+  screenPickApply = setTarget;
 }
 const pickFromScreen = screenPicker(screenPicked, (e) =>
   status("Could not pick from the screen: " + e.message),
 );
 if (pickFromScreen) {
   $("eyeDropper").hidden = false;
-  $("eyeDropper").onclick = pickFromScreen;
+  $("eyeDropper").onclick = () => {
+    screenPickApply = setTarget;
+    pickFromScreen();
+  };
 }
 // Variants: the current selection and treatment once per palette colour (a
 // tone's ramp for skin tones). Each uses the same steps as clicking that
@@ -1732,7 +1848,8 @@ function clearVariants() {
   $("variants").replaceChildren();
 }
 function markVariants() {
-  $("makeVariants").disabled = !pixels || params.mode === "transparent";
+  $("makeVariants").disabled =
+    !pixels || params.mode === "transparent" || !currentSet().entries.length;
   if (variantsKey === null) return;
   const stale = selectionKey() !== variantsKey;
   $("variants").classList.toggle("stale", stale);
@@ -1858,7 +1975,7 @@ async function exportVariants() {
 }
 $("makeVariants").onclick = makeVariants;
 $("exportVariants").onclick = exportVariants;
-renderSet();
+renderSavedSets();
 // Recipes: the maps applied so far, plus the current one if it changes
 // anything. Also returns that current preview (null when it changes nothing).
 async function currentSteps() {
@@ -2480,6 +2597,7 @@ function background() {
   const kind = choice("background");
   $("viewport").classList.toggle("checker", kind === "checker");
   $("backgroundColour").hidden = kind !== "custom";
+  $("backgroundColour").style.backgroundColor = $("backgroundColour").value;
   for (const el of document.querySelectorAll(".canvas-space"))
     el.style.backgroundColor =
       kind === "white"
@@ -2498,14 +2616,40 @@ for (const tab of document.querySelectorAll(".dock-tabs button"))
     for (const other of document.querySelectorAll(".dock-tabs button"))
       other.setAttribute("aria-pressed", String(other === tab));
   };
-// Column widths and the dock's height are set by dragging the handles (or with the
-// arrow keys; see workspace.js). They last for the session only: the theme is the
-// one thing Hex Shift stores.
+// Column widths and the dock's height last for the session only (workspace.js).
 $("background").onchange = background;
 $("backgroundColour").oninput = background;
 $("dismissTip").onclick = () => ($("firstUse").hidden = true);
-// The theme setting is "modifier:theme" and stays the only thing Hex Shift
-// keeps in storage. Without a saved modifier, a system asking for more
+picker = createPicker({
+  store: colourStore,
+  recent: () => recent,
+  pickScreen: pickFromScreen
+    ? (apply) => {
+        screenPickApply = apply;
+        pickFromScreen();
+      }
+    : null,
+});
+for (const [id, title] of [
+  ["targetColour", "Target colour"],
+  ["outlineColour", "Outline colour"],
+  ["backgroundColour", "Preview background"],
+]) {
+  const control = $(id);
+  control.onclick = () =>
+    picker.open(control, {
+      title,
+      get: () => control.value,
+      input: (hex) => {
+        control.value = hex;
+        control.style.backgroundColor = hex;
+        control.dispatchEvent(new Event("input", { bubbles: true }));
+      },
+      commit: () =>
+        control.dispatchEvent(new Event("change", { bubbles: true })),
+    });
+}
+// The theme setting is "modifier:theme". Without a saved modifier, a system asking for more
 // contrast starts on Contrast and a light system on Day.
 let uiTheme = DEFAULT_THEME,
   modifier = null;
@@ -2618,7 +2762,11 @@ document.addEventListener("keydown", (e) => {
       !field.matches(
         "input[type=range],input[type=checkbox],input[type=radio],input[type=color]",
       );
-  if (typing || document.querySelector("dialog[open]")) return;
+  if (
+    typing ||
+    document.querySelector("dialog[open],.colour-picker:popover-open")
+  )
+    return;
   const key = e.key.toLowerCase();
   if (e.ctrlKey || e.metaKey) {
     // From a slider or checkbox Ctrl+Z is the page's undo: right after a drag it is
@@ -3100,6 +3248,11 @@ createMenubar({
       mnemonic: "i",
       items: [
         {
+          type: "item",
+          label: "Save colour to swatches",
+          run: () => colourStore.add(params.target),
+        },
+        {
           type: "check",
           label: "Outline",
           checked: () => edit.outline.on,
@@ -3159,4 +3312,10 @@ setTool("pick");
 const sampleBytes = Uint8Array.from(atob(sample.split(",")[1]), (c) =>
   c.charCodeAt(0),
 );
-openBlob(new Blob([sampleBytes], { type: "image/png" }), "red_heart.png", true);
+openBlob(
+  new Blob([sampleBytes], { type: "image/png" }),
+  "red_heart.png",
+  true,
+).then(() => {
+  if (coloursWarning) status(coloursWarning);
+});
