@@ -578,12 +578,15 @@ test("the menu bar opens with the mouse, switches by hover and closes with Escap
   await page.keyboard.press("Escape");
   await expect(menu(page, "Edit")).toHaveCount(0);
   await expect(top(page, "Edit")).toBeFocused();
-  // Clicking elsewhere closes a menu too.
+  // Clicking elsewhere closes a menu too. The View menu covers the left of
+  // the canvas, and the getting-started tip covers the top middle (it grows
+  // when the text is wide). The click lands on the open picture below both.
   await top(page, "View").click();
   await expect(menu(page, "View")).toBeVisible();
-  // The View menu is tall enough to cover the left edge of the canvas, so the
-  // click that means "elsewhere" sits further across the picture.
-  await page.locator("#viewport").click({ position: { x: 320, y: 160 } });
+  const canvas = await page.locator("#viewport").boundingBox();
+  await page.locator("#viewport").click({
+    position: { x: canvas.width / 2, y: Math.max(40, canvas.height - 80) },
+  });
   await expect(menu(page, "View")).toHaveCount(0);
 });
 
