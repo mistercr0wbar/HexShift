@@ -50,11 +50,23 @@ namespace HexShift
         // HexShift closes; no /SUPPRESSMSGBOXES, so Setup can still ask "open it now?".
         internal const string InstallerArguments = "/SP- /SILENT /NORESTART /CLOSEAPPLICATIONS /NORESTARTAPPLICATIONS /RESTARTEXITCODE=3010";
 
-        // At most one automatic check a day. A last-check time in the future (clock changed) counts as due.
-        internal static bool IsCheckDue(bool autoCheck, DateTime lastCheckUtc, DateTime nowUtc)
+        // When automatic checks are on, HexShift checks once on every launch (a couple of seconds after
+        // the page has loaded, so starting is never slowed down) and then again every few hours while
+        // the window stays open. The last-check time no longer holds a launch back: it is only shown.
+        internal static readonly TimeSpan LaunchDelay = TimeSpan.FromSeconds(2);
+        internal static readonly TimeSpan RecheckInterval = TimeSpan.FromHours(6);
+
+        internal static bool ShouldCheckAtLaunch(bool autoCheck)
         {
-            if (!autoCheck) return false;
-            return lastCheckUtc > nowUtc || nowUtc - lastCheckUtc >= TimeSpan.FromHours(24);
+            return autoCheck;
+        }
+
+        // A scheduled check (the launch one or a repeat) starts only when nothing else is going on: not
+        // while another check or a download is running, and not once an update has already been found
+        // (it is waiting in the notice bar; checking again would only show the same bar).
+        internal static bool CanRunScheduledCheck(bool autoCheck, bool busy, bool downloading, bool updateFound)
+        {
+            return autoCheck && !busy && !downloading && !updateFound;
         }
 
         // https, the default port, no user:password@, no fragment.

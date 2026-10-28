@@ -71,20 +71,41 @@ export function recipeStep(rows, pixels, width, labels) {
   if (labels?.some((v) => v !== 0)) step.approximate = true;
   return step;
 }
-export function writeRecipe(steps) {
-  return (
-    JSON.stringify(
-      {
-        format: "hexshift-recipe",
-        version: 1,
-        steps: steps.map((s) => ({ rows: s.rows })),
-      },
-      null,
-      2,
-    ) + "\n"
-  );
+// A recipe can carry the outline too: { widthPct, colour }. Version 1 files
+// have none; a file is written as version 2 only when it has one, so recipes
+// without an outline stay readable by older versions.
+export const OUTLINE_MIN = 0.5,
+  OUTLINE_MAX = 15;
+function cleanOutline(source) {
+  if (source === null || source === undefined) return null;
+  const widthPct =
+      typeof source === "object" && !Array.isArray(source)
+        ? Number(source.widthPct)
+        : NaN,
+    colour = String(source?.colour).toUpperCase();
+  if (
+    !(widthPct >= OUTLINE_MIN && widthPct <= OUTLINE_MAX) ||
+    !/^#[\dA-F]{6}$/.test(colour)
+  )
+    throw Error("A recipe's outline is 0.5 to 15 percent wide, in #RRGGBB.");
+  return { widthPct, colour };
 }
+export function writeRecipe(steps, outline = null) {
+  const clean = cleanOutline(outline),
+    data = {
+      format: "hexshift-recipe",
+      version: clean ? 2 : 1,
+      steps: steps.map((s) => ({ rows: s.rows })),
+    };
+  if (clean) data.outline = clean;
+  return JSON.stringify(data, null, 2) + "\n";
+}
+// The steps alone, as every caller before outlines expected them.
 export function parseRecipe(text) {
+  return parseRecipeFile(text).steps;
+}
+// { steps, outline }: outline is null when the file has none.
+export function parseRecipeFile(text) {
   if (typeof text !== "string") throw Error("A recipe must be text.");
   if (new TextEncoder().encode(text).length > MAX_RECIPE_BYTES)
     throw Error("Recipes must be 64 KB or smaller.");
@@ -96,7 +117,7 @@ export function parseRecipe(text) {
   }
   if (data?.format !== "hexshift-recipe")
     throw Error("This is not a Hex Shift recipe.");
-  if (data.version !== 1)
+  if (data.version !== 1 && data.version !== 2)
     throw Error("This recipe needs a newer version of Hex Shift.");
   if (
     !Array.isArray(data.steps) ||
@@ -104,7 +125,7 @@ export function parseRecipe(text) {
     data.steps.length > MAX_STEPS
   )
     throw Error("A recipe has 1 to 32 steps.");
-  return data.steps.map((step) => {
+  const steps = data.steps.map((step) => {
     if (
       !Array.isArray(step?.rows) ||
       !step.rows.length ||
@@ -131,6 +152,10 @@ export function parseRecipe(text) {
       throw Error("A recipe step can have at most 64 samples.");
     return { rows, approximate: false };
   });
+  return {
+    steps,
+    outline: data.version === 2 ? cleanOutline(data.outline) : null,
+  };
 }
 // Runs the steps on an image, each on the result of the one before.
 export async function replay(

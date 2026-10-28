@@ -1,12 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  compositeOutline,
   distanceField,
   outline,
+  outlineLayer,
+  outlineMask,
   resize,
   finish,
   outlineRadius,
   shrinkSilhouette,
+  strokeKey,
 } from "../src/output.js";
 let seed = 11;
 const random = () =>
@@ -52,8 +56,13 @@ test("outline keeps opaque artwork and paints a stroke around it", async () => {
   assert.equal(out.height, 10);
   for (let i = 0; i < 100; i++)
     if (pixels[i * 4 + 3] === 255)
-      assert.deepEqual([...out.pixels.slice(i * 4, i * 4 + 4)], [255, 0, 0, 255]);
-  const at = (x, y) => [...out.pixels.slice((y * 10 + x) * 4, (y * 10 + x) * 4 + 4)];
+      assert.deepEqual(
+        [...out.pixels.slice(i * 4, i * 4 + 4)],
+        [255, 0, 0, 255],
+      );
+  const at = (x, y) => [
+    ...out.pixels.slice((y * 10 + x) * 4, (y * 10 + x) * 4 + 4),
+  ];
   assert.deepEqual(at(2, 5), [255, 255, 255, 255]);
   // Two pixels out is the stroke's anti-aliased rim: half coverage.
   assert.deepEqual(at(1, 5), [255, 255, 255, 128]);
@@ -64,7 +73,10 @@ test("outline grows the canvas only where the artwork is too close to the edge",
     out = await outline(pixels, 10, 10, { widthPct: 20, rgb: [0, 0, 0] });
   assert.equal(out.width, 13);
   assert.equal(out.height, 13);
-  assert.deepEqual([...out.pixels.slice((3 * 13 + 3) * 4, (3 * 13 + 4) * 4)], [255, 0, 0, 255]);
+  assert.deepEqual(
+    [...out.pixels.slice((3 * 13 + 3) * 4, (3 * 13 + 4) * 4)],
+    [255, 0, 0, 255],
+  );
 });
 test("outline refuses to exceed the export pixel limit", async () => {
   const size = 2048,
@@ -119,6 +131,82 @@ test("resize averages premultiplied, so transparent neighbours don't darken", ()
       assert.deepEqual([...image.slice(i, i + 4)], [18, 171, 52, 200]);
   const clear = resize(new Uint8ClampedArray(16), 2, 2, 1, 1);
   assert.deepEqual([...clear], [0, 0, 0, 0]);
+});
+test("the stroke's mask plus a colour is exactly the exported outline", async () => {
+  // Soft edges and a part-transparent rim, so the maths is not all 0 and 255.
+  const size = 24,
+    pixels = new Uint8ClampedArray(size * size * 4);
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++) {
+      const d = Math.hypot(x - 11.5, y - 11.5);
+      if (d < 9)
+        pixels.set(
+          [200, 30, 90, Math.round(255 * Math.min(1, 10 - d))],
+          (y * size + x) * 4,
+        );
+    }
+  for (const widthPct of [0.5, 4, 15]) {
+    const mask = await outlineMask(pixels, size, size, widthPct),
+      rgb = [18, 171, 52],
+      composed = compositeOutline(pixels, size, size, mask, rgb),
+      direct = await outline(pixels, size, size, { widthPct, rgb });
+    assert.deepEqual(composed.pixels, direct.pixels);
+    assert.equal(composed.width, mask.width);
+    assert.equal(composed.height, mask.height);
+    // The stroke alone, with the artwork drawn over it (source-over), is
+    // what the export holds.
+    const layer = outlineLayer(mask, rgb);
+    assert.equal(layer.length, mask.width * mask.height * 4);
+    for (let i = 0; i < mask.coverage.length; i++) {
+      assert.deepEqual([...layer.subarray(i * 4, i * 4 + 3)], rgb);
+      assert.equal(layer[i * 4 + 3], Math.round(mask.coverage[i] * 255));
+    }
+  }
+});
+test("the mask says where the stroke falls and how far the canvas grows", async () => {
+  // The square from 0 to 4 touches the top and left edges.
+  const pixels = square(10, 0, 4),
+    mask = await outlineMask(pixels, 10, 10, 20);
+  assert.equal(mask.width, 13);
+  assert.equal(mask.height, 13);
+  assert.equal(mask.left, 3);
+  assert.equal(mask.top, 3);
+  const at = (x, y) =>
+    mask.coverage[(y + mask.top) * mask.width + x + mask.left];
+  assert.equal(at(1, 1), 1); // under the artwork
+  assert.equal(at(-1, 0), 1); // one pixel out, on the grown part
+  assert.equal(at(-2, 0), 0.5); // the rim, two pixels out
+  assert.equal(at(-3, 0), 0); // beyond it, still on the canvas
+  // Nothing to draw: no width, or nothing opaque.
+  assert.equal(await outlineMask(pixels, 10, 10, 0), null);
+  assert.equal(await outlineMask(new Uint8ClampedArray(400), 10, 10, 20), null);
+  // The same limits as an export.
+  await assert.rejects(
+    outlineMask(new Uint8ClampedArray(8192 * 4).fill(255), 8192, 1, 0.5),
+    /8,192 pixels on a side/,
+  );
+});
+test("the stroke key follows the shape of the artwork and ignores its colours", () => {
+  const pixels = square(),
+    key = strokeKey(pixels);
+  // Recolouring the artwork, or changing alpha between two opaque values,
+  // leaves the stroke where it was.
+  const recoloured = pixels.slice();
+  for (let i = 0; i < recoloured.length; i += 4)
+    if (recoloured[i + 3]) recoloured.set([0, 255, 0, 200], i);
+  assert.equal(strokeKey(recoloured), key);
+  // Making a pixel see-through (below 128) or drawing a new one moves it.
+  const thinner = pixels.slice();
+  thinner[(5 * 10 + 5) * 4 + 3] = 100;
+  assert.notEqual(strokeKey(thinner), key);
+  const fainter = pixels.slice();
+  fainter[(0 * 10 + 0) * 4 + 3] = 5;
+  assert.notEqual(strokeKey(fainter), key);
+  assert.notEqual(strokeKey(new Uint8ClampedArray(400)), key);
+  assert.notEqual(
+    strokeKey(new Uint8ClampedArray(404)),
+    strokeKey(new Uint8ClampedArray(400)),
+  );
 });
 test("finish without settings returns the export unchanged", async () => {
   const pixels = square(),

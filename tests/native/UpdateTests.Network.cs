@@ -471,16 +471,19 @@ static partial class UpdateTests
             UpdateService svc = new UpdateService(data, pub, "2.1.0", e, LocalTransport(e));
 
             Is(true, svc.Enabled, "service with a key is enabled");
-            Is(true, svc.IsCheckDue(), "a fresh install is due for a check");
+            Is(true, svc.CheckAtLaunch, "a fresh install checks at launch");
+            Is(true, svc.LastCheckUtc == DateTime.MinValue, "a fresh install has never checked");
             CheckOutcome found = svc.Check(none);
             Is(true, found.Kind == CheckKind.Available && found.Offer != null, "check finds the newer version");
             Same("2.1.1", found.Offer == null ? null : found.Offer.Version, "offered version");
             Same("Fixes things.", found.Offer == null ? null : found.Offer.Notes, "offered notes");
-            Is(false, svc.IsCheckDue(), "no second check is due straight after");
-            Is(false, new UpdateService(data, pub, "2.1.0", e, LocalTransport(e)).IsCheckDue(), "the last-check time survives a restart");
+            Is(true, svc.CheckAtLaunch, "a check straight after does not hold back the next launch's check");
+            Is(true, svc.LastCheckUtc > DateTime.UtcNow.AddMinutes(-1) && svc.LastCheckUtc <= DateTime.UtcNow, "a successful check records when it finished");
+            Is(true, new UpdateService(data, pub, "2.1.0", e, LocalTransport(e)).CheckAtLaunch, "...even after a restart");
+            Is(true, new UpdateService(data, pub, "2.1.0", e, LocalTransport(e)).LastCheckUtc == svc.LastCheckUtc, "the last-check time survives a restart");
             svc.AutoCheck = false;
             Is(false, new UpdateService(data, pub, "2.1.0", e, LocalTransport(e)).AutoCheck, "turning automatic checks off survives a restart");
-            Is(false, new UpdateService(data, pub, "2.1.0", e, LocalTransport(e)).IsCheckDue(), "no check is due when automatic checks are off");
+            Is(false, new UpdateService(data, pub, "2.1.0", e, LocalTransport(e)).CheckAtLaunch, "no check at launch when automatic checks are off");
             svc.AutoCheck = true;
             Is(true, new UpdateService(data, pub, "2.1.1", e, LocalTransport(e)).Check(none).Kind == CheckKind.UpToDate, "the same version sees no update");
 
@@ -547,7 +550,7 @@ static partial class UpdateTests
             UpdateService wrongKey = new UpdateService(Path.Combine(work, "data-wrongkey"), otherPub, "2.1.0", e, LocalTransport(e));
             CheckOutcome refused = wrongKey.Check(none);
             Is(true, refused.Kind == CheckKind.Failed && !string.IsNullOrEmpty(refused.Message), "feed not signed by the app's key");
-            Is(true, wrongKey.IsCheckDue(), "a failed check does not count as having checked");
+            Is(true, wrongKey.LastCheckUtc == DateTime.MinValue, "a failed check does not count as having checked");
 
             s.Body("/updates/appcast.json.signature", Encoding.ASCII.GetBytes(Sign(feed).Substring(4) + "AAAA"), false);
             Is(true, svc.Check(none).Kind == CheckKind.Failed, "a damaged signature file");
@@ -558,7 +561,7 @@ static partial class UpdateTests
 
             UpdateService off = new UpdateService(Path.Combine(work, "data-off"), null, "2.1.0", e, LocalTransport(e));
             Is(false, off.Enabled, "service without a key is disabled");
-            Is(false, off.IsCheckDue(), "a disabled service never wants a check");
+            Is(false, off.CheckAtLaunch, "a disabled service never wants a check");
             int quiet = s.Requests;
             Is(true, off.Check(none).Kind == CheckKind.Disabled, "a disabled service reports that, without contacting anyone");
             Raises<UpdateException>(delegate { off.Download(found.Offer, null, none); }, "a disabled service downloads nothing");

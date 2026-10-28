@@ -53,18 +53,15 @@ export async function distanceField(inside, w, h, yieldFn = async () => {}) {
 // Outline radius in pixels for a width given as a percentage of the longest side.
 export const outlineRadius = (w, h, widthPct) =>
   (Math.max(w, h) * widthPct) / 100;
-// Paints an anti-aliased stroke of `rgb` around the silhouette (alpha >= 128,
-// or a given `silhouette` mask of the same size), under the artwork. The
-// canvas grows only where the transparent margin is narrower than the stroke.
-export async function outline(
-  pixels,
-  w,
-  h,
-  { widthPct, rgb, silhouette },
-  yieldFn,
-) {
+// Where the stroke falls: its coverage (0 to 1) at every pixel of the canvas it
+// needs, around the silhouette (alpha >= 128, or a given `silhouette` mask of
+// the same size). The canvas grows only where the transparent margin is
+// narrower than the stroke, by `left` and `top` at the origin. Returns null
+// when there is nothing to draw. The colour is added later (compositeOutline,
+// outlineLayer), so the viewer keeps this and only recolours it.
+export async function outlineMask(pixels, w, h, widthPct, silhouette, yieldFn) {
   const r = outlineRadius(w, h, widthPct);
-  if (!(r > 0)) return { pixels, width: w, height: h };
+  if (!(r > 0)) return null;
   let minX = w,
     minY = h,
     maxX = -1,
@@ -77,7 +74,7 @@ export async function outline(
         minY = Math.min(minY, y);
         maxY = Math.max(maxY, y);
       }
-  if (maxX < 0) return { pixels, width: w, height: h };
+  if (maxX < 0) return null;
   const reach = Math.ceil(r + 0.5),
     left = Math.max(0, reach - minX),
     top = Math.max(0, reach - minY),
@@ -87,23 +84,33 @@ export async function outline(
     throw Error(
       "The outline would make the image larger than 4,194,304 pixels or 8,192 pixels on a side. Use a thinner outline or a smaller image.",
     );
-  const art = new Uint8ClampedArray(W * H * 4),
-    inside = new Uint8Array(W * H);
+  const inside = new Uint8Array(W * H);
+  for (let y = 0; y < h; y++) {
+    const row = (y + top) * W + left;
+    if (silhouette) inside.set(silhouette.subarray(y * w, (y + 1) * w), row);
+    else
+      for (let x = 0; x < w; x++)
+        inside[row + x] = pixels[(y * w + x) * 4 + 3] >= 128 ? 1 : 0;
+  }
+  const dist = await distanceField(inside, W, H, yieldFn),
+    coverage = new Float64Array(W * H);
+  for (let i = 0; i < W * H; i++)
+    coverage[i] = clamp(r + 0.5 - Math.sqrt(dist[i]), 0, 1);
+  return { coverage, width: W, height: H, left, top };
+}
+// Paints the stroke of `rgb` under the artwork, on the mask's canvas.
+export function compositeOutline(pixels, w, h, mask, rgb) {
+  const { coverage, width: W, height: H, left, top } = mask,
+    art = new Uint8ClampedArray(W * H * 4),
+    out = new Uint8ClampedArray(W * H * 4);
   for (let y = 0; y < h; y++)
     art.set(
       pixels.subarray(y * w * 4, (y + 1) * w * 4),
       ((y + top) * W + left) * 4,
     );
-  if (silhouette)
-    for (let y = 0; y < h; y++)
-      inside.set(silhouette.subarray(y * w, (y + 1) * w), (y + top) * W + left);
-  else
-    for (let i = 0; i < W * H; i++) inside[i] = art[i * 4 + 3] >= 128 ? 1 : 0;
-  const dist = await distanceField(inside, W, H, yieldFn),
-    out = new Uint8ClampedArray(W * H * 4);
   for (let i = 0; i < W * H; i++) {
     const o = i * 4,
-      lineA = clamp(r + 0.5 - Math.sqrt(dist[i]), 0, 1),
+      lineA = coverage[i],
       artA = art[o + 3] / 255,
       a = artA + lineA * (1 - artA);
     if (!a) continue;
@@ -114,6 +121,48 @@ export async function outline(
     out[o + 3] = Math.round(a * 255);
   }
   return { pixels: out, width: W, height: H };
+}
+// Paints an anti-aliased stroke of `rgb` around the silhouette, under the
+// artwork: the export's outline.
+export async function outline(
+  pixels,
+  w,
+  h,
+  { widthPct, rgb, silhouette },
+  yieldFn,
+) {
+  const mask = await outlineMask(pixels, w, h, widthPct, silhouette, yieldFn);
+  return mask
+    ? compositeOutline(pixels, w, h, mask, rgb)
+    : { pixels, width: w, height: h };
+}
+// The stroke alone as an image, for the viewer to draw behind the artwork: the
+// outline colour at the stroke's coverage. The artwork drawn over it gives the
+// same pixels as compositeOutline.
+export function outlineLayer(mask, rgb) {
+  const { coverage, width, height } = mask,
+    out = new Uint8ClampedArray(width * height * 4);
+  for (let i = 0; i < coverage.length; i++) {
+    const o = i * 4;
+    out[o] = rgb[0];
+    out[o + 1] = rgb[1];
+    out[o + 2] = rgb[2];
+    out[o + 3] = Math.round(coverage[i] * 255);
+  }
+  return out;
+}
+// What the stroke depends on in the artwork: which pixels are inside it (alpha
+// 128 or more) and which are drawn at all (any alpha). Recolouring leaves the
+// key alone, so a recolour never recomputes the stroke.
+export function strokeKey(pixels) {
+  let a = 2166136261,
+    b = 5381;
+  for (let i = 3; i < pixels.length; i += 4) {
+    const v = pixels[i] >= 128 ? 2 : pixels[i] ? 1 : 0;
+    a = Math.imul(a ^ v, 16777619);
+    b = (Math.imul(b, 33) + v) | 0;
+  }
+  return a + ":" + b + ":" + pixels.length;
 }
 // For each output index along one axis: the source indices and weights.
 // Shrinking averages the exact covered area; enlarging interpolates linearly.

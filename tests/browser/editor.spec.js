@@ -55,13 +55,25 @@ async function exportFile(page) {
     bytes: await readFile(await file.path()),
   };
 }
+// The app is idle: nothing is waiting on a result. (Cancel is no help here: it
+// only appears once processing has taken a while.)
+const settled = (page, timeout = 15000) =>
+  expect(page.locator(".app")).toHaveAttribute("data-busy", "false", {
+    timeout,
+  });
+// Opens a panel that may start collapsed (Swatches and Outline do on short windows).
+async function openPanel(page, id) {
+  const toggle = page.locator(`.panel[data-panel="${id}"] .panel-toggle`);
+  if ((await toggle.getAttribute("aria-expanded")) === "false")
+    await toggle.click();
+}
 async function ready(page) {
   await expect(page.locator("#palette button").first()).toBeVisible();
-  await expect(page.locator("#cancel")).toBeHidden();
+  await settled(page);
 }
 async function pick(page) {
   await page.locator("#palette button").first().click();
-  await expect(page.locator("#cancel")).toBeHidden();
+  await settled(page);
 }
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
@@ -74,13 +86,13 @@ test("sample, modes, exact target, undo/redo and export", async ({ page }) => {
   await choose(page, "mode", "flat");
   await page.locator("#targetHex").fill("#12AB34");
   await page.locator("#targetHex").press("Tab");
-  await expect(page.locator("#cancel")).toBeHidden();
+  await settled(page);
   await expect(page.locator("#targetResult")).toContainText("achieved #12AB34");
   await page.locator("#apply").click();
   await ready(page);
   await expect(page.locator("#editState")).toHaveText("No pending edit");
   await page.locator("#undo").click();
-  await expect(page.locator("#cancel")).toBeHidden();
+  await settled(page);
   await expect(page.locator("#editState")).toHaveText("Pending edit");
   await page.locator("#redo").click();
   await ready(page);
@@ -169,7 +181,7 @@ test("shift lands on the target in both colour models", async ({ page }) => {
     await choose(page, "model", model);
     await page.locator("#targetHex").fill("#5865F2");
     await page.locator("#targetHex").press("Tab");
-    await expect(page.locator("#cancel")).toBeHidden();
+    await settled(page);
     await expect(page.locator("#targetResult")).toContainText(
       "Requested #5865F2 · achieved #5865F2",
     );
@@ -181,7 +193,7 @@ test("outline appears in the export and the real-size preview", async ({
   page,
 }) => {
   await pick(page);
-  await page.locator("#outlinePanel summary").click();
+  await openPanel(page, "outline");
   await page.locator("#outline").check();
   await page.locator("#outlineHex").fill("#00FF00");
   await page.locator("#outlineWidth").fill("10");
@@ -429,7 +441,10 @@ test("in the Windows app the screen picker asks the host and takes only its answ
   await ready(page);
   await pick(page);
   await page.locator("#eyeDropper").click();
+  // The page asks the host where the update check stands as it starts, and for
+  // nothing else besides the pick.
   expect(await page.evaluate(() => window.chrome.webview.sent)).toEqual([
+    "update-state",
     "pick-colour",
   ]);
   const reply = (data) =>
@@ -449,7 +464,7 @@ test("in the Windows app the screen picker asks the host and takes only its answ
 test("palettes open from files and paste, and save as GIMP palettes", async ({
   page,
 }) => {
-  await page.locator("#palettePanel summary").click();
+  await openPanel(page, "swatches");
   await page.locator("#paletteInput").setInputFiles({
     name: "brand.gpl",
     mimeType: "application/octet-stream",
@@ -517,7 +532,7 @@ test("variants preview each colour and export the same bytes as a single edit", 
   page,
 }) => {
   await pick(page);
-  await page.locator("#palettePanel summary").click();
+  await openPanel(page, "swatches");
   await page.locator("#makeVariants").click();
   await expect(page.locator("#variants .variant")).toHaveCount(4);
   await expect(page.locator("#exportVariants")).toBeVisible();
@@ -545,7 +560,7 @@ test("variants preview each colour and export the same bytes as a single edit", 
     "da373c.png",
   ]);
   await page.locator("#variants .variant").first().click();
-  await expect(page.locator("#cancel")).toBeHidden();
+  await settled(page);
   await expect(page.locator("#targetResult")).toContainText(
     "Requested #5865F2",
   );
@@ -581,10 +596,10 @@ test("the colour map changes several colours at once, with undo", async ({
   await expect(rows.nth(1)).toHaveAttribute("aria-pressed", "true");
   await expect(rows.nth(1)).toContainText("Pick a colour");
   await page.getByRole("button", { name: "Pick #000000" }).click();
-  await expect(page.locator("#cancel")).toBeHidden();
+  await settled(page);
   await page.locator("#targetHex").fill("#FFFFFF");
   await expect(rows.nth(1)).toContainText("#000000 → #FFFFFF");
-  await expect(page.locator("#cancel")).toBeHidden();
+  await settled(page);
   await expect(rows.nth(1)).toContainText(" px");
   // One export carries both: a green heart with a white outline.
   const both = await exportFile(page),
@@ -622,7 +637,7 @@ test("map all colours, then save a recipe, apply it and batch it into a ZIP", as
   await expect(page.locator("#editState")).toHaveText("No pending edit");
   await page.locator("#targetHex").fill("#5865F2");
   await expect(page.locator("#editState")).toHaveText("Pending edit");
-  await expect(page.locator("#cancel")).toBeHidden();
+  await settled(page);
   const edited = await raw((await exportFile(page)).bytes);
   await page.locator("#recipePanel summary").click();
   const saving = page.waitForEvent("download");
@@ -644,7 +659,7 @@ test("map all colours, then save a recipe, apply it and batch it into a ZIP", as
     buffer: Buffer.from(text),
   });
   await expect(page.locator("#status")).toContainText("Applied heart.json");
-  await expect(page.locator("#cancel")).toBeHidden();
+  await settled(page);
   const replayed = await raw((await exportFile(page)).bytes);
   expect(Buffer.compare(replayed, edited)).toBe(0);
   // A malformed recipe is refused without touching the image.
@@ -677,20 +692,19 @@ test("map all colours, then save a recipe, apply it and batch it into a ZIP", as
 test("brush overrides, history and preview background do not alter export alpha", async ({
   page,
 }) => {
-  await page.locator("#brushPanel").locator("summary").click();
   await page.locator("#brushAdd").click();
   const box = await page.locator("#resultCanvas").boundingBox();
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   await expect(page.locator("#coverage")).toContainText("pixels selected");
   await choose(page, "mode", "transparent");
-  await expect(page.locator("#cancel")).toBeHidden();
+  await settled(page);
   await expect(page.locator("#editState")).toHaveText("Pending edit");
   await page.locator("#undo").click();
   await expect(page.locator('#mode input[value="shift"]')).toBeChecked();
   await page.locator("#redo").click();
   await expect(page.locator('#mode input[value="transparent"]')).toBeChecked();
   await choose(page, "background", "white");
-  await expect(page.locator("#cancel")).toBeHidden();
+  await settled(page);
   const alpha = await page
     .locator("#resultCanvas")
     .evaluate((c) => c.getContext("2d").getImageData(64, 64, 1, 1).data[3]);
@@ -712,9 +726,10 @@ test("responsive workspace, keyboard palette and theme persist without image sto
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     ).toBe(true);
-    if (width < 960) {
+    // Portrait and phone layouts put the canvas above the controls.
+    if (width < height) {
       const canvas = await page.locator("#viewport").boundingBox(),
-        controls = await page.locator(".inspector").boundingBox();
+        controls = await page.locator("#dock").boundingBox();
       expect(canvas.y).toBeLessThan(controls.y);
     }
   }
@@ -730,10 +745,11 @@ test("responsive workspace, keyboard palette and theme persist without image sto
 test("network and content security policy block external resources and script injection", async ({
   page,
 }) => {
-  const external = [];
+  const external = [],
+    origin = new URL(page.url()).origin;
   page.on("request", (r) => {
     if (
-      !r.url().startsWith("http://127.0.0.1:4173") &&
+      !r.url().startsWith(origin) &&
       !r.url().startsWith("blob:") &&
       !r.url().startsWith("data:")
     )
@@ -748,7 +764,7 @@ test("network and content security policy block external resources and script in
   await pick(page);
   expect(external).toEqual([]);
 });
-test("worker fallback remains editable", async ({ browser }) => {
+test("worker fallback remains editable", async ({ browser, baseURL }) => {
   const context = await browser.newContext();
   await context.addInitScript(() => {
     window.Worker = class {
@@ -758,7 +774,7 @@ test("worker fallback remains editable", async ({ browser }) => {
     };
   });
   const page = await context.newPage();
-  await page.goto("http://127.0.0.1:4173");
+  await page.goto(baseURL);
   await ready(page);
   await pick(page);
   await expect(page.locator("#editState")).toHaveText("Pending edit");
@@ -819,7 +835,7 @@ test("large images remain cancellable and a new edit resumes processing", async 
   });
   await expect(page.locator("#status")).toContainText("cancelled");
   await choose(page, "mode", "flat");
-  await expect(page.locator("#cancel")).toBeHidden({ timeout: 60000 });
+  await settled(page, 60000);
   await expect(page.locator("#editState")).toHaveText("Pending edit");
 });
 test("SVG geometry, styles, gradients and hostile XML limits", async ({
@@ -960,27 +976,32 @@ test("Fluent Color SVG filters, mask types and blend modes", async ({
   await ready(page);
   await expect(page.locator("#status")).not.toContainText("Could not open");
 });
-test("wide screens show the canvas over three side-by-side panels; phones switch panels with tabs", async ({
+test("wide screens put Selection left of the canvas and the rest right of it; phones switch panels with tabs", async ({
   page,
 }) => {
   const box = (selector) => page.locator(selector).boundingBox();
-  const [selection, colour, exported] = await Promise.all(
-    ["selection", "colour", "export"].map((p) =>
-      box(`.panel[data-panel="${p}"]`),
-    ),
+  const [selection, colour, adjust, exported, viewport] = await Promise.all(
+    ["selection", "colour", "adjust", "export"]
+      .map((p) => box(`.panel[data-panel="${p}"]`))
+      .concat(box("#viewport")),
   );
-  expect(selection.y).toBe(colour.y);
-  expect(colour.y).toBe(exported.y);
-  expect(selection.x).toBeLessThan(colour.x);
-  expect(colour.x).toBeLessThan(exported.x);
-  expect((await box("#viewport")).height).toBeGreaterThanOrEqual(300);
+  await expect(page.locator("#main")).toHaveAttribute("data-preset", "side");
+  expect(selection.x + selection.width).toBeLessThanOrEqual(viewport.x + 1);
+  for (const panel of [colour, adjust, exported]) {
+    expect(panel.x).toBeGreaterThanOrEqual(viewport.x + viewport.width - 1);
+    expect(panel.x).toBe(colour.x);
+  }
+  // Colour, Adjust and Export stack in one column, top to bottom.
+  expect(colour.y).toBeLessThan(adjust.y);
+  expect(adjust.y).toBeLessThan(exported.y);
+  expect(viewport.height).toBeGreaterThanOrEqual(300);
   await expect(page.locator(".dock-tabs")).toBeHidden();
   // Treatment choices answer the arrow keys like any radio group.
   await pick(page);
   await page.locator('#mode input[value="shift"]').focus();
   await page.keyboard.press("ArrowRight");
   await expect(page.locator('#mode input[value="flat"]')).toBeChecked();
-  await expect(page.locator("#cancel")).toBeHidden();
+  await settled(page);
   await expect(page.locator("#targetResult")).toContainText("achieved");
   await page.setViewportSize({ width: 360, height: 800 });
   await expect(page.locator(".dock-tabs")).toBeVisible();
@@ -1008,7 +1029,7 @@ test("on touch screens controls are finger-sized and two fingers pinch to zoom",
   const page = await context.newPage();
   await page.goto("/");
   await expect(page.locator("#palette button").first()).toBeAttached();
-  await expect(page.locator("#cancel")).toBeHidden();
+  await settled(page);
   for (const selector of [
     "#open",
     "#undo",
@@ -1302,6 +1323,7 @@ test("JPEG/WebP signatures and animated GIF first-frame import", async ({
 test("repeated imports release fallback pixel buffers", async ({
   browser,
   browserName,
+  baseURL,
 }) => {
   test.skip(
     browserName !== "chromium",
@@ -1317,7 +1339,7 @@ test("repeated imports release fallback pixel buffers", async ({
     };
   });
   const page = await context.newPage();
-  await page.goto("http://127.0.0.1:4173");
+  await page.goto(baseURL);
   await ready(page);
   const cdp = await context.newCDPSession(page),
     fixture = await sharp({

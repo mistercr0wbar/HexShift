@@ -1,10 +1,10 @@
 // Hex Shift - the update notice.
 //
 // A slim bar across the top of the window, plain WinForms, never a modal window: it says
-// an update exists, shows progress, and asks before anything is installed. The only
-// thing the page can ask the host for is the screen colour picker (ScreenPicker.cs),
-// so none of this goes through the page. "Check for updates" lives in the window's system menu
-// (right-click the title bar, or Alt+Space).
+// an update exists, shows progress, and asks before anything is installed. Everything that
+// is only information (checking, up to date, could not check) goes to the page as an
+// "update-state" message (HostMessages.cs) and appears in its status bar; the page's Help menu
+// sends back the few exact commands it may (check now, automatic checks on or off).
 //
 // C# 5 on purpose, like the rest of the host.
 
@@ -12,7 +12,6 @@ using System;
 using System.ComponentModel;
 using System.Drawing;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
@@ -129,37 +128,37 @@ namespace HexShift
 
     sealed class UpdateController
     {
-        const int WmSysCommand = 0x112;
-        const int CmdCheck = 0x1000;
-        const int CmdAuto = 0x1010;
-        const uint MfString = 0x0, MfChecked = 0x8, MfUnchecked = 0x0, MfSeparator = 0x800, MfByCommand = 0x0;
-
-        [DllImport("user32.dll")]
-        static extern IntPtr GetSystemMenu(IntPtr hWnd, bool revert);
-        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-        static extern bool AppendMenuW(IntPtr hMenu, uint flags, UIntPtr id, string text);
-        [DllImport("user32.dll")]
-        static extern uint CheckMenuItem(IntPtr hMenu, uint id, uint check);
-
         readonly Form owner;
         readonly UpdateService service;
         readonly UpdateBar bar;
         readonly bool installedCopy;
         readonly bool dark;
         CancellationTokenSource cancel;
-        System.Windows.Forms.Timer startupTimer;
-        IntPtr systemMenu = IntPtr.Zero;
+        System.Windows.Forms.Timer launchTimer;
+        System.Windows.Forms.Timer recheckTimer;
         bool busy;
         bool downloading;
         bool manualRequested;
         UpdateOffer offer;
         string stagedPath;
+        // Where the check stands, as the page is told it (UpdateState).
+        string phase = UpdateState.Idle;
+        string phaseVersion;
+        string phaseDetail;
+        int phasePercent;
+        bool phaseManual;
 
-        internal UpdateController(Form owner, string dataDir, bool dark)
+        // Receives an "update-state" message whenever the state changes, on the window's thread.
+        internal Action<string> StateChanged;
+
+        internal UpdateController(Form owner, string dataDir, bool dark) : this(owner, UpdateService.ForRelease(dataDir), dark) { }
+
+        // Takes the service ready-made, so a test can point it at a loopback server or give it no key.
+        internal UpdateController(Form owner, UpdateService service, bool dark)
         {
             this.owner = owner;
             this.dark = dark;
-            service = UpdateService.ForRelease(dataDir);
+            this.service = service;
             installedCopy = IsInstalledCopy();
             bar = new UpdateBar(dark);
         }
@@ -183,58 +182,81 @@ namespace HexShift
             catch (Exception) { return false; }
         }
 
-        // ---- system menu -------------------------------------------------------------
+        // ---- the page's commands and the state it is shown ----------------------------
 
-        internal void AttachSystemMenu(IntPtr handle)
+        // The commands the page may send (HostMessages.Parse has already checked the words and the
+        // sender). Returns false for anything else.
+        internal bool HandlePageMessage(PageMessage kind)
         {
-            try
+            switch (kind)
             {
-                systemMenu = GetSystemMenu(handle, false);
-                if (systemMenu == IntPtr.Zero) return;
-                AppendMenuW(systemMenu, MfSeparator, UIntPtr.Zero, null);
-                AppendMenuW(systemMenu, MfString, (UIntPtr)CmdCheck, "Check for &updates...");
-                AppendMenuW(systemMenu, MfString | (service.AutoCheck ? MfChecked : MfUnchecked), (UIntPtr)CmdAuto, "Check for updates &automatically");
-            }
-            catch (Exception) { systemMenu = IntPtr.Zero; }
-        }
-
-        // Called for WM_SYSCOMMAND; the low four bits of the id belong to Windows.
-        internal bool HandleSysCommand(IntPtr wParam)
-        {
-            switch ((int)(wParam.ToInt64() & 0xFFF0))
-            {
-                case CmdCheck: CheckNow(); return true;
-                case CmdAuto: ToggleAuto(); return true;
+                case PageMessage.CheckUpdates: CheckNow(); return true;
+                case PageMessage.AutoUpdatesOn: SetAutoCheck(true); return true;
+                case PageMessage.AutoUpdatesOff: SetAutoCheck(false); return true;
+                case PageMessage.UpdateState: Publish(); return true;
             }
             return false;
         }
 
-        void ToggleAuto()
+        internal void SetAutoCheck(bool on)
         {
-            service.AutoCheck = !service.AutoCheck;
-            if (systemMenu != IntPtr.Zero) CheckMenuItem(systemMenu, CmdAuto, MfByCommand | (service.AutoCheck ? MfChecked : MfUnchecked));
+            service.AutoCheck = on;
+            Publish();
+        }
+
+        internal string StateJson()
+        {
+            return UpdateState.Json(phase, phaseVersion, service.LastCheckUtc, service.AutoCheck, service.Enabled, phaseManual, phaseDetail, phasePercent);
+        }
+
+        internal void Publish()
+        {
+            Action<string> send = StateChanged;
+            if (send != null) send(StateJson());
+        }
+
+        void SetPhase(string next, string version, string detail, bool manual)
+        {
+            phase = next;
+            phaseVersion = version;
+            phaseDetail = detail;
+            phaseManual = manual;
+            phasePercent = 0;
+            Publish();
         }
 
         // ---- checking ----------------------------------------------------------------
 
-        // Waits a few seconds so starting HexShift is never slowed by it.
-        internal void StartAutomaticCheck()
+        // Called once the page has loaded. With automatic checks on, a check starts a couple of seconds
+        // later on every launch (so starting is never slowed down), and another follows every few hours
+        // while the window stays open (UpdatePolicy).
+        internal void StartAutomaticChecks()
         {
-            if (!service.IsCheckDue()) return;
-            startupTimer = new System.Windows.Forms.Timer();
-            startupTimer.Interval = 5000;
-            startupTimer.Tick += delegate
+            if (launchTimer != null || !service.Enabled) return;
+            launchTimer = new System.Windows.Forms.Timer();
+            launchTimer.Interval = (int)UpdatePolicy.LaunchDelay.TotalMilliseconds;
+            launchTimer.Tick += delegate
             {
-                startupTimer.Stop();
+                launchTimer.Stop();
                 // The person may have switched automatic checks off during the wait.
-                if (service.IsCheckDue()) BeginCheck(false);
+                if (service.CheckAtLaunch) RunScheduledCheck();
+                recheckTimer = new System.Windows.Forms.Timer();
+                recheckTimer.Interval = (int)UpdatePolicy.RecheckInterval.TotalMilliseconds;
+                recheckTimer.Tick += delegate { RunScheduledCheck(); };
+                recheckTimer.Start();
             };
-            startupTimer.Start();
+            launchTimer.Start();
+        }
+
+        void RunScheduledCheck()
+        {
+            if (UpdatePolicy.CanRunScheduledCheck(service.Enabled && service.AutoCheck, busy, downloading, offer != null)) BeginCheck(false);
         }
 
         internal void Cancel()
         {
-            if (startupTimer != null) startupTimer.Stop();
+            if (launchTimer != null) launchTimer.Stop();
+            if (recheckTimer != null) recheckTimer.Stop();
             if (cancel != null) cancel.Cancel();
         }
 
@@ -242,22 +264,29 @@ namespace HexShift
         {
             if (!service.Enabled)
             {
-                Info("Updates are not available in this build of HexShift.");
+                SetPhase(UpdateState.Failed, null, "Updates are not available in this build of Hex Shift.", true);
                 return;
             }
             if (busy)
             {
-                // A check is already running (probably the automatic one): say so, and make sure the
-                // person who asked gets the answer when it arrives.
+                // A check is already running (probably the automatic one): the person who asked gets
+                // the answer when it arrives, and the page is told it is theirs.
                 if (!downloading)
                 {
                     manualRequested = true;
-                    bar.Display("Checking for updates...", -1);
+                    phaseManual = true;
+                    Publish();
                 }
                 return;
             }
-            if (offer != null && stagedPath != null) ShowReady();
-            else if (offer != null) ShowAvailable();
+            // An update that was already found is shown again; the page is told it was asked.
+            if (offer != null)
+            {
+                phaseManual = true;
+                Publish();
+                if (stagedPath != null) ShowReady();
+                else ShowAvailable();
+            }
             else BeginCheck(true);
         }
 
@@ -265,7 +294,7 @@ namespace HexShift
         {
             if (busy) return;
             busy = true;
-            if (manual) bar.Display("Checking for updates...", -1);
+            SetPhase(UpdateState.Checking, null, null, manual);
             cancel = new CancellationTokenSource();
             CancellationToken token = cancel.Token;
             ThreadPool.QueueUserWorkItem(delegate
@@ -283,19 +312,20 @@ namespace HexShift
             busy = false;
             manual = manual || manualRequested;
             manualRequested = false;
+            // An update is shown in the notice bar. "Up to date" and "could not check" are only
+            // information, so they go to the page's status bar and never open a window.
             switch (outcome.Kind)
             {
                 case CheckKind.Available:
                     offer = outcome.Offer;
+                    SetPhase(UpdateState.Available, offer.Version, null, manual);
                     ShowAvailable();
                     return;
                 case CheckKind.UpToDate:
-                    bar.Dismiss();
-                    if (manual) Info(outcome.Message);
+                    SetPhase(UpdateState.Current, service.CurrentVersion, null, manual);
                     return;
                 default:
-                    bar.Dismiss();
-                    if (manual) Info("HexShift could not check for updates.\n\n" + outcome.Message + "\n\nHexShift keeps working as normal.");
+                    SetPhase(UpdateState.Failed, null, outcome.Message, manual);
                     return;
             }
         }
@@ -329,6 +359,7 @@ namespace HexShift
             downloading = true;
             UpdateOffer target = offer;
             string label = "Downloading HexShift " + target.Version + "...";
+            SetPhase(UpdateState.Downloading, target.Version, null, false);
             bar.Display(label, 0, new BarButton("Cancel", delegate { if (cancel != null) cancel.Cancel(); }));
             cancel = new CancellationTokenSource();
             CancellationToken token = cancel.Token;
@@ -341,7 +372,12 @@ namespace HexShift
                     path = service.Download(target, delegate(long done, long total)
                     {
                         int percent = (int)(done * 100 / total);
-                        Post(delegate { bar.Display(label + " " + percent + "%", percent, new BarButton("Cancel", delegate { if (cancel != null) cancel.Cancel(); })); });
+                        Post(delegate
+                        {
+                            bar.Display(label + " " + percent + "%", percent, new BarButton("Cancel", delegate { if (cancel != null) cancel.Cancel(); }));
+                            // The page hears about whole percents only, not every chunk.
+                            if (percent != phasePercent) { phasePercent = percent; Publish(); }
+                        });
                     }, token);
                 }
                 catch (OperationCanceledException) { }
@@ -360,16 +396,19 @@ namespace HexShift
             if (path != null)
             {
                 stagedPath = path;
+                SetPhase(UpdateState.Ready, offer.Version, null, false);
                 ShowReady();
             }
             else if (failure != null)
             {
+                SetPhase(UpdateState.Failed, offer.Version, "The update could not be downloaded. " + failure, false);
                 bar.Display("The update could not be downloaded. " + failure, -1,
                     new BarButton("Dismiss", bar.Dismiss),
                     new BarButton("Try again", BeginDownload));
             }
             else
             {
+                SetPhase(UpdateState.Available, offer.Version, null, false);
                 ShowAvailable();
             }
         }

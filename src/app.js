@@ -18,7 +18,15 @@ import { History } from "./history.js";
 import { decodeBlob } from "./import.js";
 import { canEncodeWebP, formatBytes, outputName, safeStem } from "./export.js";
 import { deliver } from "./deliver.js";
-import { finish, resize, outlineRadius, shrinkSilhouette } from "./output.js";
+import {
+  finish,
+  resize,
+  outlineLayer,
+  outlineMask,
+  outlineRadius,
+  shrinkSilhouette,
+  strokeKey,
+} from "./output.js";
 import {
   PRESETS,
   presetById,
@@ -36,12 +44,14 @@ import {
 } from "./palettes.js";
 import {
   MAX_RECIPE_BYTES,
-  parseRecipe,
+  parseRecipeFile,
   recipeStep,
   replay,
   writeRecipe,
 } from "./recipe.js";
-import { screenPicker, systemColours } from "./host.js";
+import { screenPicker, systemColours, updateChannel } from "./host.js";
+import { createMenubar } from "./menu.js";
+import { createWorkspace } from "./workspace.js";
 import {
   THEMES,
   MODIFIERS,
@@ -52,7 +62,9 @@ import {
 import sample from "./sample.js";
 import { makePause } from "./yield.js";
 const $ = (id) => document.getElementById(id),
-  pause = makePause();
+  pause = makePause(),
+  // Set by the build from package.json.
+  VERSION = __VERSION__;
 let w = 0,
   h = 0,
   name = "",
@@ -96,14 +108,38 @@ const history = new History(),
   before = $("beforeCanvas"),
   after = $("resultCanvas"),
   wipeCanvas = $("wipeCanvas");
-function status(message) {
-  $("status").textContent = message;
+let statusTimer = 0;
+// `fade` clears the message after that many ms, if nothing has replaced it.
+function status(message, { fade = 0 } = {}) {
+  const line = $("status");
+  clearTimeout(statusTimer);
+  line.classList.remove("fading");
+  line.textContent = message;
+  if (fade)
+    statusTimer = setTimeout(() => {
+      if (line.textContent !== message) return;
+      line.classList.add("fading");
+      statusTimer = setTimeout(() => {
+        if (line.textContent === message) line.textContent = "";
+        line.classList.remove("fading");
+      }, 400);
+    }, fade);
 }
 function newRow(id, base = defaults()) {
   return { id, params: base, seeds: [] };
 }
-function freshEdit(base) {
-  return { rows: [newRow(1, base)], active: 0, steps: [] };
+// The outline is part of the edit (it is undone, redone and saved in recipes with the
+// colours), but not of the image: it is drawn behind the artwork and added on export.
+function freshEdit(
+  base,
+  outline = { on: false, widthPct: 4, colour: "#FFFFFF" },
+) {
+  return {
+    rows: [newRow(1, base)],
+    active: 0,
+    steps: [],
+    outline: { ...outline },
+  };
 }
 // Points `params` and `seeds` at the active row.
 function activate() {
@@ -150,29 +186,46 @@ function setChoice(id, value) {
   const input = $(id).querySelector(`input[value="${value}"]`);
   if (input) input.checked = true;
 }
+let cancelTimer = 0;
 function buttons() {
   const available = !!pixels;
   $("undo").disabled = !history.undoEntries.length;
   $("redo").disabled = !history.redoEntries.length;
-  $("apply").disabled = !available || processing || !result?.changed;
+  // Apply keeps the state of the last result while the next is on its way, so it
+  // does not flicker during a drag; clicking it waits for the newest result.
+  $("apply").disabled = !available || !result?.changed;
   $("copy").disabled = !available;
   $("export").disabled = !available;
-  $("cancel").hidden = !processing;
+  // `data-busy` says whether the page is waiting on a result. Cancel has a place of
+  // its own in the status bar and shows only once the wait is long enough to need
+  // it, so a quick drag never makes anything appear or move.
+  document.querySelector(".app").dataset.busy = String(processing);
+  if (processing) {
+    cancelTimer ||= setTimeout(() => {
+      cancelTimer = 0;
+      if (processing) $("cancel").classList.add("shown");
+    }, 400);
+  } else {
+    clearTimeout(cancelTimer);
+    cancelTimer = 0;
+    $("cancel").classList.remove("shown");
+  }
   $("batch").disabled = !available || !$("cancelBatch").hidden;
   $("editState").textContent = result?.changed
     ? "Pending edit"
     : "No pending edit";
   $("editState").classList.toggle("pending", !!result?.changed);
 }
-function makeSlider(parent, key, label, min, max, unit) {
+// A slider is one row: its name, the track, and the number. `short` is the name shown
+// when the full one will not fit the row; the full name is the tooltip.
+function makeSlider(parent, key, label, min, max, unit, short = label) {
   const box = document.createElement("div");
   box.className = "slider";
-  const head = document.createElement("div");
-  head.className = "slider-head";
   const lab = document.createElement("label");
   lab.htmlFor = key;
   lab.id = key + "Label";
-  lab.textContent = label;
+  lab.textContent = short;
+  lab.title = label;
   const number = document.createElement("input");
   number.type = "number";
   number.min = min;
@@ -187,8 +240,7 @@ function makeSlider(parent, key, label, min, max, unit) {
   range.max = max;
   range.step = number.step;
   range.setAttribute("aria-label", label);
-  head.append(lab, number);
-  box.append(head, range);
+  box.append(lab, range, number);
   $(parent).append(box);
   const update = (value) => {
     begin();
@@ -218,8 +270,8 @@ for (const args of [
 for (const args of [
   ["hueTol", "Hue tolerance", 0, 180, "degrees"],
   ["shadeTol", "Shade range", 0, 100, "percent"],
-  ["soft", "Colour-match softness", 0, 100, "percent"],
-  ["feather", "Spatial feather", 0, 8, "pixels"],
+  ["soft", "Colour-match softness", 0, 100, "percent", "Softness"],
+  ["feather", "Spatial feather", 0, 8, "pixels", "Feather"],
 ])
   makeSlider("selectionSliders", ...args);
 function swatch(hex, label, fn) {
@@ -297,66 +349,76 @@ function rowText(row) {
               : p.target;
   return { from, to };
 }
+// The chips are built once for a given set of rows and then only repainted, so
+// dragging a slider (which updates the map every frame) rebuilds nothing, moves
+// nothing and never takes the keyboard focus away from a chip.
+function buildMapRow(k) {
+  const item = document.createElement("div"),
+    select = document.createElement("button"),
+    part = (tag, className) => {
+      const node = document.createElement(tag);
+      node.className = className;
+      return node;
+    };
+  item.className = "map-row";
+  select.type = "button";
+  select.className = "map-select";
+  select.append(
+    part("span", "chip"),
+    part("span", "map-text"),
+    part("span", "chip"),
+    part("span", "map-count"),
+  );
+  select.onclick = () => selectRow(k);
+  item.append(select);
+  if (edit.rows.length > 1) {
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "map-remove";
+    remove.textContent = "×";
+    remove.setAttribute("aria-label", "Remove colour " + (k + 1));
+    remove.onclick = () => removeRow(k);
+    item.append(remove);
+  }
+  return item;
+}
+function paintMapRow(item, row, k) {
+  const { from, to } = rowText(row),
+    select = item.firstChild,
+    [fromChip, text, toChip, count] = select.children,
+    pixelsOwned = result?.counts?.[k],
+    toColour = to.startsWith("#") ? to : to === "unchanged" ? from : null;
+  item.classList.toggle("active", k === edit.active);
+  select.setAttribute("aria-pressed", String(k === edit.active));
+  text.textContent = from ? from + " → " + to : "Pick a colour";
+  count.textContent =
+    from && Number.isInteger(pixelsOwned)
+      ? pixelsOwned.toLocaleString() + " px"
+      : "";
+  fromChip.className = "chip" + (from ? "" : " empty");
+  fromChip.style.backgroundColor = from?.startsWith("#") ? from : "";
+  toChip.className = "chip" + (to === "transparent" ? " clear" : "");
+  toChip.style.backgroundColor = toColour || "";
+  select.setAttribute(
+    "aria-label",
+    "Colour " +
+      (k + 1) +
+      ": " +
+      (from ? from + " to " + to : "nothing picked yet") +
+      (count.textContent
+        ? ", " + count.textContent.replace("px", "pixels")
+        : ""),
+  );
+}
 function renderMap() {
   if (!pixels) return;
-  const box = $("colourMap");
-  box.replaceChildren();
-  edit.rows.forEach((row, k) => {
-    const item = document.createElement("div"),
-      select = document.createElement("button"),
-      { from, to } = rowText(row),
-      chip = (hex, kind) => {
-        const c = document.createElement("span");
-        c.className = "chip" + (kind ? " " + kind : "");
-        if (hex) c.style.backgroundColor = hex;
-        return c;
-      },
-      text = document.createElement("span"),
-      count = document.createElement("span"),
-      pixelsOwned = result?.counts?.[k];
-    item.className = "map-row" + (k === edit.active ? " active" : "");
-    select.type = "button";
-    select.className = "map-select";
-    select.setAttribute("aria-pressed", String(k === edit.active));
-    text.className = "map-text";
-    text.textContent = from ? from + " → " + to : "Pick a colour";
-    count.className = "map-count";
-    count.textContent =
-      from && Number.isInteger(pixelsOwned)
-        ? pixelsOwned.toLocaleString() + " px"
-        : "";
-    select.setAttribute(
-      "aria-label",
-      "Colour " +
-        (k + 1) +
-        ": " +
-        (from ? from + " to " + to : "nothing picked yet") +
-        (count.textContent
-          ? ", " + count.textContent.replace("px", "pixels")
-          : ""),
-    );
-    select.append(
-      chip(from?.startsWith("#") ? from : null, from ? "" : "empty"),
-      text,
-      chip(
-        to.startsWith("#") ? to : to === "unchanged" ? from : null,
-        to === "transparent" ? "clear" : "",
-      ),
-      count,
-    );
-    select.onclick = () => selectRow(k);
-    item.append(select);
-    if (edit.rows.length > 1) {
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "map-remove";
-      remove.textContent = "×";
-      remove.setAttribute("aria-label", "Remove colour " + (k + 1));
-      remove.onclick = () => removeRow(k);
-      item.append(remove);
-    }
-    box.append(item);
-  });
+  const box = $("colourMap"),
+    shape = edit.rows.map((r) => r.id).join(",") + (edit.rows.length > 1);
+  if (box.dataset.shape !== shape) {
+    box.dataset.shape = shape;
+    box.replaceChildren(...edit.rows.map((_, k) => buildMapRow(k)));
+  }
+  edit.rows.forEach((row, k) => paintMapRow(box.children[k], row, k));
   $("addRow").disabled = edit.rows.length >= MAX_ROWS;
 }
 function selectRow(k) {
@@ -529,7 +591,7 @@ function targetDeltas() {
 function syncTarget() {
   const transparent = params.mode === "transparent";
   $("targetControls").hidden = transparent;
-  $("fine").hidden = params.mode !== "shift";
+  $("adjustPanel").hidden = params.mode !== "shift";
   $("protectLabel").hidden = params.mode !== "shift";
   $("cleanEdgesLabel").hidden = !transparent;
   const dsName = params.model === "hsl" ? "Saturation" : "Chroma";
@@ -560,6 +622,7 @@ function sync() {
   $("protect").checked = params.protect;
   $("cleanEdges").checked = params.cleanEdges;
   syncTarget();
+  syncOutline();
   renderSeeds();
   renderMap();
   buttons();
@@ -775,13 +838,14 @@ function receive(m) {
     : seeds.length
       ? "No matching pixels. Increase tolerance, or add a sample."
       : "Click a colour or choose an image swatch.";
+  $("coverage").title = $("coverage").textContent;
   $("resultNote").textContent = m.changed
     ? m.changed.toLocaleString() + " px changed"
     : "";
   if (seeds.length) {
     const sd = seeds.at(-1),
       o = (sd.y * w + sd.x) * 4;
-    $("targetResult").textContent =
+    $("targetText").textContent =
       params.mode === "transparent"
         ? "Selected pixels become transparent."
         : (params.manual && params.mode === "shift"
@@ -791,7 +855,9 @@ function receive(m) {
               : "Requested " + params.target) +
           " · achieved " +
           toHex(...m.pixels.subarray(o, o + 3));
-  } else $("targetResult").textContent = "Pick a source colour to begin.";
+  } else $("targetText").textContent = "Pick a source colour to begin.";
+  // The line is one line; the full text is the tooltip when it is cut short.
+  $("targetText").title = $("targetText").textContent;
   $("capWarning").hidden = !(m.capped && params.mode === "shift");
   renderMap();
   draw();
@@ -832,6 +898,11 @@ const dialogText = {
     "Redraw the SVG at a new size?",
     "Redrawing starts again from the SVG file, so your edits are cleared. Export first if you want to keep them.",
     "Redraw",
+  ],
+  quit: [
+    "Quit Hex Shift?",
+    "Your current image has edits. Export it first if you want to keep them.",
+    "Quit",
   ],
 };
 // Resolves true once the image is open. `redraw` reopens the current SVG at
@@ -884,11 +955,13 @@ async function openBlob(blob, fileName, isSample = false, redraw = false) {
     original = decoded.pixels;
     pixels = original.slice();
     overrides = new Int8Array(w * h);
-    edit = freshEdit();
+    // The outline settings carry over to the next image, as they always have.
+    edit = freshEdit(undefined, edit.outline);
     activate();
     dirty = false;
     history.clear();
     gesture = null;
+    resetOutlineLayer();
     for (const canvas of [before, after, wipeCanvas]) {
       canvas.width = w;
       canvas.height = h;
@@ -943,6 +1016,7 @@ async function apply() {
       rows: [newRow(1, { ...params, dh: 0, ds: 0, dl: 0, manual: false })],
       active: 0,
       steps: [...edit.steps, step],
+      outline: edit.outline,
     };
     activate();
     dirty = true;
@@ -958,7 +1032,8 @@ function reset() {
   action("Reset original", () => {
     pixels = original.slice();
     overrides = new Int8Array(w * h);
-    edit = freshEdit();
+    // The image goes back to the original; the outline is a finishing choice and stays.
+    edit = freshEdit(undefined, edit.outline);
     activate();
     dirty = false;
     prepareCurrent();
@@ -1117,18 +1192,22 @@ function draw() {
   renderPreview();
   scheduleReadout();
   markVariants();
+  // The stroke is worked out once the result has settled, not on every frame.
+  scheduleOutline();
+  placeOutline();
 }
-// Export finishing settings. UI-only: not part of the edit history.
+// What export, copy, the size readout, the real-size strip and batch finish an image
+// with. The size and format are UI-only; the outline belongs to the edit.
 function finishSettings() {
   const settings = {
     size: $("size").value,
     format: $("format").value,
     custom: Number($("customSize").value),
   };
-  if ($("outline").checked)
+  if (edit.outline.on)
     settings.outline = {
-      widthPct: Number($("outlineWidth").value),
-      colour: toHex(...(readColour($("outlineHex").value) || [255, 255, 255])),
+      widthPct: edit.outline.widthPct,
+      colour: edit.outline.colour,
     };
   return settings;
 }
@@ -1164,79 +1243,247 @@ async function renderPreview() {
   for (const canvas of previewCanvases)
     canvas.parentElement.style.backgroundColor = ground;
   if (!pixels) return;
-  const source = result?.pixels || pixels,
-    scale = Math.min(1, 256 / Math.max(w, h)),
-    bw = Math.max(1, Math.round(w * scale)),
-    bh = Math.max(1, Math.round(h * scale));
   let base;
   try {
-    base = await finish(
-      resize(source, w, h, bw, bh),
-      bw,
-      bh,
-      finishSettings(),
-      undefined,
-      scale < 1 ? shrinkSilhouette(source, w, h, bw, bh) : undefined,
-    );
+    base = await outlinedBase(result?.pixels || pixels);
   } catch {
     return;
   }
   if (ticket !== previewTicket) return;
   const dpr = window.devicePixelRatio || 1;
-  PREVIEW_SIZES.forEach((size, k) => {
-    const canvas = previewCanvases[k],
-      box = Math.round(size * dpr),
-      fit = box / Math.max(base.width, base.height),
-      tw = Math.max(1, Math.round(base.width * fit)),
-      th = Math.max(1, Math.round(base.height * fit));
-    canvas.width = canvas.height = box;
-    canvas
-      .getContext("2d")
-      .putImageData(
-        new ImageData(
-          resize(base.pixels, base.width, base.height, tw, th),
-          tw,
-          th,
-        ),
-        (box - tw) >> 1,
-        (box - th) >> 1,
-      );
-  });
+  PREVIEW_SIZES.forEach((size, k) =>
+    drawFitted(previewCanvases[k], base, Math.round(size * dpr)),
+  );
+}
+// The image at preview size (at most 256 px), finished like the export, outline included.
+async function outlinedBase(source, settings = finishSettings()) {
+  const scale = Math.min(1, 256 / Math.max(w, h)),
+    bw = Math.max(1, Math.round(w * scale)),
+    bh = Math.max(1, Math.round(h * scale));
+  return finish(
+    resize(source, w, h, bw, bh),
+    bw,
+    bh,
+    settings,
+    undefined,
+    scale < 1 ? shrinkSilhouette(source, w, h, bw, bh) : undefined,
+  );
+}
+// Draws `base` centred in a square canvas of `box` pixels, as large as fits.
+function drawFitted(canvas, base, box) {
+  const fit = box / Math.max(base.width, base.height),
+    tw = Math.max(1, Math.round(base.width * fit)),
+    th = Math.max(1, Math.round(base.height * fit));
+  canvas.width = canvas.height = box;
+  canvas
+    .getContext("2d")
+    .putImageData(
+      new ImageData(
+        resize(base.pixels, base.width, base.height, tw, th),
+        tw,
+        th,
+      ),
+      (box - tw) >> 1,
+      (box - th) >> 1,
+    );
+}
+// ---- The outline ----
+// Its settings live in `edit.outline`, so they are undone, redone and saved in
+// recipes with the colours. The stroke is drawn on a canvas of its own behind the
+// result, so the artwork is never touched and the exports (which add the same
+// stroke, from the same mask) match what is shown.
+const outlineCanvas = $("outlineCanvas");
+let outlineCache = null, // { key, mask }: where the stroke falls, until the artwork's shape changes
+  outlineTicket = 0,
+  outlineTimer = 0,
+  outlineShown = null; // { left, top, width, height } of the stroke's canvas, in image pixels
+// Brings the controls in line with the settings (after an undo, a recipe, a new image).
+function syncOutline() {
+  const o = edit.outline;
+  $("outline").checked = o.on;
+  if (document.activeElement !== $("outlineWidth"))
+    $("outlineWidth").value = o.widthPct;
+  if (document.activeElement !== $("outlineHex")) {
+    $("outlineHex").value = o.colour;
+    $("outlineHex").removeAttribute("aria-invalid");
+  }
+  $("outlineColour").value = o.colour.toLowerCase();
+  outlineControls();
+  // Turning the outline on or off changes how much room the fitted image leaves.
+  layout();
 }
 function outlineControls() {
-  const pct = Number($("outlineWidth").value),
+  const pct = edit.outline.widthPct,
     px = w ? outlineRadius(w, h, pct) : 0;
-  $("outlineWidthValue").textContent =
-    pct + "%" + (w ? " · " + Math.round(px * 10) / 10 + " px here" : "");
+  $("outlineWidthValue").textContent = pct + "%";
+  $("outlineWidthValue").title = w
+    ? Math.round(px * 10) / 10 + " px at this image's size"
+    : "";
   renderPreview();
   scheduleReadout();
+  scheduleOutline();
+  // Variant previews are drawn with the outline, so they are now out of date.
+  markVariants();
 }
-$("outline").onchange = outlineControls;
-$("outlineWidth").oninput = outlineControls;
-$("outlineColour").oninput = (e) => {
-  $("outlineHex").value = e.target.value.toUpperCase();
+// A change that is only the outline: undoable, but nothing to reprocess.
+function outlineAction(label, fn) {
+  commit("Adjust colour");
+  const old = snapshot();
+  fn();
+  history.record(old, snapshot(), label);
+  buttons();
+  syncOutline();
+  refreshOutline();
+}
+$("outline").onchange = (e) =>
+  outlineAction("Outline", () => {
+    edit.outline.on = e.target.checked;
+  });
+$("outlineWidth").addEventListener("input", (e) => {
+  begin();
+  edit.outline.widthPct = Number(e.target.value);
   outlineControls();
-};
+});
+$("outlineWidth").addEventListener("change", () => {
+  commit("Outline width");
+  buttons();
+});
+$("outlineColour").addEventListener("input", (e) => {
+  begin();
+  edit.outline.colour = e.target.value.toUpperCase();
+  $("outlineHex").value = edit.outline.colour;
+  $("outlineHex").removeAttribute("aria-invalid");
+  outlineControls();
+  refreshOutline();
+});
+$("outlineColour").addEventListener("change", () => {
+  commit("Outline colour");
+  buttons();
+});
 $("outlineHex").addEventListener("input", (e) => {
   const rgb = readColour(e.target.value);
   e.target.setAttribute("aria-invalid", String(!rgb));
   if (rgb) {
-    $("outlineColour").value = toHex(...rgb).toLowerCase();
+    begin();
+    edit.outline.colour = toHex(...rgb);
+    $("outlineColour").value = edit.outline.colour.toLowerCase();
     outlineControls();
+    refreshOutline();
   }
+});
+$("outlineHex").addEventListener("change", () => {
+  commit("Outline colour");
+  buttons();
+  if (readColour($("outlineHex").value))
+    $("outlineHex").value = edit.outline.colour;
 });
 for (const [label, hex] of [
   ["White", "#FFFFFF"],
   ["Black", "#000000"],
 ])
   $("outlineSwatches").append(
-    swatch(hex, label + " outline", () => {
-      $("outlineHex").value = hex;
-      $("outlineColour").value = hex.toLowerCase();
-      $("outline").checked = true;
-      outlineControls();
-    }),
+    swatch(hex, label + " outline", () =>
+      outlineAction("Outline colour", () => {
+        edit.outline.colour = hex;
+        edit.outline.on = true;
+      }),
+    ),
   );
+function resetOutlineLayer() {
+  outlineTicket++;
+  clearTimeout(outlineTimer);
+  outlineTimer = 0;
+  outlineCache = null;
+  outlineShown = null;
+  outlineCanvas.hidden = true;
+}
+// At most one pass every 120 ms while settings or results keep changing.
+function scheduleOutline() {
+  if (outlineTimer) return;
+  outlineTimer = setTimeout(() => {
+    outlineTimer = 0;
+    refreshOutline();
+  }, 120);
+}
+async function refreshOutline() {
+  const ticket = ++outlineTicket,
+    o = edit.outline;
+  if (!pixels || !o.on) {
+    outlineCanvas.hidden = true;
+    outlineShown = null;
+    outlineCache = null;
+    return;
+  }
+  const source = result?.pixels || pixels,
+    key = o.widthPct + "|" + w + "x" + h + "|" + strokeKey(source);
+  try {
+    // A pass that has been overtaken stops at its next breath rather than finishing.
+    if (outlineCache?.key !== key) {
+      const mask = await outlineMask(
+        source,
+        w,
+        h,
+        o.widthPct,
+        undefined,
+        async () => {
+          await pause();
+          if (ticket !== outlineTicket)
+            throw new DOMException("", "AbortError");
+        },
+      );
+      if (ticket !== outlineTicket) return;
+      outlineCache = mask ? { key, mask } : null;
+    }
+    if (!outlineCache) {
+      outlineCanvas.hidden = true;
+      outlineShown = null;
+      return;
+    }
+    const { mask } = outlineCache,
+      rgb = parseHex(o.colour) || [255, 255, 255];
+    if (outlineCanvas.width !== mask.width) outlineCanvas.width = mask.width;
+    if (outlineCanvas.height !== mask.height)
+      outlineCanvas.height = mask.height;
+    outlineCanvas
+      .getContext("2d")
+      .putImageData(
+        new ImageData(outlineLayer(mask, rgb), mask.width, mask.height),
+        0,
+        0,
+      );
+    outlineShown = {
+      left: mask.left,
+      top: mask.top,
+      width: mask.width,
+      height: mask.height,
+    };
+    outlineCanvas.hidden = false;
+    placeOutline();
+  } catch (e) {
+    if (e.name === "AbortError" || ticket !== outlineTicket) return;
+    outlineCanvas.hidden = true;
+    outlineShown = null;
+    status("Could not draw the outline: " + e.message);
+  }
+}
+// Sizes and places the stroke's canvas like the image's own: same zoom and pan,
+// moved by how far the stroke grew past the image's top and left edges.
+function placeOutline() {
+  if (!outlineShown || outlineCanvas.hidden) return;
+  const { left, top, width: W, height: H } = outlineShown,
+    dx = (W / 2 - left - w / 2) * zoom,
+    dy = (H / 2 - top - h / 2) * zoom,
+    wipe = choice("view") === "wipe";
+  outlineCanvas.style.width = W * zoom + "px";
+  outlineCanvas.style.height = H * zoom + "px";
+  outlineCanvas.style.transform = `translate(calc(-50% + ${panX + dx}px),calc(-50% + ${panY + dy}px))`;
+  // In the wipe view the stroke belongs to the result side only; the selection-only
+  // view shows the selection and nothing else.
+  outlineCanvas.style.clipPath = wipe
+    ? `inset(0 0 0 ${((left + (w * Number($("wipe").value)) / 100) / W) * 100}%)`
+    : "";
+  outlineCanvas.style.visibility = choice("overlay") === "only" ? "hidden" : "";
+}
 $("previewGround").onchange = renderPreview;
 const FORMAT_NAMES = {
     png: "PNG",
@@ -1381,7 +1628,8 @@ async function openPalette(source, label) {
     paletteSets.push(set);
     addSetOption(set);
     $("paletteSet").value = set.id;
-    $("palettePanel").open = true;
+    // A palette that was just opened is shown, even if the panel was collapsed.
+    workspace.setCollapsed("swatches", false);
     renderSet();
     status(
       "Opened " +
@@ -1465,7 +1713,7 @@ function selectionKey() {
     if (overrides[i]) sum = (sum * 31 + (i + 1) * overrides[i]) % 2147483647;
   const { target, ramp, dh, ds, dl, manual, ...rest } = params,
     others = edit.rows.filter((_, k) => k !== edit.active);
-  return JSON.stringify([imageId, seeds, rest, others, sum]);
+  return JSON.stringify([imageId, seeds, rest, others, sum, edit.outline]);
 }
 // A main-thread copy of the prepared image for variants (the worker keeps its own).
 async function variantImage() {
@@ -1490,7 +1738,7 @@ function markVariants() {
   $("variants").classList.toggle("stale", stale);
   $("variantsNote").hidden = !stale;
   $("variantsNote").textContent =
-    "The selection or treatment changed. Make variants again to update the previews; export always uses the current selection.";
+    "The selection, treatment or outline changed. Make variants again to update the previews; export always uses the current settings.";
 }
 async function makeVariants() {
   const run = ++variantRun,
@@ -1499,6 +1747,7 @@ async function makeVariants() {
   try {
     const image = await variantImage(),
       key = selectionKey(),
+      settings = finishSettings(),
       dpr = window.devicePixelRatio || 1,
       box = Math.round(56 * dpr),
       fit = box / Math.max(w, h),
@@ -1535,13 +1784,19 @@ async function makeVariants() {
         () => run !== variantRun,
       );
       if (run !== variantRun) return;
-      canvas
-        .getContext("2d")
-        .putImageData(
-          new ImageData(resize(r.pixels, w, h, tw, th), tw, th),
-          (box - tw) >> 1,
-          (box - th) >> 1,
-        );
+      // With the outline on, a tile shows the variant as it will be exported,
+      // outline included, fitted into the tile.
+      if (settings.outline)
+        drawFitted(canvas, await outlinedBase(r.pixels, settings), box);
+      else
+        canvas
+          .getContext("2d")
+          .putImageData(
+            new ImageData(resize(r.pixels, w, h, tw, th), tw, th),
+            (box - tw) >> 1,
+            (box - th) >> 1,
+          );
+      if (run !== variantRun) return;
     }
     $("exportVariants").hidden = false;
     status(
@@ -1625,8 +1880,11 @@ async function saveRecipe() {
     return;
   }
   const filename = safeStem(name) + "-recipe.json";
+  const { on, widthPct, colour } = edit.outline;
   download(
-    new Blob([writeRecipe(steps)], { type: "application/json" }),
+    new Blob([writeRecipe(steps, on ? { widthPct, colour } : null)], {
+      type: "application/json",
+    }),
     filename,
   );
   status(
@@ -1647,7 +1905,9 @@ async function applyRecipe(file) {
   try {
     if (file.size > MAX_RECIPE_BYTES)
       throw Error("Recipes must be 64 KB or smaller.");
-    const recipe = parseRecipe(await file.text()),
+    const { steps: recipe, outline: recipeOutline } = parseRecipeFile(
+        await file.text(),
+      ),
       { steps, preview } = await currentSteps(),
       iid = imageId,
       base = preview ? preview.pixels : pixels;
@@ -1661,6 +1921,10 @@ async function applyRecipe(file) {
       rows: [newRow(1, { ...params, dh: 0, ds: 0, dl: 0, manual: false })],
       active: 0,
       steps: [...steps, ...recipe],
+      // A recipe that carries an outline turns it on; one that does not leaves it be.
+      outline: recipeOutline
+        ? { on: true, ...recipeOutline }
+        : { ...edit.outline },
     };
     activate();
     dirty = true;
@@ -1793,13 +2057,23 @@ $("cancelBatch").onclick = () => {
 function layout() {
   if (!w) return;
   const pane = after.parentElement,
-    // Floating tools sit over the top and bottom of the canvas on wide
-    // layouts; fitting leaves room for them so they never cover the artwork.
+    tools = $("stageTools"),
+    floating = getComputedStyle(tools).position === "absolute",
+    // Floating tools sit over the top of the canvas on wide layouts, and the
+    // labels and background chips over its bottom; fitting leaves room for both
+    // so they never cover the artwork. The tools may wrap onto a second row on a
+    // narrow stage, so their real height is used.
+    // An outline needs room past the image's edges. How much is set by the outline
+    // being on, never by its width, so dragging the width never rescales the picture.
+    spare = edit.outline.on ? 40 : 0,
     marginY =
-      getComputedStyle($("stageTools")).position === "absolute" ? 116 : 40;
+      (floating ? 2 * Math.max(tools.offsetHeight + 18, 46) : 40) + spare;
+  pane
+    .closest(".stage")
+    .style.setProperty("--tools-h", tools.offsetHeight + "px");
   if (fitMode) {
     zoom = Math.min(
-      (pane.clientWidth - 40) / w,
+      (pane.clientWidth - 40 - spare) / w,
       (pane.clientHeight - marginY) / h,
     );
     zoom = Math.max(0.01, zoom);
@@ -1814,6 +2088,7 @@ function layout() {
   // edges and rims can be judged exactly; the fitted overview stays smooth.
   $("viewport").classList.toggle("pixelated", !fitMode && zoom >= 2);
   $("zoomReadout").textContent = Math.round(zoom * 100) + "%";
+  placeOutline();
 }
 function setZoom(value, anchor) {
   if (!w) return;
@@ -1957,6 +2232,10 @@ function setTool(value) {
     ["addSample", value === "pick" && addSample],
   ])
     $(id).setAttribute("aria-pressed", String(active));
+  // The brush's size sits beside the tools while a brush is the tool.
+  $("brushSizeGroup").hidden = value !== "add" && value !== "subtract";
+  $("brushCursor").hidden =
+    $("brushSizeGroup").hidden || $("brushCursor").hidden;
   after.parentElement.style.cursor = before.parentElement.style.cursor =
     value === "pan" ? "grab" : "crosshair";
 }
@@ -2211,44 +2490,17 @@ function background() {
             ? $("backgroundColour").value
             : "";
 }
-// On narrow screens (and in the Android app) the dock shows one panel at a
-// time; the tab bar picks which. Wider layouts show all three and hide it.
+// On phones (and in the Android app) the dock shows one group of panels at a time;
+// the tab bar picks which. Wider layouts show their panels all at once and hide it.
 for (const tab of document.querySelectorAll(".dock-tabs button"))
   tab.onclick = () => {
     $("dock").dataset.tab = tab.dataset.tab;
     for (const other of document.querySelectorAll(".dock-tabs button"))
       other.setAttribute("aria-pressed", String(other === tab));
   };
-// The dock's height can be dragged or set with the arrow keys. It lasts for
-// the session only: the theme is the one thing Hex Shift stores.
-function dockHeight(px) {
-  const max = Math.max(160, innerHeight - 320),
-    value = Math.round(clamp(px, 120, Math.min(600, max)));
-  document.querySelector(".app").style.setProperty("--dock-h", value + "px");
-  $("dockHandle").setAttribute("aria-valuenow", String(value));
-  layout();
-}
-$("dockHandle").addEventListener("pointerdown", (e) => {
-  const handle = $("dockHandle"),
-    start = e.clientY,
-    height = $("dock").getBoundingClientRect().height;
-  handle.setPointerCapture(e.pointerId);
-  const move = (m) => dockHeight(height + start - m.clientY);
-  handle.addEventListener("pointermove", move);
-  handle.addEventListener(
-    "pointerup",
-    () => handle.removeEventListener("pointermove", move),
-    { once: true },
-  );
-});
-$("dockHandle").addEventListener("keydown", (e) => {
-  const step = e.shiftKey ? 60 : 20,
-    now = $("dock").getBoundingClientRect().height;
-  if (e.key === "ArrowUp") dockHeight(now + step);
-  else if (e.key === "ArrowDown") dockHeight(now - step);
-  else return;
-  e.preventDefault();
-});
+// Column widths and the dock's height are set by dragging the handles (or with the
+// arrow keys; see workspace.js). They last for the session only: the theme is the
+// one thing Hex Shift stores.
 $("background").onchange = background;
 $("backgroundColour").oninput = background;
 $("dismissTip").onclick = () => ($("firstUse").hidden = true);
@@ -2297,6 +2549,12 @@ for (const t of THEMES) {
 function theme() {
   const root = document.documentElement,
     { dark, contrast, tokens } = resolveTheme(uiTheme, modifier, system);
+  // The colours change at once, not through the in-between shades the buttons'
+  // colour transition would show (some of them are low contrast).
+  root.classList.add("theming");
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => root.classList.remove("theming")),
+  );
   root.dataset.theme = dark ? "dark" : "light";
   root.dataset.modifier = modifier;
   if (contrast) root.dataset.contrast = "high";
@@ -2344,21 +2602,43 @@ $("themeMenu").addEventListener("keydown", (e) => {
 });
 theme();
 document.addEventListener("keydown", (e) => {
-  const editing = e.target.closest(
-    "input,select,textarea,[contenteditable=true]",
-  );
-  if (editing || $("replaceDialog").open) return;
+  if (e.key === "F1" && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+    e.preventDefault();
+    showShortcuts();
+    return;
+  }
+  // A menu, a text field or a dialog has the keys while it is in use. A slider,
+  // checkbox or colour box takes no typing, so the tool keys still reach the page
+  // from them (Space and the Ctrl keys are theirs, below).
+  const field = e.target.closest(
+      "input,select,textarea,[contenteditable=true],[role=menu],[role=menubar]",
+    ),
+    typing =
+      field &&
+      !field.matches(
+        "input[type=range],input[type=checkbox],input[type=radio],input[type=color]",
+      );
+  if (typing || document.querySelector("dialog[open]")) return;
   const key = e.key.toLowerCase();
-  if ((e.ctrlKey || e.metaKey) && key === "o") {
+  if (e.ctrlKey || e.metaKey) {
+    // From a slider or checkbox Ctrl+Z is the page's undo: right after a drag it is
+    // exactly what is wanted, and those controls have no undo of their own.
+    if (e.altKey) return;
+    if (key === "o") $("fileInput").click();
+    else if (key === "e") save();
+    else if (key === "c" && e.shiftKey) save(true);
+    else if (key === "z") restore(e.shiftKey);
+    else if (key === "y") restore(true);
+    else if (key === "enter") apply();
+    else return;
     e.preventDefault();
-    $("fileInput").click();
-  } else if ((e.ctrlKey || e.metaKey) && key === "z") {
-    e.preventDefault();
-    restore(e.shiftKey);
-  } else if (key === "escape") {
-    $("clear").click();
-  } else if (
+    return;
+  }
+  if (e.altKey) return;
+  if (key === "escape") $("clear").click();
+  else if (
     e.code === "Space" &&
+    !field &&
     !e.target.closest("button,summary,a,[role=separator]")
   ) {
     // Space on a focused button or summary still presses it.
@@ -2367,6 +2647,13 @@ document.addEventListener("keydown", (e) => {
   } else if (key === "f") $("fit").click();
   else if (key === "+" || key === "=") $("zoomIn").click();
   else if (key === "-") $("zoomOut").click();
+  else if (key === "1") $("actual").click();
+  // The tools, by their first letters.
+  else if (key === "i") $("replaceSample").click();
+  else if (key === "a") $("addSample").click();
+  else if (key === "b") $("brushAdd").click();
+  else if (key === "e") $("brushSubtract").click();
+  else if (key === "h") $("pan").click();
 });
 document.addEventListener("keyup", (e) => {
   if (e.code === "Space") space = false;
@@ -2408,23 +2695,53 @@ document.addEventListener("paste", (e) => {
       }
       return;
     }
-  // Text pasted outside a text field: one colour becomes the target, several
-  // become a palette.
   const text = e.clipboardData?.getData("text/plain");
   if (!text || e.target.closest?.("input, textarea, select, [contenteditable]"))
     return;
+  if (pasteText(text)) e.preventDefault();
+});
+// Text pasted outside a text field: one colour becomes the target, several become
+// a palette. Returns false if it is neither.
+function pasteText(text) {
   let entries;
   try {
     entries = parsePalette(text);
   } catch {
-    return;
+    return false;
   }
-  e.preventDefault();
   if (entries.length === 1) setTarget(entries[0].hex);
   else openPalette(text, "Pasted palette");
+  return true;
+}
+// Edit > Paste: the same as Ctrl+V, for windows that let a menu read the clipboard.
+async function pasteFromClipboard() {
+  try {
+    for (const item of await navigator.clipboard.read()) {
+      const type = item.types.find((t) => t.startsWith("image/"));
+      if (type) {
+        openBlob(await item.getType(type), "pasted.png");
+        return;
+      }
+    }
+    if (!pasteText(await navigator.clipboard.readText()))
+      status("The clipboard has no image or colours to paste.");
+  } catch {
+    status(
+      "This window won't let a menu read the clipboard. Press Ctrl+V instead.",
+    );
+  }
+}
+// The panels sit where the window's size says (workspace.js); the image refits after.
+const workspace = createWorkspace($("main"), { onPreset: () => layout() });
+window.addEventListener("resize", () => {
+  workspace.refresh();
+  layout();
 });
-window.addEventListener("resize", layout);
-new ResizeObserver(layout).observe($("viewport"));
+// The image refits when its stage resizes, and when the floating tools above it
+// change height (a brush's size appears beside the tools, or they wrap).
+const stageWatch = new ResizeObserver(layout);
+stageWatch.observe($("viewport"));
+stageWatch.observe($("stageTools"));
 window.addEventListener("beforeunload", (e) => {
   if (dirty || result?.changed) {
     e.preventDefault();
@@ -2453,6 +2770,389 @@ if (
       });
     })
     .catch(() => {});
+// ---- Shortcuts, About, release notes, and quitting ----
+function showShortcuts() {
+  const list = $("shortcuts");
+  list.open = true;
+  list.querySelector("summary").focus();
+}
+// The shortcuts list closes on Escape or a click elsewhere, like the theme menu. A
+// click on a menu item (which may be what opened it) is not elsewhere: the item is
+// already gone from the page by the time the click reaches here.
+document.addEventListener("click", (e) => {
+  const fromMenu = e
+    .composedPath()
+    .some((node) => node.classList?.contains("menu-pop"));
+  if (!fromMenu && !$("shortcuts").contains(e.target))
+    $("shortcuts").open = false;
+});
+$("shortcuts").addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && $("shortcuts").open) {
+    $("shortcuts").open = false;
+    $("shortcuts").querySelector("summary").focus();
+    e.stopPropagation();
+  }
+});
+function showAbout() {
+  $("aboutVersion").textContent = "Version " + VERSION;
+  // The licence notices are in the page already (see the build); they are copied
+  // into the dialog only when it is opened.
+  $("aboutNotices").textContent =
+    $("licence-notices")?.content.textContent.trim() ?? "";
+  $("aboutDialog").showModal();
+}
+// The release notes are a few paragraphs of plain text with **bold** and `code`.
+function notesParagraph(text) {
+  const p = document.createElement("p");
+  for (const part of text
+    .replace(/^#+\s*/, "")
+    .split(/(\*\*[^*]+\*\*|`[^`]+`)/)) {
+    if (!part) continue;
+    if (part.startsWith("**") && part.endsWith("**")) {
+      const bold = document.createElement("strong");
+      bold.textContent = part.slice(2, -2);
+      p.append(bold);
+    } else if (part.startsWith("`") && part.endsWith("`")) {
+      const code = document.createElement("code");
+      code.textContent = part.slice(1, -1);
+      p.append(code);
+    } else p.append(part);
+  }
+  return p;
+}
+function showNotes() {
+  const raw = $("release-notes")?.content.textContent ?? "";
+  $("notesBody").replaceChildren(
+    ...raw
+      .split(/\n\s*\n/)
+      .map((text) => text.replace(/\s*\n\s*/g, " ").trim())
+      .filter(Boolean)
+      .map(notesParagraph),
+  );
+  $("notesDialog").showModal();
+}
+// File > Exit (the Windows app only). The window asks first if there is unsaved work.
+async function quit() {
+  if (pixels && (dirty || result?.changed)) {
+    const dialog = $("replaceDialog");
+    [
+      $("replaceTitle").textContent,
+      $("replaceText").textContent,
+      $("replaceConfirm").textContent,
+    ] = dialogText.quit;
+    dialog.showModal();
+    const answer = await new Promise((resolve) =>
+      dialog.addEventListener("close", () => resolve(dialog.returnValue), {
+        once: true,
+      }),
+    );
+    if (answer !== "replace") return;
+  }
+  window.close();
+}
+
+// ---- The Windows app's update check ----
+// The app checks at every launch and says what it found; nothing is shown in a
+// browser, which updates itself. An update that is found opens the app's own bar.
+const inApp = !!window.chrome?.webview;
+let updateState = { phase: "idle", auto: true, enabled: true };
+const updates = updateChannel((state) => {
+  updateState = state;
+  const named = "Hex Shift" + (state.version ? " " + state.version : "");
+  if (state.phase === "checking") status("Checking for updates…");
+  else if (state.phase === "current")
+    status(named + " is up to date", { fade: 6000 });
+  else if (state.phase === "available")
+    status(named + " is available. See the bar above.", { fade: 10000 });
+  else if (state.phase === "failed" && !state.version)
+    status(
+      "Couldn't check for updates" +
+        (state.manual && state.detail ? ": " + state.detail : ""),
+      { fade: 8000 },
+    );
+});
+updates?.request();
+
+// ---- The menu bar ----
+// Each item runs the same handler as the control or key it mirrors.
+const have = () => !!pixels;
+const press = (id, value) =>
+  $(id).querySelector(`input[value="${value}"]`).click();
+const radio = (group, label, value) => ({
+  type: "radio",
+  label,
+  checked: () => choice(group) === value,
+  run: () => press(group, value),
+});
+createMenubar({
+  root: $("menubar"),
+  menus: [
+    {
+      id: "file",
+      label: "File",
+      mnemonic: "f",
+      items: [
+        {
+          type: "item",
+          label: "Open…",
+          shortcut: "Ctrl+O",
+          run: () => $("fileInput").click(),
+        },
+        {
+          type: "item",
+          label: "Export…",
+          shortcut: "Ctrl+E",
+          enabled: have,
+          run: () => save(),
+        },
+        {
+          type: "item",
+          label: "Copy PNG",
+          shortcut: "Ctrl+Shift+C",
+          enabled: have,
+          run: () => save(true),
+        },
+        { type: "separator" },
+        {
+          type: "item",
+          label: "Open palette…",
+          run: () => $("paletteInput").click(),
+        },
+        {
+          type: "item",
+          label: "Save palette (.gpl)…",
+          run: () => $("savePalette").click(),
+        },
+        { type: "item", label: "Save recipe…", enabled: have, run: saveRecipe },
+        {
+          type: "item",
+          label: "Apply recipe…",
+          enabled: have,
+          run: () => $("recipeInput").click(),
+        },
+        {
+          type: "item",
+          label: "Batch from files…",
+          enabled: () => have() && $("cancelBatch").hidden,
+          run: () => $("batchInput").click(),
+        },
+        { type: "separator", hidden: () => !inApp },
+        { type: "item", label: "Exit", hidden: () => !inApp, run: quit },
+      ],
+    },
+    {
+      id: "edit",
+      label: "Edit",
+      mnemonic: "e",
+      items: [
+        {
+          type: "item",
+          label: "Undo",
+          shortcut: "Ctrl+Z",
+          enabled: () => !$("undo").disabled,
+          run: () => restore(false),
+        },
+        {
+          type: "item",
+          label: "Redo",
+          shortcut: "Ctrl+Shift+Z",
+          enabled: () => !$("redo").disabled,
+          run: () => restore(true),
+        },
+        { type: "separator" },
+        {
+          type: "item",
+          label: "Apply, then build on it",
+          shortcut: "Ctrl+Enter",
+          enabled: () => !$("apply").disabled,
+          run: apply,
+        },
+        { type: "item", label: "Reset original", enabled: have, run: reset },
+        {
+          type: "item",
+          label: "Clear selection",
+          shortcut: "Esc",
+          enabled: have,
+          run: () => $("clear").click(),
+        },
+        { type: "separator" },
+        {
+          type: "item",
+          label: "Add colour row",
+          enabled: () => have() && !$("addRow").disabled,
+          run: addRow,
+        },
+        { type: "item", label: "Map all colours", enabled: have, run: mapAll },
+        { type: "separator" },
+        {
+          type: "item",
+          label: "Paste",
+          shortcut: "Ctrl+V",
+          run: pasteFromClipboard,
+        },
+      ],
+    },
+    {
+      id: "view",
+      label: "View",
+      mnemonic: "v",
+      items: [
+        radio("view", "Result", "result"),
+        radio("view", "Side by side", "side"),
+        radio("view", "Wipe", "wipe"),
+        {
+          type: "sub",
+          label: "Compare with",
+          enabled: () => choice("view") !== "result",
+          items: [
+            ["working", "Before current edit"],
+            ["original", "Original"],
+          ].map(([value, label]) => ({
+            type: "radio",
+            label,
+            checked: () => $("compare").value === value,
+            run: () => {
+              $("compare").value = value;
+              draw();
+            },
+          })),
+        },
+        { type: "separator" },
+        {
+          type: "item",
+          label: "Zoom in",
+          shortcut: "+",
+          enabled: have,
+          run: () => $("zoomIn").click(),
+        },
+        {
+          type: "item",
+          label: "Zoom out",
+          shortcut: "−",
+          enabled: have,
+          run: () => $("zoomOut").click(),
+        },
+        {
+          type: "item",
+          label: "Fit",
+          shortcut: "F",
+          enabled: have,
+          run: () => $("fit").click(),
+        },
+        {
+          type: "item",
+          label: "100%",
+          shortcut: "1",
+          enabled: have,
+          run: () => $("actual").click(),
+        },
+        { type: "separator" },
+        {
+          type: "sub",
+          label: "Background",
+          items: [
+            radio("background", "Checkerboard", "checker"),
+            radio("background", "White", "white"),
+            radio("background", "Dark", "dark"),
+            radio("background", "Custom colour", "custom"),
+          ],
+        },
+        {
+          type: "sub",
+          label: "Show selection",
+          items: [
+            radio("overlay", "Tinted", "overlay"),
+            radio("overlay", "Only", "only"),
+            radio("overlay", "Off", "normal"),
+          ],
+        },
+        {
+          type: "sub",
+          label: "Theme",
+          items: [
+            ...THEMES.map((t) => ({
+              type: "radio",
+              label: t.name,
+              checked: () => uiTheme === t.id,
+              run: () => {
+                uiTheme = t.id;
+                theme();
+              },
+            })),
+            { type: "separator" },
+            { type: "heading", label: "Modifier" },
+            ...MODIFIERS.map((m) => ({
+              type: "radio",
+              label: m.name,
+              checked: () => modifier === m.id,
+              run: () => {
+                modifier = m.id;
+                theme();
+              },
+            })),
+          ],
+        },
+      ],
+    },
+    {
+      id: "image",
+      label: "Image",
+      mnemonic: "i",
+      items: [
+        {
+          type: "check",
+          label: "Outline",
+          checked: () => edit.outline.on,
+          enabled: have,
+          run: () => $("outline").click(),
+        },
+        { type: "separator" },
+        {
+          type: "item",
+          label: "Make a variant for each colour",
+          enabled: () => !$("makeVariants").disabled,
+          run: makeVariants,
+        },
+        {
+          type: "item",
+          label: "Export all variants (ZIP)",
+          enabled: () => !$("exportVariants").hidden,
+          run: exportVariants,
+        },
+      ],
+    },
+    {
+      id: "help",
+      label: "Help",
+      mnemonic: "h",
+      items: [
+        {
+          type: "item",
+          label: "Shortcuts",
+          shortcut: "F1",
+          run: showShortcuts,
+        },
+        {
+          type: "item",
+          label: "Check for updates…",
+          hidden: () => !updates,
+          run: () => updates.check(),
+        },
+        {
+          type: "check",
+          label: "Check for updates automatically",
+          hidden: () => !updates,
+          checked: () => updateState.auto,
+          run: () => updates.setAuto(!updateState.auto),
+        },
+        { type: "separator" },
+        { type: "item", label: "Release notes", run: showNotes },
+        { type: "item", label: "About Hex Shift", run: showAbout },
+      ],
+    },
+  ],
+});
+
 startWorker();
 syncTarget();
 setTool("pick");

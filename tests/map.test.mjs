@@ -18,6 +18,7 @@ import {
 import {
   MAX_STEPS,
   parseRecipe,
+  parseRecipeFile,
   recipeStep,
   replay,
   writeRecipe,
@@ -303,7 +304,7 @@ test("recipes are parsed safely: format, version, size, counts and ranges", () =
   assert.throws(() => parseRecipe("{"), /not valid JSON/);
   assert.throws(() => parseRecipe(" ".repeat(70000) + text(good)), /64 KB/);
   bad((o) => (o.format = "something-else"), /not a Hex Shift recipe/);
-  bad((o) => (o.version = 2), /newer version/);
+  bad((o) => (o.version = 3), /newer version/);
   bad((o) => (o.steps = []), /1 to 32 steps/);
   bad(
     (o) => (o.steps = Array(MAX_STEPS + 1).fill(o.steps[0])),
@@ -338,4 +339,52 @@ test("recipes are parsed safely: format, version, size, counts and ranges", () =
   assert.equal(params.polluted, undefined);
   assert.equal({}.polluted, undefined);
   assert.equal(params.target, "#5865F2");
+});
+test("a recipe carries the outline, and recipes without one are unchanged", () => {
+  const steps = [
+    {
+      rows: [
+        {
+          params: { ...defaults(), target: "#5865F2" },
+          seeds: [{ hex: "#FF0000" }],
+        },
+      ],
+    },
+  ];
+  // Without an outline the file is exactly what version 1 wrote.
+  const plain = writeRecipe(steps);
+  assert.equal(JSON.parse(plain).version, 1);
+  assert.equal("outline" in JSON.parse(plain), false);
+  assert.deepEqual(parseRecipeFile(plain).outline, null);
+  assert.equal(writeRecipe(steps, null), plain);
+  // With one it is version 2, and it reads back normalised.
+  const withOutline = writeRecipe(steps, { widthPct: 4, colour: "#ffffff" });
+  assert.equal(JSON.parse(withOutline).version, 2);
+  const back = parseRecipeFile(withOutline);
+  assert.deepEqual(back.outline, { widthPct: 4, colour: "#FFFFFF" });
+  assert.equal(back.steps[0].rows[0].seeds[0].hex, "#FF0000");
+  assert.equal(parseRecipe(withOutline).length, 1);
+  // A version 2 file may simply have no outline.
+  const v2 = JSON.parse(plain);
+  v2.version = 2;
+  assert.equal(parseRecipeFile(JSON.stringify(v2)).outline, null);
+  // An outline in a version 1 file is not part of that format and is ignored.
+  const v1 = JSON.parse(withOutline);
+  v1.version = 1;
+  assert.equal(parseRecipeFile(JSON.stringify(v1)).outline, null);
+  // Bad outlines are refused, when written and when read.
+  for (const bad of [
+    { widthPct: 0.4, colour: "#FFFFFF" },
+    { widthPct: 16, colour: "#FFFFFF" },
+    { widthPct: "wide", colour: "#FFFFFF" },
+    { widthPct: 4, colour: "white" },
+    { widthPct: 4 },
+    "thick",
+    [],
+  ]) {
+    assert.throws(() => writeRecipe(steps, bad), /outline/);
+    const o = JSON.parse(withOutline);
+    o.outline = bad;
+    assert.throws(() => parseRecipeFile(JSON.stringify(o)), /outline/);
+  }
 });
