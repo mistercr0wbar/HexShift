@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-XB7Qf6D1mMqsIkpxG2Fb/mMSse6xYz5f55OPY1n/eZk='; style-src 'sha256-sNu4SBcl7eXTdug3EN6cHyUnynB2qpRTuLdZm7qhKaE='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ltVNOxHZDwNYw+RWUgkSjOdxNBzOUzj7WSHOoVOyruY='; style-src 'sha256-sNu4SBcl7eXTdug3EN6cHyUnynB2qpRTuLdZm7qhKaE='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta
       name="theme-color"
@@ -6963,8 +6963,8 @@ dialog p {
       night: pick2(DEFAULT_LOOKS.night)
     };
   }
-  var contrastLook = (main, boost) => {
-    const accent = boost ? amplify(main) : readable(main, ["#000000"], 8);
+  var contrastLook = (main) => {
+    const accent = amplify(main);
     return {
       ground: "#000000",
       surface: "#000000",
@@ -6979,7 +6979,7 @@ dialog p {
     };
   };
   function resolveTheme(id, modifier2, system2) {
-    const theme2 = themeById(id), looks = theme2.system ? systemLooks(system2) : theme2, p = modifier2 === "contrast" ? contrastLook(looks.default.accent, !theme2.system) : looks[MODIFIERS.some((m) => m.id === modifier2) ? modifier2 : "default"], dark = luminance(p.ground) < 0.2, { ground, surface, raised, line: line2, ink } = p, panels = [ground, surface, raised];
+    const theme2 = themeById(id), looks = theme2.system ? systemLooks(system2) : theme2, p = modifier2 === "contrast" ? contrastLook(looks.default.accent) : looks[MODIFIERS.some((m) => m.id === modifier2) ? modifier2 : "default"], dark = luminance(p.ground) < 0.2, { ground, surface, raised, line: line2, ink } = p, panels = [ground, surface, raised];
     const fill = readable(p.accent, panels, 3), darkInk = mix(dark ? ground : ink, "#000000", 0.5), onAccent = contrast(fill, darkInk) >= contrast(fill, "#ffffff") ? darkInk : "#ffffff", accent = readable(fill, [onAccent], 4.5), accentSoft = p.contrast ? "#1a1a1a" : mix(surface, accent, dark ? 0.18 : 0.14);
     return {
       dark,

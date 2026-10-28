@@ -226,10 +226,9 @@ function systemLooks({ accent, dark } = {}) {
     night: pick(DEFAULT_LOOKS.night),
   };
 }
-// System keeps the OS accent as it is, only brightened enough to read on
-// black; the other themes boost their main colour.
-const contrastLook = (main, boost) => {
-  const accent = boost ? amplify(main) : readable(main, ["#000000"], 8);
+// Every theme boosts its main colour; for System that is the OS accent.
+const contrastLook = (main) => {
+  const accent = amplify(main);
   return {
     ground: "#000000",
     surface: "#000000",
@@ -252,7 +251,7 @@ export function resolveTheme(id, modifier, system) {
     looks = theme.system ? systemLooks(system) : theme,
     p =
       modifier === "contrast"
-        ? contrastLook(looks.default.accent, !theme.system)
+        ? contrastLook(looks.default.accent)
         : looks[
             MODIFIERS.some((m) => m.id === modifier) ? modifier : "default"
           ],

@@ -18,7 +18,7 @@ namespace HexShift
 {
     static class Program
     {
-        public const string Version = "3.1.0";
+        public const string Version = "3.1.1";
 
         [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Unicode)]
         static extern IntPtr LoadLibraryExW(string path, IntPtr reserved, uint flags);
