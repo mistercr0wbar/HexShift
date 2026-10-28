@@ -842,6 +842,72 @@ test("exports with the outline off are what 3.1.1 produced", async ({
   );
 });
 
+// ---- Text that runs wide ----
+
+// Linux's fonts are wider than Segoe UI, and a person may choose a bigger font or a
+// zoom. Looser letters stand in for any of them, whatever fonts this machine has:
+// nothing may spill sideways, at any window size or at 200 percent. (The page's
+// policy only allows its own stylesheet, so this rewrites the page in a context that
+// bypasses it.)
+test("nothing spills sideways when the text runs wide, at any window size or at 200 percent", async ({
+  browser,
+  baseURL,
+}) => {
+  const context = await browser.newContext({
+    bypassCSP: true,
+    viewport: { width: 1280, height: 720 },
+  });
+  const page = await context.newPage();
+  await page.route(
+    (url) => url.pathname === "/",
+    async (route) => {
+      const response = await route.fetch();
+      await route.fulfill({
+        response,
+        body: (await response.text()).replace(
+          "</head>",
+          "<style>*{letter-spacing:0.08em !important}</style></head>",
+        ),
+      });
+    },
+  );
+  await page.goto(baseURL + "/");
+  await ready(page);
+  await pick(page);
+  const overflow = () =>
+    page.evaluate(() => ({
+      page: document.documentElement.scrollWidth - innerWidth,
+      // A column with a sideways scroll bar would also lose height to it.
+      columns: [...document.querySelectorAll(".stack")].filter(
+        (s) => s.scrollWidth > s.clientWidth + 1,
+      ).length,
+    }));
+  for (const [width, height] of [
+    [1920, 1080],
+    [1280, 720],
+    [1100, 700],
+    [900, 700],
+    [800, 1000],
+    [360, 800],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await expect
+      .poll(overflow, { message: `at ${width} × ${height}` })
+      .toEqual({ page: expect.any(Number), columns: 0 });
+    expect(
+      (await overflow()).page,
+      `at ${width} × ${height}`,
+    ).toBeLessThanOrEqual(0);
+  }
+  // 200 percent, as the accessibility test asks for it.
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.evaluate(() => (document.body.style.zoom = "2"));
+  await expect
+    .poll(async () => (await overflow()).page, { message: "at 200 percent" })
+    .toBeLessThanOrEqual(0);
+  await context.close();
+});
+
 // ---- Cancel only shows when the wait is long ----
 
 test("Cancel appears only after a long wait, in its own place", async ({

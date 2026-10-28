@@ -1479,9 +1479,12 @@ canvas#outlineCanvas {
 #cancel.shown {
   visibility: visible;
 }
+/* The readout and the privacy note give way first when the bar is short of room (a
+   narrow window, a wide font, a zoom), so the bar never spills past the window.
+   They are 39 characters and their natural width when there is room. */
 #pixelReadout {
-  flex: none;
-  width: 39ch;
+  flex: 0 4 39ch;
+  min-width: 0;
   overflow: hidden;
   text-align: right;
   text-overflow: ellipsis;
@@ -1494,7 +1497,9 @@ canvas#outlineCanvas {
 }
 .privacy {
   display: inline-flex;
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
   align-items: center;
   gap: 5px;
   white-space: nowrap;
