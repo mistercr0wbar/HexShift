@@ -77,12 +77,13 @@ test("Contrast is pitch black with the main colour boosted", () => {
     .match(/\w\w/g)
     .map((v) => parseInt(v, 16));
   assert.ok(r > g && g > b);
-  // System uses the Windows accent as it is, only brighter on black.
-  assert.equal(
-    resolveTheme("system", "contrast", { accent: "#e81123", dark: true })
-      .tokens["--ground"],
-    "#000000",
-  );
+  // System boosts the Windows accent the same way.
+  const red = resolveTheme("system", "contrast", {
+    accent: "#e81123",
+    dark: true,
+  }).tokens;
+  assert.equal(red["--ground"], "#000000");
+  assert.equal(red["--accent"], amplify("#e81123"));
 });
 
 test("System follows the Windows light or dark app mode", () => {
