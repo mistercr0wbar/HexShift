@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-3K174BHOQd/T9RO+kVm0SanSv122VZNyx8DZEK6bNUg='; style-src 'sha256-b8sUxNys007JYkek0OEAoxgQbuClqN7MSR/Qw70IP4M='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-3K174BHOQd/T9RO+kVm0SanSv122VZNyx8DZEK6bNUg='; style-src 'sha256-HgIS9kR4SLupPHnAaqMjzrRBjXHiIfd67Sugtpf0k6Q='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta
       name="theme-color"
@@ -1613,6 +1613,8 @@ dialog::backdrop {
 .colour-trigger {
   min-width: var(--ctl);
   min-height: var(--ctl);
+  /* A colour readout must show the chosen colour immediately. */
+  transition: none;
   box-shadow: inset 0 0 0 3px var(--surface);
 }
 .colour-picker {

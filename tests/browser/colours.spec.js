@@ -116,6 +116,11 @@ test("picker edits by keyboard and RGB, saves 48 stable slots, and survives relo
   await pop.getByLabel("Blue", { exact: true }).fill("70");
   await pop.getByLabel("Blue", { exact: true }).press("Tab");
   await expect(page.locator("#targetHex")).toHaveValue("#248046");
+  expect(
+    await page
+      .locator("#targetColour")
+      .evaluate((el) => getComputedStyle(el).backgroundColor),
+  ).toBe("rgb(36, 128, 70)");
   await page.locator("#pickerSave").click();
   await expect(page.locator("#pickerSave")).toBeDisabled();
   const square = pop.getByRole("slider", { name: "Saturation and brightness" });
