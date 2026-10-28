@@ -891,13 +891,17 @@ test("nothing spills sideways when the text runs wide, at any window size or at 
     [360, 800],
   ]) {
     await page.setViewportSize({ width, height });
+    // Resizing re-places the panels, so wait for the layout to settle: the page
+    // and the columns must both come right, together.
     await expect
-      .poll(overflow, { message: `at ${width} × ${height}` })
-      .toEqual({ page: expect.any(Number), columns: 0 });
-    expect(
-      (await overflow()).page,
-      `at ${width} × ${height}`,
-    ).toBeLessThanOrEqual(0);
+      .poll(
+        async () => {
+          const now = await overflow();
+          return now.page <= 0 && now.columns === 0;
+        },
+        { message: `at ${width} × ${height}` },
+      )
+      .toBe(true);
   }
   // 200 percent, as the accessibility test asks for it.
   await page.setViewportSize({ width: 1280, height: 720 });
