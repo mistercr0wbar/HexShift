@@ -26,6 +26,22 @@ namespace HexShift
         internal BarButton(string text, Action click) { Text = text; Click = click; }
     }
 
+    // The Graphite theme for the few native controls, matching the page default.
+    static class Graphite
+    {
+        internal static void Style(Button b, bool dark, bool primary)
+        {
+            b.FlatStyle = FlatStyle.Flat;
+            b.UseVisualStyleBackColor = false;
+            Color raised = dark ? Color.FromArgb(0x26, 0x26, 0x26) : Color.White;
+            Color ink = dark ? Color.FromArgb(0xEC, 0xEC, 0xEC) : Color.FromArgb(0x17, 0x17, 0x17);
+            b.BackColor = primary ? ink : raised;
+            b.ForeColor = primary ? (dark ? Color.FromArgb(0x0A, 0x0A, 0x0A) : Color.White) : ink;
+            b.FlatAppearance.BorderColor = primary ? ink : (dark ? Color.FromArgb(0x3D, 0x3D, 0x3D) : Color.FromArgb(0xC4, 0xC4, 0xC4));
+            b.FlatAppearance.BorderSize = 1;
+        }
+    }
+
     sealed class UpdateBar : Panel
     {
         readonly Label message = new Label();
@@ -33,6 +49,7 @@ namespace HexShift
         readonly FlowLayoutPanel buttons = new FlowLayoutPanel();
         readonly Button[] slots = new Button[] { new Button(), new Button(), new Button() };
         readonly Action[] actions = new Action[3];
+        readonly bool dark;
 
         internal UpdateBar(bool dark)
         {
@@ -40,8 +57,10 @@ namespace HexShift
             Height = 46;
             Visible = false;
             Padding = new Padding(14, 7, 10, 7);
-            BackColor = dark ? Color.FromArgb(0x26, 0x23, 0x33) : Color.FromArgb(0xE4, 0xE1, 0xF2);
-            ForeColor = dark ? Color.FromArgb(0xEE, 0xEC, 0xF6) : Color.FromArgb(0x1B, 0x19, 0x24);
+            this.dark = dark;
+            BackColor = dark ? Color.FromArgb(0x1C, 0x1C, 0x1C) : Color.FromArgb(0xF6, 0xF6, 0xF6);
+            ForeColor = dark ? Color.FromArgb(0xEC, 0xEC, 0xEC) : Color.FromArgb(0x17, 0x17, 0x17);
+            Font = new Font("Segoe UI", 9f);
             AccessibleName = "Update notice";
 
             message.Dock = DockStyle.Fill;
@@ -69,7 +88,7 @@ namespace HexShift
                 slot.AutoSize = true;
                 slot.MinimumSize = new Size(0, 30);
                 slot.Padding = new Padding(8, 0, 8, 0);
-                slot.FlatStyle = FlatStyle.System;
+                Graphite.Style(slot, dark, false);
                 slot.Visible = false;
                 slot.Click += delegate { Action act = actions[index]; if (act != null) act(); };
                 buttons.Controls.Add(slot);
@@ -92,7 +111,12 @@ namespace HexShift
                 bool used = i < choices.Length;
                 slots[i].Visible = used;
                 actions[i] = used ? choices[i].Click : null;
-                if (used) slots[i].Text = choices[i].Text;
+                if (used)
+                {
+                    slots[i].Text = choices[i].Text;
+                    // The last choice is the one that moves the update on.
+                    Graphite.Style(slots[i], dark, i == choices.Length - 1);
+                }
             }
             Visible = true;
         }
@@ -363,7 +387,9 @@ namespace HexShift
                 dialog.MaximizeBox = false;
                 dialog.ShowInTaskbar = false;
                 dialog.ClientSize = new Size(540, 380);
-                dialog.BackColor = dark ? Color.FromArgb(0x1B, 0x19, 0x24) : Color.FromArgb(0xF4, 0xF3, 0xF8);
+                dialog.BackColor = dark ? Color.FromArgb(0x1C, 0x1C, 0x1C) : Color.FromArgb(0xF6, 0xF6, 0xF6);
+                dialog.ForeColor = dark ? Color.FromArgb(0xEC, 0xEC, 0xEC) : Color.FromArgb(0x17, 0x17, 0x17);
+                dialog.Font = new Font("Segoe UI", 9f);
 
                 string notes = (offer.Notes ?? "").Replace("\r\n", "\n").Replace("\n", "\r\n").Trim();
                 TextBox box = new TextBox();
@@ -374,20 +400,26 @@ namespace HexShift
                 box.Size = new Size(516, 316);
                 box.Text = notes.Length > 0 ? notes : "The notes for this version are on its release page.";
                 box.AccessibleName = "Release notes";
+                box.BorderStyle = BorderStyle.FixedSingle;
+                box.BackColor = dark ? Color.FromArgb(0x26, 0x26, 0x26) : Color.White;
+                box.ForeColor = dialog.ForeColor;
 
                 Button page = new Button();
                 page.Text = "Open release page";
                 page.AutoSize = true;
                 page.Location = new Point(12, 338);
+                Graphite.Style(page, dark, false);
                 page.Click += delegate { MainForm.OpenExternal(UpdatePolicy.ReleasesUrl); };
                 Button close = new Button();
                 close.Text = "Close";
                 close.Location = new Point(448, 338);
                 close.DialogResult = DialogResult.Cancel;
+                Graphite.Style(close, dark, true);
                 dialog.CancelButton = close;
                 dialog.Controls.Add(box);
                 dialog.Controls.Add(page);
                 dialog.Controls.Add(close);
+                if (dark) dialog.HandleCreated += delegate { MainForm.DarkTitleBar(dialog.Handle); };
                 dialog.ShowDialog(owner);
             }
         }

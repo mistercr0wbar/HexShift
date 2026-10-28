@@ -11,7 +11,7 @@ Reviewed 21 October 2026. These are documented/exposed capabilities, not compara
 | [OptiPix](https://optipix.art/color-changer)                        | Modes, comparison, undo/redo and batch workflows                            | Adopt comparison/history, defer batch and broader photo effects.                                         |
 | [Irrational Tools](https://irrationaltools.com/color-replacer/)     | Region constraints, zoom/pan, multiple pairs, transparency, history         | Keep connected selection and multi-sampling; add a simple corrective brush. Defer polygon/lasso editing. |
 
-The design preserves HexShift's neutral/coloured pixel separation, independent hue and shade tolerances, and shading caps. It prioritizes emoji, icons and transparent assets, with a 320px desktop inspector and canvas-first mobile layout. Scope excludes AI effects, batch processing, projects and reusable recipes.
+The design preserves HexShift's neutral/coloured pixel separation, independent hue and shade tolerances, and shading caps. It prioritizes emoji, icons and transparent assets, with a 320px desktop inspector and canvas-first mobile layout (3.0 replaced the inspector with a full-width canvas over a Selection, Colour and Export dock, one tabbed panel at a time on phones). Scope excludes AI effects, batch processing, projects and reusable recipes.
 
 ## Second review: 26 October 2026
 
