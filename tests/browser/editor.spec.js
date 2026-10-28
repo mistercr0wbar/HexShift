@@ -813,24 +813,117 @@ test("SVG geometry, styles, gradients and hostile XML limits", async ({
   await page.locator("#fileInput").setInputFiles(good);
   await expect(page.locator("#fileDims")).toContainText("512 × 256");
   await ready(page);
+  const raw = (name, text) => ({
+    name,
+    mimeType: "image/svg+xml",
+    buffer: Buffer.from(text),
+  });
+  // Five levels of ten uses each: 100,000 copies if expanded.
+  let explosive = '<g id="l0"><rect width="1" height="1"/></g>';
+  for (let i = 1; i <= 5; i++)
+    explosive +=
+      `<g id="l${i}">` + `<use href="#l${i - 1}"/>`.repeat(10) + "</g>";
   const bad = [
     svg("<g>".repeat(65) + "<rect/>" + "</g>".repeat(65)),
     svg("<rect/>".repeat(5001)),
-    {
-      name: "entity.svg",
-      mimeType: "image/svg+xml",
-      buffer: Buffer.from(
-        '<!DOCTYPE svg [<!ENTITY x "test">]><svg xmlns="http://www.w3.org/2000/svg" width="1" height="1">&x;</svg>',
-      ),
-    },
+    // Entities that nest, read files or declare parameters stay refused.
+    raw(
+      "laughs.svg",
+      '<!DOCTYPE svg [<!ENTITY a "lol"><!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;">]><svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><title>&b;</title></svg>',
+    ),
+    raw(
+      "external.svg",
+      '<!DOCTYPE svg [<!ENTITY x SYSTEM "file:///C:/Windows/win.ini">]><svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><title>&x;</title></svg>',
+    ),
+    raw(
+      "parameter.svg",
+      '<!DOCTYPE svg [<!ENTITY % p "x">]><svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>',
+    ),
     svg(
       '<defs><linearGradient id="a" href="#b"/><linearGradient id="b" href="#a"/></defs>',
     ),
+    // <use> may not multiply past the element limit, loop, or leave the file.
+    svg(`<defs>${explosive}</defs><use href="#l5"/>`),
+    svg('<g id="a"><use href="#a"/></g>'),
+    svg('<use href="https://example.com/a.svg#x"/>'),
+    svg('<use href="#missing"/>'),
+    // Stylesheets: simple rules only, nothing external.
+    svg(
+      '<style>@import url(https://example.com/x.css);</style><rect width="10" height="5"/>',
+    ),
+    svg(
+      '<style>rect{fill:url(https://example.com/x)}</style><rect width="10" height="5"/>',
+    ),
+    svg('<style>g rect{fill:red}</style><rect width="10" height="5"/>'),
+    svg('<foo:bar xmlns:foo="https://example.com"/>'),
   ];
   for (const input of bad) {
     await page.locator("#fileInput").setInputFiles(input);
     await expect(page.locator("#status")).toContainText("Could not open");
     await expect(page.locator("#fileDims")).toContainText("512 × 256");
+  }
+});
+test("SVGs exported by Illustrator, Inkscape and icon tools open and draw", async ({
+  page,
+}) => {
+  const at = (x, y) =>
+    page
+      .locator("#resultCanvas")
+      .evaluate(
+        (c, [x, y]) => [...c.getContext("2d").getImageData(x, y, 1, 1).data],
+        [x, y],
+      );
+  const near = (actual, hex) => {
+    const want = hex.match(/../g).map((v) => parseInt(v, 16));
+    for (let i = 0; i < 3; i++)
+      expect(
+        Math.abs(actual[i] - want[i]),
+        `${actual} vs #${hex}`,
+      ).toBeLessThan(4);
+    expect(actual[3]).toBe(255);
+  };
+  for (const [file, dims, samples] of [
+    // Document type with namespace and style entities, a stylesheet, the
+    // <switch> wrapper, private data and a hidden layer.
+    [
+      "illustrator-export.svg",
+      "512 × 512",
+      [
+        [100, 256, "e8384f"],
+        [400, 256, "1e5bc6"],
+        [300, 256, "1e5bc6"],
+      ],
+    ],
+    // Editor namespaces, metadata, chained gradients, clip units, a hidden text.
+    [
+      "inkscape-export.svg",
+      "512 × 256",
+      [
+        [100, 128, "ff8000"],
+        [40, 120, "ff8000"],
+        [400, 128, "00ff00"],
+      ],
+    ],
+    // <use> with offsets and inherited fill, and a symbol scaled by its viewBox.
+    [
+      "use-symbol.svg",
+      "512 × 256",
+      [
+        [64, 64, "d32f2f"],
+        [192, 64, "1565c0"],
+        [280, 20, "2e7d32"],
+        [384, 128, "ffffff"],
+      ],
+    ],
+  ]) {
+    await page
+      .locator("#fileInput")
+      .setInputFiles(resolve("tests/fixtures/" + file));
+    await expect(page.locator("#fileName")).toHaveText(file);
+    await expect(page.locator("#fileDims")).toContainText(dims);
+    await ready(page);
+    await expect(page.locator("#status")).not.toContainText("Could not open");
+    for (const [x, y, hex] of samples) near(await at(x, y), hex);
   }
 });
 test("Fluent Color SVG filters, mask types and blend modes", async ({
