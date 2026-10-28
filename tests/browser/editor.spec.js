@@ -11,6 +11,10 @@ const svg = (body, attrs = "") => ({
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 5" ${attrs}>${body}</svg>`,
   ),
 });
+// Treatment, colour model, selection preview, background and view are
+// segmented radio groups; the group keeps the old control id.
+const choose = (page, id, value) =>
+  page.locator(`#${id} input[value="${value}"]`).check();
 // Reads a stored ZIP back through its central directory.
 function unzip(buffer) {
   const v = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength),
@@ -53,7 +57,7 @@ test("sample, modes, exact target, undo/redo and export", async ({ page }) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await pick(page);
-  await page.locator("#mode").selectOption("flat");
+  await choose(page, "mode", "flat");
   await page.locator("#targetHex").fill("#12AB34");
   await page.locator("#targetHex").press("Tab");
   await expect(page.locator("#cancel")).toBeHidden();
@@ -131,7 +135,7 @@ test("lossless WebP export decodes to the exact PNG pixel values", async ({
   page,
 }) => {
   await pick(page);
-  await page.locator("#overlay").selectOption("normal");
+  await choose(page, "overlay", "normal");
   let download = page.waitForEvent("download");
   await page.locator("#export").click();
   const png = await readFile(await (await download).path());
@@ -148,7 +152,7 @@ test("lossless WebP export decodes to the exact PNG pixel values", async ({
 test("shift lands on the target in both colour models", async ({ page }) => {
   await pick(page);
   for (const model of ["oklch", "hsl"]) {
-    await page.locator("#model").selectOption(model);
+    await choose(page, "model", model);
     await page.locator("#targetHex").fill("#5865F2");
     await page.locator("#targetHex").press("Tab");
     await expect(page.locator("#cancel")).toBeHidden();
@@ -224,7 +228,7 @@ test("platform sizes export at their dimensions and within their limits", async 
   }
   await page.locator("#size").selectOption("twitch-emotes");
   await expect(page.locator("#format")).toBeDisabled();
-  await expect(page.locator("#export")).toHaveText("Export ZIP ↗");
+  await expect(page.locator("#export")).toHaveText("Export ZIP");
   const pack = await exportFile(page);
   expect(pack.name).toMatch(/-twitch-emotes\.zip$/);
   const entries = unzip(pack.bytes);
@@ -289,7 +293,7 @@ test("WhatsApp packs a small WebP sticker and tray icon, or says why not", async
   expect([b.format, b.width, b.height]).toEqual(["png", 96, 96]);
   await page.locator("#size").selectOption("original");
   await page.locator("#format").selectOption("webp-small");
-  await expect(page.locator("#export")).toHaveText("Export WebP ↗");
+  await expect(page.locator("#export")).toHaveText("Export WebP");
   const small = await exportFile(page);
   expect((await sharp(small.bytes).metadata()).format).toBe("webp");
 });
@@ -313,7 +317,7 @@ test("SVGs draw at the chosen size and redraw only after confirmation", async ({
   );
   await ready(page);
   await pick(page);
-  await page.locator("#mode").selectOption("flat");
+  await choose(page, "mode", "flat");
   await expect(page.locator("#editState")).toHaveText("Pending edit");
   await page.locator("#svgSize").selectOption("1024");
   await expect(page.locator("#replaceTitle")).toHaveText(
@@ -664,14 +668,14 @@ test("brush overrides, history and preview background do not alter export alpha"
   const box = await page.locator("#resultCanvas").boundingBox();
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   await expect(page.locator("#coverage")).toContainText("pixels selected");
-  await page.locator("#mode").selectOption("transparent");
+  await choose(page, "mode", "transparent");
   await expect(page.locator("#cancel")).toBeHidden();
   await expect(page.locator("#editState")).toHaveText("Pending edit");
   await page.locator("#undo").click();
-  await expect(page.locator("#mode")).toHaveValue("shift");
+  await expect(page.locator('#mode input[value="shift"]')).toBeChecked();
   await page.locator("#redo").click();
-  await expect(page.locator("#mode")).toHaveValue("transparent");
-  await page.locator("#background").selectOption("white");
+  await expect(page.locator('#mode input[value="transparent"]')).toBeChecked();
+  await choose(page, "background", "white");
   await expect(page.locator("#cancel")).toBeHidden();
   const alpha = await page
     .locator("#resultCanvas")
@@ -759,7 +763,7 @@ test("rapid edits and export during processing save the latest preview", async (
   page,
 }) => {
   await pick(page);
-  await page.locator("#mode").selectOption("flat");
+  await choose(page, "mode", "flat");
   await page.locator("#targetHex").fill("#FF0000");
   await page.locator("#targetHex").fill("#00FF00");
   await page.locator("#targetHex").fill("#123456");
@@ -800,7 +804,7 @@ test("large images remain cancellable and a new edit resumes processing", async 
     document.getElementById("cancel").click();
   });
   await expect(page.locator("#status")).toContainText("cancelled");
-  await page.locator("#mode").selectOption("flat");
+  await choose(page, "mode", "flat");
   await expect(page.locator("#cancel")).toBeHidden({ timeout: 60000 });
   await expect(page.locator("#editState")).toHaveText("Pending edit");
 });
@@ -813,24 +817,117 @@ test("SVG geometry, styles, gradients and hostile XML limits", async ({
   await page.locator("#fileInput").setInputFiles(good);
   await expect(page.locator("#fileDims")).toContainText("512 × 256");
   await ready(page);
+  const raw = (name, text) => ({
+    name,
+    mimeType: "image/svg+xml",
+    buffer: Buffer.from(text),
+  });
+  // Five levels of ten uses each: 100,000 copies if expanded.
+  let explosive = '<g id="l0"><rect width="1" height="1"/></g>';
+  for (let i = 1; i <= 5; i++)
+    explosive +=
+      `<g id="l${i}">` + `<use href="#l${i - 1}"/>`.repeat(10) + "</g>";
   const bad = [
     svg("<g>".repeat(65) + "<rect/>" + "</g>".repeat(65)),
     svg("<rect/>".repeat(5001)),
-    {
-      name: "entity.svg",
-      mimeType: "image/svg+xml",
-      buffer: Buffer.from(
-        '<!DOCTYPE svg [<!ENTITY x "test">]><svg xmlns="http://www.w3.org/2000/svg" width="1" height="1">&x;</svg>',
-      ),
-    },
+    // Entities that nest, read files or declare parameters stay refused.
+    raw(
+      "laughs.svg",
+      '<!DOCTYPE svg [<!ENTITY a "lol"><!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;">]><svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><title>&b;</title></svg>',
+    ),
+    raw(
+      "external.svg",
+      '<!DOCTYPE svg [<!ENTITY x SYSTEM "file:///C:/Windows/win.ini">]><svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><title>&x;</title></svg>',
+    ),
+    raw(
+      "parameter.svg",
+      '<!DOCTYPE svg [<!ENTITY % p "x">]><svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>',
+    ),
     svg(
       '<defs><linearGradient id="a" href="#b"/><linearGradient id="b" href="#a"/></defs>',
     ),
+    // <use> may not multiply past the element limit, loop, or leave the file.
+    svg(`<defs>${explosive}</defs><use href="#l5"/>`),
+    svg('<g id="a"><use href="#a"/></g>'),
+    svg('<use href="https://example.com/a.svg#x"/>'),
+    svg('<use href="#missing"/>'),
+    // Stylesheets: simple rules only, nothing external.
+    svg(
+      '<style>@import url(https://example.com/x.css);</style><rect width="10" height="5"/>',
+    ),
+    svg(
+      '<style>rect{fill:url(https://example.com/x)}</style><rect width="10" height="5"/>',
+    ),
+    svg('<style>g rect{fill:red}</style><rect width="10" height="5"/>'),
+    svg('<foo:bar xmlns:foo="https://example.com"/>'),
   ];
   for (const input of bad) {
     await page.locator("#fileInput").setInputFiles(input);
     await expect(page.locator("#status")).toContainText("Could not open");
     await expect(page.locator("#fileDims")).toContainText("512 × 256");
+  }
+});
+test("SVGs exported by Illustrator, Inkscape and icon tools open and draw", async ({
+  page,
+}) => {
+  const at = (x, y) =>
+    page
+      .locator("#resultCanvas")
+      .evaluate(
+        (c, [x, y]) => [...c.getContext("2d").getImageData(x, y, 1, 1).data],
+        [x, y],
+      );
+  const near = (actual, hex) => {
+    const want = hex.match(/../g).map((v) => parseInt(v, 16));
+    for (let i = 0; i < 3; i++)
+      expect(
+        Math.abs(actual[i] - want[i]),
+        `${actual} vs #${hex}`,
+      ).toBeLessThan(4);
+    expect(actual[3]).toBe(255);
+  };
+  for (const [file, dims, samples] of [
+    // Document type with namespace and style entities, a stylesheet, the
+    // <switch> wrapper, private data and a hidden layer.
+    [
+      "illustrator-export.svg",
+      "512 × 512",
+      [
+        [100, 256, "e8384f"],
+        [400, 256, "1e5bc6"],
+        [300, 256, "1e5bc6"],
+      ],
+    ],
+    // Editor namespaces, metadata, chained gradients, clip units, a hidden text.
+    [
+      "inkscape-export.svg",
+      "512 × 256",
+      [
+        [100, 128, "ff8000"],
+        [40, 120, "ff8000"],
+        [400, 128, "00ff00"],
+      ],
+    ],
+    // <use> with offsets and inherited fill, and a symbol scaled by its viewBox.
+    [
+      "use-symbol.svg",
+      "512 × 256",
+      [
+        [64, 64, "d32f2f"],
+        [192, 64, "1565c0"],
+        [280, 20, "2e7d32"],
+        [384, 128, "ffffff"],
+      ],
+    ],
+  ]) {
+    await page
+      .locator("#fileInput")
+      .setInputFiles(resolve("tests/fixtures/" + file));
+    await expect(page.locator("#fileName")).toHaveText(file);
+    await expect(page.locator("#fileDims")).toContainText(dims);
+    await ready(page);
+    await expect(page.locator("#status")).not.toContainText("Could not open");
+    for (const [x, y, hex] of samples) near(await at(x, y), hex);
   }
 });
 test("Fluent Color SVG filters, mask types and blend modes", async ({
@@ -849,11 +946,103 @@ test("Fluent Color SVG filters, mask types and blend modes", async ({
   await ready(page);
   await expect(page.locator("#status")).not.toContainText("Could not open");
 });
+test("wide screens show the canvas over three side-by-side panels; phones switch panels with tabs", async ({
+  page,
+}) => {
+  const box = (selector) => page.locator(selector).boundingBox();
+  const [selection, colour, exported] = await Promise.all(
+    ["selection", "colour", "export"].map((p) =>
+      box(`.panel[data-panel="${p}"]`),
+    ),
+  );
+  expect(selection.y).toBe(colour.y);
+  expect(colour.y).toBe(exported.y);
+  expect(selection.x).toBeLessThan(colour.x);
+  expect(colour.x).toBeLessThan(exported.x);
+  expect((await box("#viewport")).height).toBeGreaterThanOrEqual(300);
+  await expect(page.locator(".dock-tabs")).toBeHidden();
+  // Treatment choices answer the arrow keys like any radio group.
+  await pick(page);
+  await page.locator('#mode input[value="shift"]').focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator('#mode input[value="flat"]')).toBeChecked();
+  await expect(page.locator("#cancel")).toBeHidden();
+  await expect(page.locator("#targetResult")).toContainText("achieved");
+  await page.setViewportSize({ width: 360, height: 800 });
+  await expect(page.locator(".dock-tabs")).toBeVisible();
+  await expect(page.locator("#targetHex")).toBeVisible();
+  await expect(page.locator("#size")).toBeHidden();
+  await page.locator('.dock-tabs [data-tab="export"]').click();
+  await expect(page.locator("#size")).toBeVisible();
+  await expect(page.locator("#targetHex")).toBeHidden();
+  await page.locator('.dock-tabs [data-tab="selection"]').click();
+  await expect(page.locator("#palette button").first()).toBeVisible();
+});
+test("on touch screens controls are finger-sized and two fingers pinch to zoom", async ({
+  browser,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== "chromium",
+    "Mobile emulation and multi-touch input use Chromium.",
+  );
+  const context = await browser.newContext({
+    viewport: { width: 360, height: 800 },
+    hasTouch: true,
+    isMobile: true,
+  });
+  const page = await context.newPage();
+  await page.goto("/");
+  await expect(page.locator("#palette button").first()).toBeAttached();
+  await expect(page.locator("#cancel")).toBeHidden();
+  for (const selector of [
+    "#open",
+    "#undo",
+    "#export",
+    "#zoomIn",
+    "#mode label",
+    ".dock-tabs button",
+    "#targetHex",
+  ]) {
+    const heights = await page
+      .locator(selector)
+      .evaluateAll((els) =>
+        els
+          .filter((el) => el.offsetParent)
+          .map((el) => el.getBoundingClientRect().height),
+      );
+    expect(heights.length, selector).toBeGreaterThan(0);
+    for (const h of heights) expect(h, selector).toBeGreaterThanOrEqual(40);
+  }
+  const before = await page.locator("#zoomReadout").textContent();
+  const space = await page.locator(".after .canvas-space").boundingBox();
+  const cx = space.x + space.width / 2,
+    cy = space.y + space.height / 2;
+  const cdp = await context.newCDPSession(page);
+  const touch = (type, spread) =>
+    cdp.send("Input.dispatchTouchEvent", {
+      type,
+      touchPoints:
+        type === "touchEnd"
+          ? []
+          : [
+              { x: cx - spread, y: cy, id: 1 },
+              { x: cx + spread, y: cy, id: 2 },
+            ],
+    });
+  await touch("touchStart", 30);
+  for (const spread of [45, 60, 75, 90]) await touch("touchMove", spread);
+  await touch("touchEnd", 0);
+  await expect(page.locator("#zoomReadout")).not.toHaveText(before);
+  // A pinch never picks a colour.
+  await expect(page.locator("#seeds .seed")).toHaveCount(0);
+  await context.close();
+});
 test("touch-sized tools, wipe comparison, keyboard text shortcuts and zoom", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 360, height: 800 });
-  await page.locator("#view").selectOption("wipe");
+  await choose(page, "view", "wipe");
   await expect(page.locator("#wipeControl")).toBeVisible();
   await page.locator("#wipe").fill("25");
   await expect(page.locator("#wipeCanvas")).toHaveCSS(
@@ -899,6 +1088,60 @@ test("offline shell, cache isolation and PWA manifest", async ({
   await ready(page);
   await pick(page);
   await page.context().setOffline(false);
+});
+test("colour themes apply, persist in the one theme setting and pass accessibility checks", async ({
+  page,
+  browserName,
+}) => {
+  test.setTimeout(150000);
+  const surface = () =>
+    page.evaluate(() =>
+      getComputedStyle(document.documentElement)
+        .getPropertyValue("--surface")
+        .trim(),
+    );
+  await pick(page);
+  await page.locator("#themeMenu summary").click();
+  await expect(page.locator("#uiTheme label")).toHaveCount(10);
+  await page.locator('#uiTheme input[value="nord"]').check();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".theme-pop")).toBeHidden();
+  await page.locator("#theme").selectOption("dark");
+  expect(await surface()).toBe("#3b4252");
+  expect(
+    await page.evaluate(() => [
+      Object.keys(localStorage),
+      localStorage.getItem("hexshift-theme"),
+    ]),
+  ).toEqual([["hexshift-theme"], "dark:nord"]);
+  await page.reload();
+  await ready(page);
+  expect(await surface()).toBe("#3b4252");
+  await expect(page.locator('#uiTheme input[value="nord"]')).toBeChecked();
+  // Every theme in both modes, in one engine (the default theme is checked
+  // in all three by the next test).
+  if (browserName !== "chromium") return;
+  await pick(page);
+  const ids = await page
+    .locator("#uiTheme input")
+    .evaluateAll((inputs) => inputs.map((i) => i.value));
+  for (const id of ids)
+    for (const mode of ["light", "dark"]) {
+      await page.locator("#theme").selectOption(mode);
+      await page.locator("#themeMenu summary").click();
+      await page.locator(`#uiTheme input[value="${id}"]`).check();
+      await page.keyboard.press("Escape");
+      const results = await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+        .analyze();
+      expect(
+        results.violations.map((v) => ({
+          theme: id + " " + mode,
+          id: v.id,
+          nodes: v.nodes.map((n) => n.target),
+        })),
+      ).toEqual([]);
+    }
 });
 test("accessibility in light/dark themes and at 200 percent zoom", async ({
   page,

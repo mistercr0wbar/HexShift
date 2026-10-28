@@ -4,6 +4,10 @@
 
 The sample red heart is from https://github.com/microsoft/fluentui-emoji . Copyright (c) Microsoft Corporation. MIT licence; the permission and warranty terms are included in LICENSE.
 
+## Colour theme palettes
+
+The Nord, Solarized, Dracula, Catppuccin, Gruvbox, Rosé Pine and Everforest themes use colours from these open-source palettes, each MIT licensed: Nord (Copyright (c) 2016-present Sven Greb, https://www.nordtheme.com), Solarized (Copyright (c) 2011 Ethan Schoonover, https://ethanschoonover.com/solarized), Dracula (Copyright (c) 2016 Dracula Theme, https://draculatheme.com), Catppuccin (Copyright (c) 2021 Catppuccin, https://catppuccin.com), Gruvbox (Copyright (c) 2017 Pavel Pertsev, https://github.com/morhetz/gruvbox), Rosé Pine (Copyright (c) 2023 Rosé Pine, https://rosepinetheme.com) and Everforest (Copyright (c) 2019 sainnhe, https://github.com/sainnhe/everforest). Some shades are adjusted so text meets WCAG AA contrast. The MIT permission and warranty terms are included in LICENSE.
+
 ## DOMPurify 3.4.17
 
 Copyright (c) Cure53 and other contributors. https://github.com/cure53/DOMPurify . Bundled without modifications under the Apache License 2.0 option of its dual licence. The full Apache licence follows.

@@ -41,7 +41,7 @@ namespace HexShift
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch (Exception) { }
 
             // Same ground the page paints, so nothing flashes before it loads.
-            Color ground = dark ? Color.FromArgb(0x15, 0x14, 0x1B) : Color.FromArgb(0xF4, 0xF3, 0xF8);
+            Color ground = dark ? Color.FromArgb(0x14, 0x14, 0x14) : Color.FromArgb(0xE9, 0xE9, 0xE9);
             BackColor = ground;
             web = new WebView2();
             web.Dock = DockStyle.Fill;
@@ -73,11 +73,16 @@ namespace HexShift
         {
             base.OnHandleCreated(e);
             updates.AttachSystemMenu(Handle);
-            if (!dark) return;
+            if (dark) DarkTitleBar(Handle);
+        }
+
+        // Windows 10 2004+ uses attribute 20; earlier Windows 10 builds used 19.
+        internal static void DarkTitleBar(IntPtr handle)
+        {
             int on = 1;
             try
             {
-                if (DwmSetWindowAttribute(Handle, 20, ref on, 4) != 0) DwmSetWindowAttribute(Handle, 19, ref on, 4);
+                if (DwmSetWindowAttribute(handle, 20, ref on, 4) != 0) DwmSetWindowAttribute(handle, 19, ref on, 4);
             }
             catch (Exception) { }
         }

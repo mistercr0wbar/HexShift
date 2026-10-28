@@ -12,3 +12,4 @@ playwright-report/
 tests/native/bin/
 tests/native/obj/
 SHA256SUMS.txt
+screenshots/
