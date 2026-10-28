@@ -483,6 +483,10 @@ export function createMenubar({ root, menus, label = "Application menu" }) {
   document.addEventListener(
     "keydown",
     (e) => {
+      if (document.querySelector("dialog[open],.colour-picker:popover-open")) {
+        altAlone = false;
+        return;
+      }
       if (e.key === "Alt") {
         altAlone = !e.ctrlKey && !e.shiftKey && !e.metaKey;
         return;
@@ -526,6 +530,10 @@ export function createMenubar({ root, menus, label = "Application menu" }) {
     true,
   );
   document.addEventListener("keyup", (e) => {
+    if (document.querySelector(".colour-picker:popover-open")) {
+      altAlone = false;
+      return;
+    }
     if (e.key === "Alt" && altAlone) {
       altAlone = false;
       if (open.length) closeAll(true);

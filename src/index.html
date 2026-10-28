@@ -469,13 +469,16 @@
                   ><span class="sr-only">Custom</span></label
                 >
               </fieldset>
-              <input
-                type="color"
+              <button
+                type="button"
+                class="colour-trigger"
                 id="backgroundColour"
                 value="#808080"
                 aria-label="Custom preview background"
+                aria-haspopup="dialog"
+                aria-expanded="false"
                 hidden
-              />
+              ></button>
             </div>
           </section>
           <section class="mapbar" aria-labelledby="colourMapLabel">
@@ -565,12 +568,16 @@
                   </fieldset>
                   <div id="targetControls" class="target-row">
                     <label for="targetHex">Target</label>
-                    <input
-                      type="color"
+                    <button
+                      type="button"
+                      class="colour-trigger"
                       id="targetColour"
                       value="#00d9ff"
                       aria-label="Target colour picker"
-                    /><input
+                      aria-haspopup="dialog"
+                      aria-expanded="false"
+                    ></button
+                    ><input
                       id="targetHex"
                       class="hex"
                       value="#00D9FF"
@@ -676,6 +683,20 @@
                   </h2>
                 </div>
                 <div class="panel-body" id="swatchesBody">
+                  <div class="picker-head">
+                    <span class="small-label">Saved colours</span>
+                    <button
+                      id="saveCurrentColour"
+                      class="text-button"
+                      type="button"
+                    >
+                      Save current colour
+                    </button>
+                  </div>
+                  <div id="savedColours"></div>
+                  <p id="savedEmpty" class="readout">
+                    Save colours to keep them between launches.
+                  </p>
                   <label class="sr-only" for="paletteSet">Palette</label
                   ><select id="paletteSet"></select>
                   <div id="presets" class="swatches named"></div>
@@ -684,6 +705,21 @@
                       Open palette…</button
                     ><button id="savePalette" class="text-button" type="button">
                       Save as .gpl
+                    </button>
+                    <button
+                      id="saveMyPalette"
+                      class="text-button"
+                      type="button"
+                    >
+                      Save as palette…
+                    </button>
+                    <button
+                      id="removeMyPalette"
+                      class="text-button"
+                      type="button"
+                      hidden
+                    >
+                      Remove from My palettes
                     </button>
                   </div>
                   <input
@@ -759,12 +795,16 @@
                   </div>
                   <div class="target-row">
                     <label for="outlineHex">Colour</label>
-                    <input
-                      type="color"
+                    <button
+                      type="button"
+                      class="colour-trigger"
                       id="outlineColour"
                       value="#ffffff"
                       aria-label="Outline colour picker"
-                    /><input
+                      aria-haspopup="dialog"
+                      aria-expanded="false"
+                    ></button
+                    ><input
                       id="outlineHex"
                       class="hex"
                       value="#FFFFFF"
@@ -1045,6 +1085,26 @@
           ><button id="replaceConfirm" class="button primary" value="replace">
             Open new image
           </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="paletteDialog" aria-labelledby="paletteDialogTitle">
+      <form id="paletteForm" method="dialog">
+        <h2 id="paletteDialogTitle">Keep in My palettes</h2>
+        <label for="paletteName">Palette name</label>
+        <input
+          id="paletteName"
+          maxlength="60"
+          required
+          autocomplete="off"
+          aria-describedby="paletteNameError"
+        />
+        <p id="paletteNameError" role="status"></p>
+        <div class="dialog-actions">
+          <button class="button" type="button" id="cancelPalette">
+            Cancel
+          </button>
+          <button class="button primary" type="submit">Save palette</button>
         </div>
       </form>
     </dialog>
