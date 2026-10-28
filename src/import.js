@@ -125,6 +125,31 @@ const filterPrimitives = {
   feGaussianBlur: ["stdDeviation", "edgeMode"],
   feComposite: ["in2", "operator", "k1", "k2", "k3", "k4"],
 };
+// Presentation properties exporters write that a static drawing can honour
+// (display:none hides a layer; color feeds currentColor).
+const DRAWING_EXTRAS = [
+  "color",
+  "display",
+  "visibility",
+  "overflow",
+  "paint-order",
+  "vector-effect",
+  "letter-spacing",
+  "word-spacing",
+  "font-stretch",
+  "font-variant",
+  "text-decoration",
+  "direction",
+  "baseline-shift",
+  "color-interpolation",
+  "color-rendering",
+  "text-rendering",
+  "image-rendering",
+];
+// Style properties that change nothing in a still picture (editor hints, text
+// layout for features not drawn here). Dropped, never refused.
+const NO_EFFECT_STYLE =
+  /^(?:-[\w-]+|font-variant-[\w-]+|font-feature-settings|font-variation-settings|font-kerning|line-height|text-align|text-indent|text-transform|writing-mode|white-space|inline-size|shape-inside|shape-padding|shape-margin|solid-color|solid-opacity|enable-background)$/;
 const tags = [
   "svg",
   "g",
@@ -206,6 +231,8 @@ const attrs = [
   "textLength",
   "lengthAdjust",
   "href",
+  "clipPathUnits",
+  ...DRAWING_EXTRAS,
   "shape-rendering",
   "mask-type",
   "filter",
@@ -242,6 +269,7 @@ const presentation = new Set([
   "font-style",
   "text-anchor",
   "dominant-baseline",
+  ...DRAWING_EXTRAS,
   "shape-rendering",
   "mask-type",
   "filter",
@@ -297,26 +325,266 @@ export function svgLength(value) {
   return Number.isFinite(v) ? v : NaN;
 }
 export const SVG_EDGES = [256, 512, 1024, 2048];
+const SVG_NS = "http://www.w3.org/2000/svg",
+  XLINK_NS = "http://www.w3.org/1999/xlink",
+  MAX_SVG_ELEMENTS = 5000;
+// Drawing programs leave notes for themselves in what they export. Elements and
+// attributes in these namespaces never draw anything, so they are dropped;
+// any other foreign namespace is still refused.
+const EDITOR_NAMESPACES = [
+  /^http:\/\/www\.inkscape\.org\/namespaces\/inkscape$/,
+  /^http:\/\/(?:inkscape\.sourceforge\.net|sodipodi\.sourceforge\.net)\/DTD\/sodipodi-0\.dtd$/,
+  /^http:\/\/ns\.adobe\.com\/[\w./-]+$/,
+  /^http:\/\/www\.w3\.org\/1999\/02\/22-rdf-syntax-ns#$/,
+  /^http:\/\/purl\.org\/dc\/elements\/1\.1\/$/,
+  /^http:\/\/(?:creativecommons\.org|web\.resource\.org\/cc)\/ns#$/,
+  /^http:\/\/www\.bohemiancoding\.com\/sketch\/ns$/,
+  /^http:\/\/www\.serif\.com\/$/,
+  /^http:\/\/www\.figma\.com\/figma\/ns$/,
+];
+const isEditorNamespace = (uri) =>
+  !!uri && EDITOR_NAMESPACES.some((pattern) => pattern.test(uri));
+// Exporters' document types: an external DTD is never fetched, and the only
+// entities accepted are plain-text ones as Illustrator writes them (namespace
+// addresses, and style declarations in older files). They cannot nest or refer
+// outside the file, and the expanded text is capped. Processing instructions
+// (stylesheet links, metadata packets) are dropped. Anything else in a DTD is
+// refused.
+function prepareSvgText(text) {
+  text = text.replace(/^\uFEFF/, "");
+  const declaration = /^\s*<\?xml\s[^?]*\?>/i.exec(text)?.[0] || "";
+  let body = text.slice(declaration.length).replace(/<\?[\s\S]*?\?>/g, "");
+  const doctype =
+    /^((?:\s|<!--[\s\S]*?-->)*)<!DOCTYPE\s+svg(?:\s+(?:PUBLIC\s+(?:"[^"<>]*"|'[^'<>]*')\s+(?:"[^"<>]*"|'[^'<>]*')|SYSTEM\s+(?:"[^"<>]*"|'[^'<>]*')))?\s*(?:\[([\s\S]*?)\]\s*)?>/i.exec(
+      body,
+    );
+  if (doctype) {
+    const names = new Map();
+    let subset = (doctype[2] || "").replace(/<!--[\s\S]*?-->/g, "");
+    subset = subset.replace(
+      /<!ENTITY\s+([A-Za-z_][\w.-]*)\s+"([\w\s#.:;%,()\/+-]{0,256})"\s*>/g,
+      (_, name, value) => {
+        if (names.has(name) || names.size >= 32)
+          throw Error("SVG document type declares too many entities.");
+        names.set(name, value);
+        return "";
+      },
+    );
+    if (subset.trim())
+      throw Error(
+        "SVG document types may only declare plain-text entities; other declarations are not supported.",
+      );
+    body =
+      doctype[1] +
+      body
+        .slice(doctype[0].length)
+        .replace(/&([A-Za-z_][\w.-]*);/g, (ref, name) =>
+          names.has(name) ? names.get(name) : ref,
+        );
+    if (body.length > 4 * 1024 * 1024)
+      throw Error("SVG entities expand past 4 MiB.");
+  }
+  if (/<!DOCTYPE|<!ENTITY|<\?/i.test(body))
+    throw Error(
+      "SVG document types, entities, and processing instructions are not supported.",
+    );
+  return declaration + body;
+}
+// Simple stylesheets (class, id and element selectors, as Illustrator and many
+// icon sets write them) are folded into each element's style attribute, ahead
+// of its own declarations, so the usual style checks then apply to every value.
+function inlineStyleSheets(root) {
+  const sheets = [...root.getElementsByTagNameNS(SVG_NS, "style")];
+  if (!sheets.length) return;
+  const rules = [];
+  let order = 0;
+  for (const sheet of sheets) {
+    const css = sheet.textContent.replace(/\/\*[\s\S]*?\*\//g, "");
+    if (/@|\\|<|url\s*\(\s*['"]?(?!#)/i.test(css))
+      throw Error("SVG stylesheets may only contain simple rules.");
+    const block = /([^{}]+)\{([^{}]*)\}/g;
+    let rest = css,
+      m;
+    while ((m = block.exec(css))) {
+      rest = rest.replace(m[0], "");
+      for (const selector of m[1].split(",")) {
+        const s = selector.trim();
+        const parts =
+          /^(\*|[A-Za-z][\w-]*)?((?:\.[\w-]+)*)(#[\w.-]+)?((?:\.[\w-]+)*)$/.exec(
+            s,
+          );
+        if (!s || !parts || (!parts[1] && !parts[2] && !parts[3] && !parts[4]))
+          throw Error("Unsupported SVG stylesheet selector: " + s);
+        const classes = (parts[2] + parts[4]).split(".").filter(Boolean);
+        rules.push({
+          tag: parts[1] && parts[1] !== "*" ? parts[1].toLowerCase() : null,
+          classes,
+          id: parts[3]?.slice(1) || null,
+          weight:
+            (parts[3] ? 100 : 0) +
+            classes.length * 10 +
+            (parts[1] && parts[1] !== "*" ? 1 : 0),
+          order: order++,
+          declarations: m[2].trim(),
+        });
+      }
+    }
+    if (rest.trim())
+      throw Error("SVG stylesheets may only contain simple rules.");
+    sheet.remove();
+  }
+  rules.sort((a, b) => a.weight - b.weight || a.order - b.order);
+  for (const el of root.querySelectorAll("*")) {
+    const own = el.getAttribute("class")?.trim().split(/\s+/) || [];
+    const matched = rules
+      .filter(
+        (r) =>
+          (!r.tag || el.localName.toLowerCase() === r.tag) &&
+          (!r.id || el.id === r.id) &&
+          r.classes.every((c) => own.includes(c)),
+      )
+      .map((r) => r.declarations.replace(/;\s*$/, ""))
+      .filter(Boolean);
+    if (matched.length) {
+      const inline = el.getAttribute("style");
+      el.setAttribute("style", [...matched, inline].filter(Boolean).join(";"));
+    }
+  }
+}
+// <use> and <symbol> become plain copies, so nothing reaches the renderer by
+// reference. Every copy counts against the element limit, so references that
+// multiply (a use of a group of uses of \u2026) are refused instead of freezing.
+function expandUses(root, count) {
+  const queue = [...root.getElementsByTagNameNS(SVG_NS, "use")];
+  while (queue.length) {
+    const use = queue.shift();
+    const href =
+      use.getAttribute("href") ?? use.getAttributeNS(XLINK_NS, "href") ?? "";
+    const ref = /^#([\w.-]+)$/.exec(href.trim());
+    if (!ref) throw Error("Only internal SVG references are supported.");
+    const target = root.ownerDocument.getElementById(ref[1]);
+    if (!target || !root.contains(target))
+      throw Error("SVG contains a missing reference.");
+    if (target === use || target.contains(use))
+      throw Error("Cyclic SVG reference.");
+    count += 1 + target.querySelectorAll("*").length;
+    if (count > MAX_SVG_ELEMENTS)
+      throw Error("SVG has too many elements (maximum 5,000).");
+    const doc = root.ownerDocument,
+      group = doc.createElementNS(SVG_NS, "g");
+    for (const a of [...use.attributes])
+      if (!["x", "y", "width", "height", "href"].includes(a.localName))
+        group.setAttributeNS(a.namespaceURI, a.name, a.value);
+    const x = Number(use.getAttribute("x")) || 0,
+      y = Number(use.getAttribute("y")) || 0;
+    if (x || y)
+      group.setAttribute(
+        "transform",
+        (
+          (use.getAttribute("transform") || "") + ` translate(${x} ${y})`
+        ).trim(),
+      );
+    let copy;
+    if (target.localName === "symbol" || target.localName === "svg") {
+      // A symbol draws like a nested <svg> sized by the use (100% by default).
+      copy = doc.createElementNS(SVG_NS, "svg");
+      for (const name of ["viewBox", "preserveAspectRatio"])
+        if (target.hasAttribute(name))
+          copy.setAttribute(name, target.getAttribute(name));
+      copy.setAttribute(
+        "width",
+        use.getAttribute("width") || target.getAttribute("width") || "100%",
+      );
+      copy.setAttribute(
+        "height",
+        use.getAttribute("height") || target.getAttribute("height") || "100%",
+      );
+      for (const child of target.childNodes) copy.append(child.cloneNode(true));
+    } else copy = target.cloneNode(true);
+    // Copies keep pointing at the original's gradients, masks and clips, so
+    // their own ids go: ids must stay unique.
+    copy.removeAttribute("id");
+    for (const el of copy.querySelectorAll("[id]")) el.removeAttribute("id");
+    group.append(copy);
+    use.replaceWith(group);
+    queue.push(...group.getElementsByTagNameNS(SVG_NS, "use"));
+  }
+  // Symbols never draw on their own; as <defs> they keep their ids for the
+  // references inside the copies.
+  for (const symbol of [...root.getElementsByTagNameNS(SVG_NS, "symbol")]) {
+    const defs = root.ownerDocument.createElementNS(SVG_NS, "defs");
+    if (symbol.id) defs.id = symbol.id;
+    const g = root.ownerDocument.createElementNS(SVG_NS, "g");
+    g.append(...symbol.childNodes);
+    defs.append(g);
+    symbol.replaceWith(defs);
+  }
+}
+// Removes what exporters add that never draws: editor metadata and namespaces,
+// Illustrator's private data and its <switch> fallback, and attributes with no
+// effect on the picture. Runs before the checks, which then see plain SVG.
+function normaliseSvg(root) {
+  const editorElements = [...root.querySelectorAll("*")].filter(
+    (el) =>
+      isEditorNamespace(el.namespaceURI) ||
+      (el.namespaceURI === SVG_NS &&
+        ["metadata", "foreignObject"].includes(el.localName)),
+  );
+  for (const el of editorElements) el.remove();
+  // Illustrator wraps the artwork in <switch> with a foreignObject first; with
+  // that gone, the first remaining child is what any viewer would draw.
+  for (const sw of [...root.getElementsByTagNameNS(SVG_NS, "switch")]) {
+    const g = root.ownerDocument.createElementNS(SVG_NS, "g");
+    for (const a of [...sw.attributes])
+      if (
+        !/^(?:requiredFeatures|requiredExtensions|systemLanguage)$/.test(
+          a.localName,
+        )
+      )
+        g.setAttributeNS(a.namespaceURI, a.name, a.value);
+    if (sw.firstElementChild) g.append(sw.firstElementChild);
+    sw.replaceWith(g);
+  }
+  inlineStyleSheets(root);
+  for (const el of [root, ...root.querySelectorAll("*")]) {
+    // xlink:href is the older spelling of href; browsers draw both alike.
+    if (el.hasAttributeNS(XLINK_NS, "href")) {
+      if (!el.hasAttribute("href"))
+        el.setAttribute("href", el.getAttributeNS(XLINK_NS, "href"));
+      el.removeAttributeNS(XLINK_NS, "href");
+    }
+    for (const a of [...el.attributes]) {
+      const prefixed = a.name.startsWith("xmlns:");
+      if (
+        isEditorNamespace(a.namespaceURI) ||
+        (prefixed && (isEditorNamespace(a.value) || a.value === SVG_NS)) ||
+        a.namespaceURI === "http://www.w3.org/XML/1998/namespace" ||
+        (a.namespaceURI === null &&
+          /^(?:version|baseProfile|class|enable-background|data-[\w-]+)$/.test(
+            a.name,
+          ))
+      )
+        el.removeAttributeNS(a.namespaceURI, a.localName);
+    }
+  }
+  expandUses(root, 1 + root.querySelectorAll("*").length);
+}
 export function guardSvg(text, edge = 512) {
   if (!SVG_EDGES.includes(edge)) throw Error("Unsupported SVG size.");
   if (new TextEncoder().encode(text).length > 2 * 1024 * 1024)
     throw Error("SVG files must be 2 MiB or smaller.");
-  if (
-    /<!DOCTYPE|<!ENTITY|<\?/i.test(
-      text.replace(/^\uFEFF?\s*<\?xml\s[^?]*\?>/i, ""),
-    )
-  )
-    throw Error(
-      "SVG document types, entities, and processing instructions are not supported.",
-    );
+  text = prepareSvgText(text);
   const doc = new DOMParser().parseFromString(text, "image/svg+xml"),
     root = doc.documentElement;
   if (
     root.localName !== "svg" ||
-    root.namespaceURI !== "http://www.w3.org/2000/svg" ||
+    root.namespaceURI !== SVG_NS ||
     doc.querySelector("parsererror")
   )
     throw Error("Invalid SVG document.");
+  if (1 + root.querySelectorAll("*").length > MAX_SVG_ELEMENTS)
+    throw Error("SVG has too many elements (maximum 5,000).");
+  normaliseSvg(root);
   const all = [root, ...root.querySelectorAll("*")];
   if (all.length > 5000)
     throw Error("SVG has too many elements (maximum 5,000).");
@@ -360,6 +628,13 @@ export function guardSvg(text, edge = 512) {
         const colon = declaration.indexOf(":"),
           key = declaration.slice(0, colon).trim().toLowerCase(),
           val = declaration.slice(colon + 1).trim();
+        if (
+          colon >= 0 &&
+          (NO_EFFECT_STYLE.test(key) ||
+            (/^marker(?:-start|-mid|-end)?$/.test(key) &&
+              val.toLowerCase() === "none"))
+        )
+          continue;
         if (colon >= 0 && styleOnly.has(key)) {
           if (!styleOnly.get(key).has(val.toLowerCase()))
             throw Error("Unsupported SVG style declaration.");
