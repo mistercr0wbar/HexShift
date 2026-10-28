@@ -112,7 +112,38 @@
           <h1>Hex Shift<span class="version"> / 03</span></h1>
         </div>
         <div id="menubar" class="menubar"></div>
-        <div class="file-info">
+        <div id="documentTabs" class="document-tabs">
+          <div
+            id="tabList"
+            class="tab-list"
+            role="tablist"
+            aria-label="Open images"
+            aria-multiselectable="true"
+          ></div>
+          <select
+            id="documentPicker"
+            class="document-picker"
+            aria-label="Open images"
+          ></select>
+          <button
+            id="closeDocument"
+            class="document-phone-close"
+            type="button"
+            aria-label="Close current tab"
+          >
+            ×
+          </button>
+          <button
+            id="addDocument"
+            class="document-add"
+            type="button"
+            title="Open images (Ctrl+O)"
+            aria-label="Open more images"
+          >
+            +
+          </button>
+        </div>
+        <div class="file-info" hidden>
           <span id="fileName">Loading sample…</span><span id="fileDims"></span>
         </div>
         <div class="top-actions">
@@ -163,6 +194,7 @@
           id="fileInput"
           type="file"
           accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+          multiple
           hidden
         />
       </header>
@@ -926,14 +958,6 @@
                       hidden
                     />
                     <p id="batchNote" class="readout" aria-live="polite"></p>
-                    <button
-                      id="cancelBatch"
-                      class="button full"
-                      type="button"
-                      hidden
-                    >
-                      Cancel batch
-                    </button>
                   </details>
                 </div>
               </section>
@@ -996,6 +1020,22 @@
               <div>
                 <dt>Ctrl E</dt>
                 <dd>Export</dd>
+              </div>
+              <div>
+                <dt>Ctrl Tab / Ctrl Shift Tab</dt>
+                <dd>Next / previous image</dd>
+              </div>
+              <div>
+                <dt>Ctrl 1…9</dt>
+                <dd>Switch to an image tab</dd>
+              </div>
+              <div>
+                <dt>Ctrl W</dt>
+                <dd>Close this image tab</dd>
+              </div>
+              <div>
+                <dt>Ctrl / Shift-click tab</dt>
+                <dd>Select tabs / select a range for batch actions</dd>
               </div>
               <div>
                 <dt>Ctrl Shift C</dt>

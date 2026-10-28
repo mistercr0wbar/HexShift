@@ -54,6 +54,17 @@ const row = (id, data, w, x, y, target, extra = {}) => {
 };
 const strip = (...rgb) =>
   new Uint8ClampedArray(rgb.flatMap((c) => [...c, 255]));
+test("an in-memory recipe replays exactly like the same recipe saved and loaded", async () => {
+  const pixels = strip([220, 30, 30], [30, 60, 220]),
+    rows = [
+      row(1, pixels, 2, 0, 0, "#12AB34", { mode: "flat", connected: true }),
+    ],
+    steps = [recipeStep(rows, pixels, 2, new Int8Array(2))];
+  const direct = await replay(2, 1, pixels, steps),
+    loaded = await replay(2, 1, pixels, parseRecipe(writeRecipe(steps)));
+  assert.deepEqual(direct, loaded);
+  assert.deepEqual([...direct.subarray(0, 4)], [18, 171, 52, 255]);
+});
 test("one row gives exactly the single-edit result, brush included", async () => {
   const { w, h, data, image } = await heart(),
     labels = new Int8Array(w * h),

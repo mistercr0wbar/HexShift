@@ -1262,24 +1262,21 @@ test("accessibility in light/dark themes and at 200 percent zoom", async ({
   ).toBe(true);
   await expect(page.locator("#export")).toBeInViewport();
 });
-test("replacement confirmation is transactional and cancellation retains edits", async ({
+test("opening an image keeps the edited document in its own tab", async ({
   page,
 }) => {
   await pick(page);
   await page
     .locator("#fileInput")
     .setInputFiles(svg('<rect width="10" height="5" fill="#f00"/>'));
-  await expect(page.locator("#replaceDialog")).toBeVisible();
-  await page.getByRole("button", { name: "Keep editing", exact: true }).click();
+  await expect(page.locator("#fileDims")).toHaveText("512 × 256");
+  await ready(page);
+  await expect(page.locator("#replaceDialog")).not.toBeVisible();
+  await page.getByRole("tab", { name: "red_heart.png ●", exact: true }).click();
+  await ready(page);
   await expect(page.locator("#fileDims")).toHaveText("128 × 128");
   await expect(page.locator("#editState")).toHaveText("Pending edit");
-  await page
-    .locator("#fileInput")
-    .setInputFiles(svg('<rect width="10" height="5" fill="#0f0"/>'));
-  await expect(page.locator("#replaceDialog")).toBeVisible();
-  await page
-    .getByRole("button", { name: "Open new image", exact: true })
-    .click();
+  await page.getByRole("tab", { name: "asset.svg", exact: true }).click();
   await expect(page.locator("#fileDims")).toHaveText("512 × 256");
   await ready(page);
 });
@@ -1323,7 +1320,7 @@ test("JPEG/WebP signatures and animated GIF first-frame import", async ({
   expect([...rgba]).toEqual([255, 0, 0, 255]);
 });
 
-test("repeated imports release fallback pixel buffers", async ({
+test("closing repeated imports releases fallback pixel buffers", async ({
   browser,
   browserName,
   baseURL,
@@ -1351,18 +1348,27 @@ test("repeated imports release fallback pixel buffers", async ({
       .png()
       .toBuffer();
   async function load() {
+    const count = await page.getByRole("tab").count(),
+      sample =
+        (await page.locator("#fileName").textContent()) === "red_heart.png";
     await page.locator("#fileInput").setInputFiles({
       name: "memory.png",
       mimeType: "image/png",
       buffer: fixture,
     });
     await expect(page.locator("#fileDims")).toHaveText("512 × 512");
+    await expect(page.getByRole("tab")).toHaveCount(sample ? count : count + 1);
     await ready(page);
   }
   await load();
   await cdp.send("HeapProfiler.collectGarbage");
   const first = await cdp.send("Runtime.getHeapUsage");
-  for (let i = 0; i < 8; i++) await load();
+  for (let i = 0; i < 8; i++) {
+    await load();
+    await page.keyboard.press("Control+w");
+    await expect(page.getByRole("tab")).toHaveCount(1);
+    await ready(page);
+  }
   await cdp.send("HeapProfiler.collectGarbage");
   const last = await cdp.send("Runtime.getHeapUsage");
   expect(

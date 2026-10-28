@@ -15,6 +15,8 @@ import {
   validateMap,
 } from "./engine.js";
 import { History } from "./history.js";
+import { MAX_DOCUMENTS, trimHistories, selectDocuments } from "./documents.js";
+import { createTabs } from "./tabs.js";
 import { decodeBlob } from "./import.js";
 import { canEncodeWebP, formatBytes, outputName, safeStem } from "./export.js";
 import { deliver } from "./deliver.js";
@@ -105,8 +107,15 @@ let zoom = 1,
   drag = null,
   lastResultEdit = -1,
   lastResultImage = -1;
-const history = new History(),
-  waiters = new Set(),
+let history = new History();
+const documents = [];
+const preparedImages = new Map();
+let activeDocument = null,
+  selectedDocuments = new Set(),
+  selectionAnchor = null,
+  documentSequence = 0,
+  documentTabs = null;
+const waiters = new Set(),
   before = $("beforeCanvas"),
   after = $("resultCanvas"),
   wipeCanvas = $("wipeCanvas");
@@ -180,7 +189,7 @@ function commit(label) {
   }
 }
 function action(label, fn) {
-  if (!pixels) return;
+  if (!pixels || batchAbort) return;
   commit("Adjust colour");
   const old = snapshot();
   fn();
@@ -205,8 +214,8 @@ function setChoice(id, value) {
 let cancelTimer = 0;
 function buttons() {
   const available = !!pixels;
-  $("undo").disabled = !history.undoEntries.length;
-  $("redo").disabled = !history.redoEntries.length;
+  $("undo").disabled = !history.undoEntries.length || !!batchAbort;
+  $("redo").disabled = !history.redoEntries.length || !!batchAbort;
   // Apply keeps the state of the last result while the next is on its way, so it
   // does not flicker during a drag; clicking it waits for the newest result.
   $("apply").disabled = !available || !result?.changed;
@@ -216,7 +225,11 @@ function buttons() {
   // its own in the status bar and shows only once the wait is long enough to need
   // it, so a quick drag never makes anything appear or move.
   document.querySelector(".app").dataset.busy = String(processing);
-  if (processing) {
+  if (batchAbort) {
+    clearTimeout(cancelTimer);
+    cancelTimer = 0;
+    $("cancel").classList.add("shown");
+  } else if (processing) {
     cancelTimer ||= setTimeout(() => {
       cancelTimer = 0;
       if (processing) $("cancel").classList.add("shown");
@@ -226,11 +239,264 @@ function buttons() {
     cancelTimer = 0;
     $("cancel").classList.remove("shown");
   }
-  $("batch").disabled = !available || !$("cancelBatch").hidden;
+  $("batch").disabled = !available || !!batchAbort;
   $("editState").textContent = result?.changed
     ? "Pending edit"
     : "No pending edit";
   $("editState").classList.toggle("pending", !!result?.changed);
+  if (activeDocument) {
+    activeDocument.history = history;
+    activeDocument.edited = currentHasEdits();
+    trimHistories(documents, activeDocument);
+  }
+  renderTabs();
+}
+
+// These fields mirror the Android checkpoint metadata. The working globals are
+// references into one Doc at a time; image bytes never go to browser storage.
+function currentHasEdits() {
+  return !!(
+    pixels &&
+    (dirty || result?.changed || history.undoEntries.length || gesture)
+  );
+}
+function stash() {
+  if (!activeDocument) return;
+  Object.assign(activeDocument, {
+    w,
+    h,
+    name,
+    original,
+    pixels,
+    overrides,
+    edit,
+    palette,
+    svgSource,
+    history,
+    dirty,
+    result,
+    edited: currentHasEdits(),
+    view: {
+      zoom,
+      fitMode,
+      panX,
+      panY,
+      mode: choice("view"),
+      overlay: choice("overlay"),
+      compare: $("compare").value,
+      wipe: $("wipe").value,
+      tool,
+      addSample,
+    },
+    variants: {
+      key: variantsKey,
+      nodes: [...$("variants").children],
+      hidden: $("variants").hidden,
+      exportHidden: $("exportVariants").hidden,
+      stale: $("variants").classList.contains("stale"),
+      note: $("variantsNote").textContent,
+      noteHidden: $("variantsNote").hidden,
+    },
+  });
+}
+function invalidateDocumentWork() {
+  // Every async operation carries a request/revision guard. Switching invalidates
+  // the current requests before the next Doc is installed.
+  imageId++;
+  editId++;
+  if (raf) cancelAnimationFrame(raf);
+  raf = 0;
+  wake(Error("The active image changed."));
+  previewTicket++;
+  readoutTicket++;
+  clearTimeout(readoutTimer);
+  variantRun++;
+  mainImage = null;
+  resetOutlineLayer();
+  drag = null;
+  space = false;
+  $("loupe").hidden = $("brushCursor").hidden = true;
+}
+function unstash(doc) {
+  activeDocument = doc;
+  ({
+    w,
+    h,
+    name,
+    original,
+    pixels,
+    overrides,
+    edit,
+    palette,
+    svgSource,
+    history,
+    dirty,
+    result,
+  } = doc);
+  activate();
+  ({ zoom, fitMode, panX, panY, addSample } = doc.view);
+  setChoice("view", doc.view.mode);
+  setChoice("overlay", doc.view.overlay);
+  $("compare").value = doc.view.compare;
+  $("wipe").value = doc.view.wipe;
+  $("viewport").dataset.view = doc.view.mode;
+  $("wipeControl").hidden = doc.view.mode !== "wipe";
+  $("compare").hidden = doc.view.mode === "result";
+  setTool(doc.view.tool);
+  $("svgSizeGroup").hidden = !svgSource;
+  if (svgSource) $("svgSize").value = String(svgSource.edge);
+  $("fileName").textContent = name;
+  $("fileDims").textContent =
+    w + " × " + h + (doc.still ? " · first frame" : "");
+  for (const canvas of [before, after, wipeCanvas]) {
+    canvas.width = w;
+    canvas.height = h;
+  }
+  variantsKey = doc.variants?.key ?? null;
+  $("variants").replaceChildren(...(doc.variants?.nodes || []));
+  $("variants").hidden = doc.variants?.hidden ?? true;
+  $("exportVariants").hidden = doc.variants?.exportHidden ?? true;
+  $("variants").classList.toggle("stale", !!doc.variants?.stale);
+  $("variantsNote").textContent = doc.variants?.note || "";
+  $("variantsNote").hidden = doc.variants?.noteHidden ?? true;
+  sync();
+  draw();
+  prepareCurrent(true);
+  layout();
+}
+function renderTabs() {
+  documentTabs?.render(
+    documents,
+    activeDocument,
+    selectedDocuments,
+    !!batchAbort,
+  );
+}
+function switchDocument(doc, focus = false) {
+  if (!doc || doc === activeDocument || batchAbort || $("replaceDialog").open)
+    return;
+  const fromStrip = !!document.activeElement?.closest("#tabList");
+  document.querySelector(".colour-picker:popover-open")?.hidePopover();
+  // A document key can arrive while typing. Finish the old field's change
+  // before swapping, so sync() can fill every control from the next Doc.
+  document.activeElement?.blur();
+  commit("Adjust colour");
+  stash();
+  invalidateDocumentWork();
+  unstash(doc);
+  renderTabs();
+  documentTabs?.reveal(doc.id, focus || fromStrip);
+  status("Switched to " + name + ".");
+}
+function chooseDocument(id, e = {}) {
+  if (batchAbort || $("replaceDialog").open) return;
+  const doc = documents.find((d) => d.id === id);
+  if (!doc) return;
+  if (e.ctrlKey || e.metaKey || e.shiftKey) {
+    selectedDocuments = selectDocuments(
+      documents,
+      selectedDocuments,
+      selectionAnchor,
+      doc,
+      e.shiftKey,
+    );
+    selectionAnchor ||= doc;
+    renderTabs();
+    status(selectedDocuments.size + " tabs selected.");
+    return;
+  }
+  selectedDocuments = new Set([doc]);
+  selectionAnchor = doc;
+  switchDocument(doc);
+  renderTabs();
+}
+async function askDiscard(kind, doc) {
+  const dialog = $("replaceDialog");
+  if (dialog.open) return false;
+  [
+    $("replaceTitle").textContent,
+    $("replaceText").textContent,
+    $("replaceConfirm").textContent,
+  ] = dialogText[kind];
+  if (doc)
+    $("replaceText").textContent =
+      doc.name + " has edits. Export it first if you want to keep them.";
+  dialog.showModal();
+  return new Promise((resolve) =>
+    dialog.addEventListener(
+      "close",
+      () => resolve(dialog.returnValue === "replace"),
+      { once: true },
+    ),
+  );
+}
+async function closeDocument(id) {
+  if (batchAbort || $("replaceDialog").open) return;
+  const doc = documents.find((d) => d.id === id);
+  if (!doc) return;
+  document.activeElement?.blur();
+  commit("Adjust colour");
+  stash();
+  if (doc.edited && !(await askDiscard("close", doc))) return;
+  const at = documents.indexOf(doc),
+    wasActive = doc === activeDocument;
+  documents.splice(at, 1);
+  worker?.postMessage({ type: "release", documentId: doc.id });
+  for (const key of preparedImages.keys())
+    if (key.startsWith(doc.id + ":")) preparedImages.delete(key);
+  selectedDocuments.delete(doc);
+  if (selectionAnchor === doc) selectionAnchor = null;
+  if (wasActive) {
+    invalidateDocumentWork();
+    const next = documents[Math.min(at, documents.length - 1)];
+    if (next) {
+      if (!selectedDocuments.size) selectedDocuments.add(next);
+      unstash(next);
+      documentTabs?.reveal(next.id, true);
+    } else {
+      activeDocument = null;
+      w = h = 0;
+      name = "";
+      original = pixels = overrides = result = svgSource = prepared = null;
+      ready = processing = dirty = false;
+      palette = [];
+      history = new History();
+      edit = freshEdit();
+      activate();
+      clearVariants();
+      for (const canvas of [before, after, wipeCanvas])
+        canvas.width = canvas.height = 0;
+      $("fileName").textContent = "No images open";
+      $("fileDims").textContent = "";
+      $("svgSizeGroup").hidden = true;
+      $("coverage").textContent = "Open an image to begin.";
+      $("resultNote").textContent = "";
+      $("sizeReadout").replaceChildren();
+      $("colourMap").replaceChildren();
+      delete $("colourMap").dataset.shape;
+      $("capWarning").hidden = true;
+      for (const canvas of previewCanvases) canvas.width = canvas.height = 0;
+      renderPalette();
+      sync();
+      $("addDocument").focus();
+    }
+  }
+  renderTabs();
+  status(
+    "Closed " +
+      doc.name +
+      "." +
+      (!documents.length ? " Open an image to begin." : ""),
+  );
+}
+function reorderDocuments(from, to) {
+  if (batchAbort) return;
+  const a = documents.findIndex((d) => d.id === from),
+    b = documents.findIndex((d) => d.id === to);
+  if (a < 0 || b < 0 || a === b) return;
+  documents.splice(b, 0, documents.splice(a, 1)[0]);
+  renderTabs();
+  documentTabs.reveal(activeDocument.id);
 }
 // A slider is one row: its name, the track, and the number. `short` is the name shown
 // when the full one will not fit the row; the full name is the tooltip.
@@ -420,10 +686,8 @@ function paintMapRow(item, row, k) {
     "Colour " +
       (k + 1) +
       ": " +
-      (from ? from + " to " + to : "nothing picked yet") +
-      (count.textContent
-        ? ", " + count.textContent.replace("px", "pixels")
-        : ""),
+      text.textContent +
+      (count.textContent ? " · " + count.textContent : ""),
   );
 }
 function renderMap() {
@@ -469,10 +733,12 @@ function removeRow(k) {
 }
 // One row per colour family, each set to keep its own colour until changed.
 async function mapAll() {
-  if (!pixels) return;
+  if (!pixels || batchAbort) return;
+  const iid = imageId;
   commit("Adjust colour");
   try {
     const families = colourFamilies(await variantImage());
+    if (iid !== imageId || batchAbort) return;
     if (!families.length) {
       status("There are no colours to map in this image.");
       return;
@@ -773,17 +1039,21 @@ function startWorker() {
     if (url) URL.revokeObjectURL(url);
   }
 }
-function prepareCurrent() {
+function prepareCurrent(switching = false) {
   if (!pixels) return;
   imageId++;
   editId++;
   ready = false;
   processing = true;
-  result = null;
+  if (!switching) {
+    result = null;
+    if (activeDocument) activeDocument.revision++;
+  }
   lastError = null;
   prepared = null;
   const iid = imageId,
-    eid = editId;
+    eid = editId,
+    cacheKey = activeDocument.id + ":" + activeDocument.revision;
   validateImage(w, h, pixels);
   buttons();
   if (worker) {
@@ -795,14 +1065,25 @@ function prepareCurrent() {
         editId: eid,
         width: w,
         height: h,
+        cacheKey,
         pixels: copy,
       },
       [copy.buffer],
     );
   } else
-    prepare(w, h, pixels, pause, () => iid !== imageId)
+    (preparedImages.has(cacheKey)
+      ? Promise.resolve(preparedImages.get(cacheKey))
+      : prepare(w, h, pixels, pause, () => iid !== imageId)
+    )
       .then((im) => {
         if (iid !== imageId) return;
+        const prefix = cacheKey.split(":")[0] + ":";
+        for (const key of preparedImages.keys())
+          if (key.startsWith(prefix)) preparedImages.delete(key);
+        preparedImages.delete(cacheKey);
+        preparedImages.set(cacheKey, im);
+        while (preparedImages.size > 3)
+          preparedImages.delete(preparedImages.keys().next().value);
         prepared = im;
         receive({
           type: "ready",
@@ -967,10 +1248,10 @@ function cancelProcessing() {
   buttons();
 }
 const dialogText = {
-  open: [
-    "Open another image?",
-    "Your current image has edits. Export it first if you want to keep them.",
-    "Open new image",
+  close: [
+    "Close this tab?",
+    "This image has edits. Export it first if you want to keep them.",
+    "Close tab",
   ],
   redraw: [
     "Redraw the SVG at a new size?",
@@ -979,14 +1260,30 @@ const dialogText = {
   ],
   quit: [
     "Quit Hex Shift?",
-    "Your current image has edits. Export it first if you want to keep them.",
+    "Your open tabs have edits. Export them first if you want to keep them.",
     "Quit",
   ],
 };
 // Resolves true once the image is open. `redraw` reopens the current SVG at
 // the size chosen under "SVG drawn at".
 async function openBlob(blob, fileName, isSample = false, redraw = false) {
+  if (batchAbort) {
+    status("Wait for the batch to finish, or cancel it first.");
+    return false;
+  }
+  if ($("replaceDialog").open) return false;
+  // A pristine demonstration is replaced by the first real image; an edited
+  // sample is a normal document and stays open.
+  let replaceSample =
+    !isSample && !redraw && activeDocument?.sample && !currentHasEdits();
+  if (!redraw && documents.length >= MAX_DOCUMENTS && !replaceSample) {
+    status(
+      "Up to 20 image tabs can be open. Close a tab, or use Batch from files for up to 100 images.",
+    );
+    return false;
+  }
   const ticket = ++importId;
+  const redrawDoc = activeDocument;
   importAbort?.abort();
   const controller = new AbortController();
   importAbort = controller;
@@ -995,7 +1292,17 @@ async function openBlob(blob, fileName, isSample = false, redraw = false) {
     const edge = Number($("svgSize").value),
       decoded = await decodeBlob(blob, controller.signal, { svgEdge: edge });
     if (ticket !== importId) return false;
-    if (!isSample && pixels && (dirty || result?.changed)) {
+    if (batchAbort || $("replaceDialog").open) return false;
+    replaceSample =
+      !isSample && !redraw && activeDocument?.sample && !currentHasEdits();
+    if (!redraw && documents.length >= MAX_DOCUMENTS && !replaceSample) {
+      status(
+        "Up to 20 image tabs can be open. Close a tab, or use Batch from files for up to 100 images.",
+      );
+      return false;
+    }
+    if (redraw && activeDocument !== redrawDoc) return false;
+    if (redraw && pixels && currentHasEdits()) {
       const dialog = $("replaceDialog");
       if (dialog.open) {
         const closed = new Promise((resolve) =>
@@ -1009,7 +1316,7 @@ async function openBlob(blob, fileName, isSample = false, redraw = false) {
         $("replaceTitle").textContent,
         $("replaceText").textContent,
         $("replaceConfirm").textContent,
-      ] = dialogText[redraw ? "redraw" : "open"];
+      ] = dialogText.redraw;
       dialog.showModal();
       const choice = await new Promise((resolve) =>
         dialog.addEventListener("close", () => resolve(dialog.returnValue), {
@@ -1024,11 +1331,30 @@ async function openBlob(blob, fileName, isSample = false, redraw = false) {
         return false;
       }
     }
+    document.activeElement?.blur();
     commit("Adjust colour");
+    stash();
+    invalidateDocumentWork();
+    if (!redraw) {
+      if (replaceSample) {
+        documents.splice(documents.indexOf(activeDocument), 1);
+        selectedDocuments.delete(activeDocument);
+      }
+      activeDocument = {
+        id: ++documentSequence,
+        revision: 0,
+        sample: isSample,
+      };
+      documents.push(activeDocument);
+      selectedDocuments = new Set([activeDocument]);
+      selectionAnchor = activeDocument;
+      history = new History();
+    }
     w = decoded.width;
     h = decoded.height;
     name = String(fileName || "image").slice(0, 200);
     svgSource = decoded.svg ? { blob, name, edge } : null;
+    activeDocument.still = decoded.still;
     $("svgSizeGroup").hidden = !svgSource;
     original = decoded.pixels;
     pixels = original.slice();
@@ -1039,6 +1365,7 @@ async function openBlob(blob, fileName, isSample = false, redraw = false) {
     dirty = false;
     history.clear();
     gesture = null;
+    clearVariants();
     resetOutlineLayer();
     for (const canvas of [before, after, wipeCanvas]) {
       canvas.width = w;
@@ -1049,10 +1376,14 @@ async function openBlob(blob, fileName, isSample = false, redraw = false) {
     $("fileName").textContent = name;
     $("fileDims").textContent =
       w + " × " + h + (decoded.still ? " · first frame" : "");
+    stash();
     sync();
     prepareCurrent();
     layout();
     outlineControls();
+    stash();
+    renderTabs();
+    documentTabs?.reveal(activeDocument.id);
     status(
       isSample
         ? "Sample ready. Pick a colour to get started."
@@ -1070,6 +1401,7 @@ async function openBlob(blob, fileName, isSample = false, redraw = false) {
   }
 }
 function restore(redo) {
+  if (batchAbort || !pixels) return;
   commit("Adjust colour");
   const moved = history.move({ pixels, overrides }, redo);
   if (!moved) return;
@@ -1082,6 +1414,7 @@ function restore(redo) {
   status((redo ? "Redid " : "Undid ") + moved.label + ".");
 }
 async function apply() {
+  if (batchAbort || !pixels) return;
   try {
     commit("Adjust colour");
     const r = await latest();
@@ -1119,6 +1452,7 @@ function reset() {
   status("Original restored. Undo is available.");
 }
 async function save(copy = false) {
+  if (batchAbort || !pixels) return;
   const button = copy ? $("copy") : $("export");
   if (button.dataset.busy) return;
   button.dataset.busy = "true";
@@ -1406,6 +1740,7 @@ function outlineControls() {
 }
 // A change that is only the outline: undoable, but nothing to reprocess.
 function outlineAction(label, fn) {
+  if (!pixels || batchAbort) return;
   commit("Adjust colour");
   const old = snapshot();
   fn();
@@ -1829,13 +2164,25 @@ function selectionKey() {
     if (overrides[i]) sum = (sum * 31 + (i + 1) * overrides[i]) % 2147483647;
   const { target, ramp, dh, ds, dl, manual, ...rest } = params,
     others = edit.rows.filter((_, k) => k !== edit.active);
-  return JSON.stringify([imageId, seeds, rest, others, sum, edit.outline]);
+  return JSON.stringify([
+    activeDocument?.id,
+    activeDocument?.revision,
+    seeds,
+    rest,
+    others,
+    sum,
+    edit.outline,
+  ]);
 }
 // A main-thread copy of the prepared image for variants (the worker keeps its own).
 async function variantImage() {
   if (prepared && !worker) return prepared;
-  if (mainImage?.id !== imageId)
-    mainImage = { id: imageId, image: await prepare(w, h, pixels, pause) };
+  if (mainImage?.id !== imageId) {
+    const iid = imageId,
+      image = await prepare(w, h, pixels, pause, () => iid !== imageId);
+    if (iid !== imageId) throw Error("The active image changed.");
+    mainImage = { id: iid, image };
+  }
   return mainImage.image;
 }
 function clearVariants() {
@@ -1858,6 +2205,7 @@ function markVariants() {
     "The selection, treatment or outline changed. Make variants again to update the previews; export always uses the current settings.";
 }
 async function makeVariants() {
+  if (!pixels || batchAbort) return;
   const run = ++variantRun,
     entries = currentSet().entries.slice(0, MAX_VARIANTS);
   commit("Adjust colour");
@@ -1926,6 +2274,10 @@ async function makeVariants() {
   }
 }
 async function exportVariants() {
+  if (batchAbort || !pixels) return;
+  const iid = imageId,
+    revision = editId,
+    valid = () => iid === imageId && revision === editId;
   const button = $("exportVariants");
   if (button.dataset.busy) return;
   button.dataset.busy = "true";
@@ -1935,7 +2287,10 @@ async function exportVariants() {
       image = await variantImage(),
       settings = finishSettings(),
       files = [];
+    if (!valid()) throw Error("The image changed. Export the variants again.");
     for (const [i, entry] of entries.entries()) {
+      if (!valid())
+        throw Error("The image changed. Export the variants again.");
       status("Exporting variant " + (i + 1) + " of " + entries.length + "…");
       const p = variantParams(entry),
         r = await processEdit(
@@ -1944,7 +2299,10 @@ async function exportVariants() {
           overrides.slice(),
           edit.active,
           pause,
+          () => !valid(),
         );
+      if (!valid())
+        throw Error("The image changed. Export the variants again.");
       for (const f of await deliver(r.pixels, w, h, settings, pause))
         files.push({
           name: outputName(name, f.format, p.target, f.suffix),
@@ -1957,6 +2315,7 @@ async function exportVariants() {
         "-variants-" +
         (set.id.startsWith("user-") ? "palette" : set.id) +
         ".zip";
+    if (!valid()) throw Error("The image changed. Export the variants again.");
     download(blob, filename);
     status(
       "Prepared " +
@@ -1979,19 +2338,31 @@ renderSavedSets();
 // Recipes: the maps applied so far, plus the current one if it changes
 // anything. Also returns that current preview (null when it changes nothing).
 async function currentSteps() {
+  const doc = activeDocument,
+    iid = imageId;
   commit("Adjust colour");
   let preview = null;
   try {
     const r = await latest();
     if (r.changed) preview = r;
-  } catch {}
+  } catch (e) {
+    if (doc !== activeDocument || iid !== imageId) throw e;
+  }
+  if (doc !== activeDocument || iid !== imageId)
+    throw Error("The active image changed.");
   const steps = edit.steps.slice();
   if (preview) steps.push(recipeStep(edit.rows, pixels, w, overrides));
   return { steps: steps.filter((s) => s.rows.length), preview };
 }
 async function saveRecipe() {
-  if (!pixels) return;
-  const { steps } = await currentSteps();
+  if (!pixels || batchAbort) return;
+  let steps;
+  try {
+    ({ steps } = await currentSteps());
+  } catch (e) {
+    status("Could not save the recipe: " + e.message);
+    return;
+  }
   if (!steps.length) {
     status("Nothing to save yet. Change a colour first.");
     return;
@@ -2018,13 +2389,15 @@ async function saveRecipe() {
 }
 // Applies a recipe on top of the current preview, as one undoable change.
 async function applyRecipe(file) {
-  if (!pixels) return;
+  if (!pixels || batchAbort) return;
+  const doc = activeDocument,
+    request = imageId;
   try {
     if (file.size > MAX_RECIPE_BYTES)
       throw Error("Recipes must be 64 KB or smaller.");
-    const { steps: recipe, outline: recipeOutline } = parseRecipeFile(
-        await file.text(),
-      ),
+    const text = await file.text();
+    if (doc !== activeDocument || request !== imageId || batchAbort) return;
+    const { steps: recipe, outline: recipeOutline } = parseRecipeFile(text),
       { steps, preview } = await currentSteps(),
       iid = imageId,
       base = preview ? preview.pixels : pixels;
@@ -2076,16 +2449,199 @@ let batchRun = 0,
 function endBatch() {
   batchAbort?.abort();
   batchAbort = null;
-  $("cancelBatch").hidden = true;
+  $("main").inert = false;
+  document.querySelector(".top-actions").inert = false;
   buttons();
 }
+function beginBatch() {
+  if (batchAbort) throw Error("A batch is already running.");
+  batchAbort = new AbortController();
+  $("main").inert = true;
+  document.querySelector(".top-actions").inert = true;
+  buttons();
+}
+function batchProgress(text) {
+  $("batchNote").textContent = text;
+  status(text);
+}
+function cancelBatch() {
+  batchRun++;
+  endBatch();
+  batchProgress(
+    "Batch cancelled. Completed tabs keep their changes; Undo is available in each.",
+  );
+}
+// A background tab's pending colour map is finished exactly as in the viewer.
+// Nothing is swapped into the live editor while a tab batch is running.
+async function documentPreview(doc, cancelled) {
+  const prepared = await prepare(doc.w, doc.h, doc.pixels, pause, cancelled);
+  return processEdit(
+    prepared,
+    structuredClone(doc.edit.rows),
+    doc.overrides.slice(),
+    doc.edit.active,
+    pause,
+    cancelled,
+  );
+}
+function documentSteps(doc, preview) {
+  const steps = doc.edit.steps.slice();
+  if (preview.changed)
+    steps.push(recipeStep(doc.edit.rows, doc.pixels, doc.w, doc.overrides));
+  return steps.filter((s) => s.rows.length);
+}
+async function applyToDocuments(all = false) {
+  if (!pixels || batchAbort) return;
+  const source = activeDocument,
+    targets = documents.filter((d) => all || selectedDocuments.has(d));
+  if (!targets.length) {
+    status("Select at least one tab with Ctrl-click or Shift-click.");
+    return;
+  }
+  const run = ++batchRun,
+    cancelled = () => run !== batchRun;
+  try {
+    beginBatch();
+    const { steps } = await currentSteps();
+    if (cancelled()) return;
+    if (!steps.length && !edit.outline.on) {
+      status("Nothing to apply yet. Change a colour or add an outline first.");
+      return;
+    }
+    stash();
+    const sourceOutline = edit.outline.on ? { ...edit.outline } : null;
+    for (const [i, doc] of targets.entries()) {
+      batchProgress(
+        "Applying recipe " +
+          (i + 1) +
+          " of " +
+          targets.length +
+          ": " +
+          doc.name,
+      );
+      const preview = await documentPreview(doc, cancelled);
+      if (cancelled()) return;
+      const priorSteps = documentSteps(doc, preview),
+        base = preview.changed ? preview.pixels : doc.pixels,
+        // The source already shows this recipe. Bake its preview once rather
+        // than applying a relative colour shift a second time.
+        out =
+          doc === source
+            ? base.slice()
+            : await replay(doc.w, doc.h, base, steps, pause, cancelled);
+      if (cancelled()) return;
+      const old = {
+        pixels: doc.pixels,
+        overrides: doc.overrides.slice(),
+        meta: { edit: structuredClone(doc.edit) },
+      };
+      const nextParams = doc.edit.rows[doc.edit.active].params;
+      doc.pixels = out;
+      doc.overrides = new Int8Array(doc.w * doc.h);
+      doc.edit = {
+        rows: [
+          newRow(1, { ...nextParams, dh: 0, ds: 0, dl: 0, manual: false }),
+        ],
+        active: 0,
+        steps: doc === source ? priorSteps : [...priorSteps, ...steps],
+        outline: sourceOutline ? { ...sourceOutline } : { ...doc.edit.outline },
+      };
+      doc.history.record(
+        old,
+        {
+          pixels: doc.pixels,
+          overrides: doc.overrides,
+          meta: { edit: structuredClone(doc.edit) },
+        },
+        "Apply recipe",
+      );
+      doc.dirty = doc.edited = true;
+      doc.result = null;
+      doc.revision++;
+      doc.variants = null;
+      trimHistories(documents, source);
+      if (doc === source) {
+        // Keep the live references in sync even if cancellation follows.
+        invalidateDocumentWork();
+        unstash(doc);
+      }
+    }
+    if (!cancelled())
+      batchProgress(
+        "Applied recipe to " +
+          targets.length +
+          " tabs. Undo is available in each tab.",
+      );
+  } catch (e) {
+    if (!cancelled()) status("Could not apply to tabs: " + e.message);
+  } finally {
+    if (run === batchRun) endBatch();
+  }
+}
+async function exportDocuments() {
+  if (!documents.length || batchAbort) return;
+  const run = ++batchRun,
+    cancelled = () => run !== batchRun;
+  try {
+    commit("Adjust colour");
+    stash();
+    const exportSettings = finishSettings(),
+      files = [];
+    beginBatch();
+    for (const [i, doc] of documents.entries()) {
+      batchProgress(
+        "Exporting tab " +
+          (i + 1) +
+          " of " +
+          documents.length +
+          ": " +
+          doc.name,
+      );
+      const preview = await documentPreview(doc, cancelled);
+      if (cancelled()) return;
+      const settings = { ...exportSettings };
+      delete settings.outline;
+      if (doc.edit.outline.on) settings.outline = { ...doc.edit.outline };
+      for (const f of await deliver(
+        preview.pixels,
+        doc.w,
+        doc.h,
+        settings,
+        pause,
+      )) {
+        if (cancelled()) return;
+        files.push({
+          name: outputName(doc.name, f.format, null, f.suffix),
+          blob: f.blob,
+        });
+      }
+    }
+    const blob = await zip(files);
+    if (cancelled()) return;
+    download(blob, "hexshift-tabs.zip");
+    batchProgress(
+      "Prepared hexshift-tabs.zip (" +
+        files.length +
+        " files, " +
+        formatBytes(blob.size) +
+        "). Choose where to save it.",
+    );
+  } catch (e) {
+    if (!cancelled()) status("Could not export tabs: " + e.message);
+  } finally {
+    if (run === batchRun) endBatch();
+  }
+}
 async function runBatch(list) {
+  if (batchAbort) return;
   const run = ++batchRun,
     cancelled = () => run !== batchRun;
   try {
     if (list.length > MAX_BATCH)
       throw Error("Choose up to " + MAX_BATCH + " images at a time.");
+    beginBatch();
     const { steps } = await currentSteps();
+    if (cancelled()) return;
     if (!steps.length) {
       status("Nothing to apply yet. Change a colour first, then run a batch.");
       return;
@@ -2094,13 +2650,11 @@ async function runBatch(list) {
       edge = Number($("svgSize").value),
       files = [],
       errors = [];
-    batchAbort = new AbortController();
-    $("cancelBatch").hidden = false;
-    buttons();
     for (const [i, file] of list.entries()) {
       if (cancelled()) return;
-      $("batchNote").textContent =
-        "Image " + (i + 1) + " of " + list.length + ": " + file.name;
+      batchProgress(
+        "Image " + (i + 1) + " of " + list.length + ": " + file.name,
+      );
       try {
         const decoded = await decodeBlob(file, batchAbort.signal, {
             svgEdge: edge,
@@ -2164,12 +2718,6 @@ $("batchInput").onchange = (e) => {
   const list = [...e.target.files];
   e.target.value = "";
   if (list.length) runBatch(list);
-};
-$("cancelBatch").onclick = () => {
-  batchRun++;
-  endBatch();
-  $("batchNote").textContent = "Batch cancelled.";
-  status("Batch cancelled.");
 };
 function layout() {
   if (!w) return;
@@ -2473,15 +3021,24 @@ for (const c of [before, after]) {
 $("open").onclick = () => $("fileInput").click();
 // Palette files (.gpl, .hex, .pal, .txt) open as palettes, recipes (.json)
 // apply to the image, anything else opens as an image.
-function openFile(f) {
-  if (isPaletteFile(f)) openPalette(f, f.name);
+async function openFile(f) {
+  if (isPaletteFile(f)) await openPalette(f, f.name);
   else if (/\.json$/i.test(f.name) || f.type === "application/json")
-    applyRecipe(f);
-  else openBlob(f, f.name);
+    await applyRecipe(f);
+  else await openBlob(f, f.name);
+}
+let openingFiles = Promise.resolve();
+function openFiles(files) {
+  openingFiles = openingFiles
+    .then(async () => {
+      for (const f of files) await openFile(f);
+    })
+    .catch((e) => status("Could not open images: " + e.message));
+  return openingFiles;
 }
 $("fileInput").onchange = (e) => {
-  const f = e.target.files[0];
-  if (f) openFile(f);
+  const files = [...e.target.files];
+  if (files.length) openFiles(files);
   e.target.value = "";
 };
 $("targetHex").addEventListener("input", (e) => {
@@ -2571,7 +3128,7 @@ $("apply").onclick = apply;
 $("reset").onclick = reset;
 $("export").onclick = () => save();
 $("copy").onclick = () => save(true);
-$("cancel").onclick = cancelProcessing;
+$("cancel").onclick = () => (batchAbort ? cancelBatch() : cancelProcessing());
 $("fit").onclick = () => {
   fitMode = true;
   layout();
@@ -2751,6 +3308,44 @@ document.addEventListener("keydown", (e) => {
     showShortcuts();
     return;
   }
+  if (batchAbort) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      cancelBatch();
+    } else if (e.ctrlKey || e.metaKey) e.preventDefault();
+    return;
+  }
+  // Document keys work from text fields too, as in a desktop editor. A modal
+  // dialog or picker retains its own keys.
+  if (
+    (e.ctrlKey || e.metaKey) &&
+    !e.altKey &&
+    !document.querySelector("dialog[open],.colour-picker:popover-open")
+  ) {
+    const key = e.key.toLowerCase(),
+      at = documents.indexOf(activeDocument);
+    let doc;
+    if (key === "tab" && documents.length)
+      doc =
+        documents[
+          (at + (e.shiftKey ? documents.length - 1 : 1)) % documents.length
+        ];
+    else if (/^[1-9]$/.test(key)) doc = documents[Number(key) - 1];
+    else if (key === "w") {
+      e.preventDefault();
+      if (activeDocument) closeDocument(activeDocument.id);
+      return;
+    } else if (key !== "tab") doc = null;
+    if (doc) {
+      e.preventDefault();
+      chooseDocument(doc.id);
+      return;
+    }
+    if (key === "tab" || /^[1-9]$/.test(key)) {
+      e.preventDefault();
+      return;
+    }
+  }
   // A menu, a text field or a dialog has the keys while it is in use. A slider,
   // checkbox or colour box takes no typing, so the tool keys still reach the page
   // from them (Space and the Ctrl keys are theirs, below).
@@ -2830,8 +3425,8 @@ document.addEventListener("drop", (e) => {
   e.preventDefault();
   depth = 0;
   $("dropOverlay").hidden = true;
-  const f = e.dataTransfer?.files[0];
-  if (f) openFile(f);
+  const files = [...(e.dataTransfer?.files || [])];
+  if (files.length) openFiles(files);
 });
 document.addEventListener("paste", (e) => {
   for (const item of e.clipboardData?.items || [])
@@ -2891,7 +3486,10 @@ const stageWatch = new ResizeObserver(layout);
 stageWatch.observe($("viewport"));
 stageWatch.observe($("stageTools"));
 window.addEventListener("beforeunload", (e) => {
-  if (dirty || result?.changed) {
+  if (
+    currentHasEdits() ||
+    documents.some((d) => d !== activeDocument && d.edited)
+  ) {
     e.preventDefault();
     e.returnValue = "";
   }
@@ -2981,7 +3579,15 @@ function showNotes() {
 }
 // File > Exit (the Windows app only). The window asks first if there is unsaved work.
 async function quit() {
-  if (pixels && (dirty || result?.changed)) {
+  if ($("replaceDialog").open) return;
+  if (batchAbort) {
+    status("Wait for the batch to finish, or cancel it first.");
+    return;
+  }
+  if (
+    currentHasEdits() ||
+    documents.some((d) => d !== activeDocument && d.edited)
+  ) {
     const dialog = $("replaceDialog");
     [
       $("replaceTitle").textContent,
@@ -2998,6 +3604,8 @@ async function quit() {
   }
   window.close();
 }
+// The Windows title-bar close and Alt+F4 use this same all-tabs confirmation.
+window.hexShiftRequestClose = quit;
 
 // ---- The Windows app's update check ----
 // The app checks at every launch and says what it found; nothing is shown in a
@@ -3023,7 +3631,7 @@ updates?.request();
 
 // ---- The menu bar ----
 // Each item runs the same handler as the control or key it mirrors.
-const have = () => !!pixels;
+const have = () => !!pixels && !batchAbort;
 const press = (id, value) =>
   $(id).querySelector(`input[value="${value}"]`).click();
 const radio = (group, label, value) => ({
@@ -3044,6 +3652,7 @@ createMenubar({
           type: "item",
           label: "Open…",
           shortcut: "Ctrl+O",
+          enabled: () => !batchAbort,
           run: () => $("fileInput").click(),
         },
         {
@@ -3081,8 +3690,33 @@ createMenubar({
         {
           type: "item",
           label: "Batch from files…",
-          enabled: () => have() && $("cancelBatch").hidden,
+          enabled: have,
           run: () => $("batchInput").click(),
+        },
+        {
+          type: "item",
+          label: "Apply to selected tabs",
+          enabled: () => have() && selectedDocuments.size > 0,
+          run: () => applyToDocuments(false),
+        },
+        {
+          type: "item",
+          label: "Apply to all tabs",
+          enabled: have,
+          run: () => applyToDocuments(true),
+        },
+        {
+          type: "item",
+          label: "Export all tabs…",
+          enabled: () => documents.length > 0 && !batchAbort,
+          run: exportDocuments,
+        },
+        {
+          type: "item",
+          label: "Close tab",
+          shortcut: "Ctrl+W",
+          enabled: have,
+          run: () => closeDocument(activeDocument.id),
         },
         { type: "separator", hidden: () => !inApp },
         { type: "item", label: "Exit", hidden: () => !inApp, run: quit },
@@ -3306,6 +3940,16 @@ createMenubar({
   ],
 });
 
+documentTabs = createTabs({
+  root: $("documentTabs"),
+  list: $("tabList"),
+  picker: $("documentPicker"),
+  add: $("addDocument"),
+  close: $("closeDocument"),
+  choose: chooseDocument,
+  remove: closeDocument,
+  reorder: reorderDocuments,
+});
 startWorker();
 syncTarget();
 setTool("pick");

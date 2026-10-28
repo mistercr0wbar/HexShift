@@ -33,6 +33,13 @@ export class History {
     this.redoEntries = [];
     this.bytes = 0;
   }
+  trimOldest() {
+    // Redo's furthest future is at index zero; removing it keeps a contiguous chain.
+    const entry = this.undoEntries.shift() || this.redoEntries.shift();
+    if (!entry) return 0;
+    this.bytes -= entry.bytes;
+    return entry.bytes;
+  }
   record(before, after, label) {
     const pixels =
         before.pixels === after.pixels

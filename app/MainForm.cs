@@ -23,6 +23,8 @@ namespace HexShift
         readonly bool dark;
         readonly UpdateController updates;
         readonly ScreenPicker picker = new ScreenPicker();
+        bool pageAllowsClose;
+        bool closePending;
 
         [DllImport("dwmapi.dll")]
         static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
@@ -51,7 +53,7 @@ namespace HexShift
             updates = new UpdateController(this, dataDir, dark);
             updates.StateChanged = PostToPage;
             Controls.Add(updates.Bar);
-            FormClosing += delegate { updates.Cancel(); };
+            FormClosing += OnClosing;
             Load += OnLoad;
         }
 
@@ -114,7 +116,7 @@ namespace HexShift
             core.NewWindowRequested += OnNewWindow;
             core.WebMessageReceived += OnWebMessage;
             // File > Exit in the page is window.close(); the page has already asked about unsaved work.
-            core.WindowCloseRequested += delegate { BeginInvoke(new Action(Close)); };
+            core.WindowCloseRequested += delegate { pageAllowsClose = true; BeginInvoke(new Action(Close)); };
             // The System theme follows the Windows accent and app mode, now and whenever they change.
             // Once the page is up, the update schedule starts (a check a couple of seconds on) and the page
             // is told where it stands.
@@ -145,6 +147,29 @@ namespace HexShift
             Uri uri;
             return Uri.TryCreate(value, UriKind.Absolute, out uri) && uri.Scheme == "https" && uri.Host == "hexshift.invalid" && uri.IsDefaultPort && string.IsNullOrEmpty(uri.UserInfo) && string.IsNullOrEmpty(uri.Query)
                 && (uri.AbsolutePath == "/" || uri.AbsolutePath == "/index.html" || uri.AbsolutePath == "/HexShift.html");
+        }
+
+        // Closing the native window must ask about background tabs too. The
+        // page's File > Exit and title-bar close share one confirmation dialog;
+        // its window.close() request is the signal that the person agreed.
+        async void OnClosing(object sender, FormClosingEventArgs e)
+        {
+            if (pageAllowsClose || updates.Installing || web.CoreWebView2 == null || e.CloseReason != CloseReason.UserClosing)
+            {
+                updates.Cancel();
+                return;
+            }
+            e.Cancel = true;
+            if (closePending) return;
+            closePending = true;
+            try
+            {
+                string handled = await web.CoreWebView2.ExecuteScriptAsync(
+                    "typeof window.hexShiftRequestClose === 'function' ? (window.hexShiftRequestClose(), true) : false");
+                if (handled != "true") { pageAllowsClose = true; Close(); }
+            }
+            catch (Exception) { pageAllowsClose = true; Close(); }
+            finally { closePending = false; }
         }
 
         // Every file the page may save: MIME type -> extension, Save As filter and dialog title.

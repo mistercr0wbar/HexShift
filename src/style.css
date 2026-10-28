@@ -464,6 +464,91 @@ summary::marker {
   border: 1px solid var(--line);
   font-size: 12px;
 }
+.file-info[hidden] {
+  display: none;
+}
+.document-tabs {
+  display: flex;
+  flex: 1 1 140px;
+  min-width: 100px;
+  max-width: 100%;
+  align-items: center;
+  gap: 3px;
+}
+.tab-list {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  gap: 3px;
+}
+.document-tab {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--raised);
+  max-width: 190px;
+}
+.document-tab.selected {
+  border-color: var(--muted);
+}
+.document-tab.active {
+  border-color: var(--accent);
+  box-shadow: inset 0 -2px var(--accent);
+}
+.document-tab.tab-drop {
+  outline: 2px solid var(--accent);
+}
+.document-button,
+.document-close,
+.document-add,
+.document-phone-close {
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  height: var(--ctl);
+  border-radius: 5px;
+}
+.document-button {
+  display: flex;
+  align-items: center;
+  padding: 0;
+  min-width: 0;
+}
+.document-name {
+  min-width: 30px;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 6px;
+  font-size: 12px;
+}
+.document-close,
+.document-add,
+.document-phone-close {
+  flex: none;
+  width: var(--ctl);
+  padding: 0;
+  font-size: 18px;
+}
+.document-close {
+  display: inline-grid;
+  place-items: center;
+}
+.document-close:hover,
+.document-name:hover,
+.document-add:hover,
+.document-phone-close:hover {
+  background: var(--hover);
+}
+.document-picker,
+.document-phone-close {
+  display: none;
+}
 .file-info span {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1838,6 +1923,22 @@ dialog details {
 /* Phone layout (also the Android port): the page scrolls; the canvas, the colour
    map and one group of panels at a time, chosen from a tab bar at the bottom. */
 @container app (max-width: 759px) {
+  .document-tabs {
+    flex: 1 0 100%;
+    order: 3;
+  }
+  .tab-list {
+    display: none;
+  }
+  .document-picker {
+    display: block;
+    flex: 1;
+    min-width: 0;
+    width: 0;
+  }
+  .document-phone-close {
+    display: block;
+  }
   .app {
     height: auto;
     min-height: 100dvh;

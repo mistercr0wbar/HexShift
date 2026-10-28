@@ -169,7 +169,11 @@ export async function replay(
   let pixels = data;
   for (const step of steps) {
     const image = await prepare(width, height, pixels, yieldFn, cancelled),
-      rows = step.rows.map((row, k) => ({ id: k + 1, ...row })),
+      rows = step.rows.map((row, k) => ({
+        id: k + 1,
+        ...row,
+        params: cleanParams(row.params),
+      })),
       result = await processEdit(
         image,
         rows,
