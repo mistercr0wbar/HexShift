@@ -33,7 +33,7 @@ namespace HexShift
         public MainForm(string dataDir)
         {
             this.dataDir = dataDir;
-            dark = SystemUsesDarkMode();
+            dark = SystemColours.AppsUseDarkMode();
             Text = "Hex Shift";
             StartPosition = FormStartPosition.CenterScreen;
             ClientSize = new Size(1280, 840);
@@ -52,20 +52,6 @@ namespace HexShift
             Controls.Add(updates.Bar);
             FormClosing += delegate { updates.Cancel(); };
             Load += OnLoad;
-        }
-
-        static bool SystemUsesDarkMode()
-        {
-            try
-            {
-                using (RegistryKey k = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"))
-                {
-                    if (k == null) return false;
-                    object v = k.GetValue("AppsUseLightTheme");
-                    return v is int && (int)v == 0;
-                }
-            }
-            catch (Exception) { return false; }
         }
 
         // Ask the window manager for a dark title bar when the system is dark (Windows 10 1809+).
@@ -121,7 +107,7 @@ namespace HexShift
             core.Settings.IsZoomControlEnabled = true;
             core.Settings.AreBrowserAcceleratorKeysEnabled = true;
             core.Settings.AreHostObjectsAllowed = false;
-            // Only for the screen colour picker: the page may send "pick-colour" and nothing else.
+            // The page may send only "pick-colour"; the host also sends it the Windows colours for the System theme.
             core.Settings.IsWebMessageEnabled = true;
             core.Settings.IsGeneralAutofillEnabled = false;
             core.Settings.IsPasswordAutosaveEnabled = false;
@@ -133,6 +119,10 @@ namespace HexShift
             core.DownloadStarting += OnDownloadStarting;
             core.NewWindowRequested += OnNewWindow;
             core.WebMessageReceived += OnWebMessage;
+            // The System theme follows the Windows accent and app mode, now and whenever they change.
+            core.NavigationCompleted += delegate { SendSystemColours(); };
+            SystemEvents.UserPreferenceChanged += OnPreferenceChanged;
+            FormClosed += delegate { SystemEvents.UserPreferenceChanged -= OnPreferenceChanged; };
             core.LaunchingExternalUriScheme += delegate(object s, CoreWebView2LaunchingExternalUriSchemeEventArgs args) { args.Cancel = true; };
             core.NavigationStarting += delegate(object s, CoreWebView2NavigationStartingEventArgs args) { args.Cancel = !IsAppDocument(args.Uri); };
             core.FrameNavigationStarting += delegate(object s, CoreWebView2NavigationStartingEventArgs args) { args.Cancel = true; };
@@ -265,6 +255,18 @@ namespace HexShift
                 web.Focus();
                 SendPick(hex);
             });
+        }
+
+        void OnPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
+        {
+            if (e.Category != UserPreferenceCategory.General && e.Category != UserPreferenceCategory.Color
+                && e.Category != UserPreferenceCategory.VisualStyle) return;
+            if (IsHandleCreated) BeginInvoke(new Action(SendSystemColours));
+        }
+
+        void SendSystemColours()
+        {
+            if (web.CoreWebView2 != null) web.CoreWebView2.PostWebMessageAsJson(SystemColours.Current());
         }
 
         void SendPick(string hex)

@@ -1,9 +1,13 @@
-// Colour themes for the interface. Each has a dark and a light version, given
-// as a few base colours; the rest (hover, borders, readable text on buttons)
-// is worked out here, and every text colour is nudged until it reads at WCAG AA
-// (4.5:1) on every surface it sits on, so any theme passes the same checks.
-// The colourful palettes follow well-known open-source editor themes (all MIT;
-// see THIRD_PARTY_NOTICES.md).
+// Colour themes for the interface. A theme is picked together with a modifier:
+// Default (the theme's own look), Day (light), Night (deeper and darker) and
+// Contrast (pitch black, with the theme's main colour boosted as the accent).
+// Each look is given as a few base colours; the rest (hover, borders, readable
+// text on buttons) is worked out here, and every text colour is nudged until it
+// reads at WCAG AA on every surface it sits on, so every look passes the same
+// checks. System builds its looks from the colours the operating system
+// reports (in the Windows app: the accent colour and the light/dark app mode).
+// Nord and Everforest follow their open-source palettes (both MIT; see
+// THIRD_PARTY_NOTICES.md).
 
 const hex = (h) => h.match(/[0-9a-f]{2}/gi).map((v) => parseInt(v, 16));
 const toHex = (rgb) =>
@@ -38,90 +42,103 @@ function readable(colour, backgrounds, target) {
     }
   return best || (worst("#000000") > worst("#ffffff") ? "#000000" : "#ffffff");
 }
+function toHsl(h) {
+  const [r, g, b] = hex(h).map((v) => v / 255),
+    max = Math.max(r, g, b),
+    min = Math.min(r, g, b),
+    l = (max + min) / 2,
+    d = max - min;
+  if (!d) return [0, 0, l];
+  const s = d / (1 - Math.abs(2 * l - 1)),
+    hue =
+      max === r
+        ? ((g - b) / d + 6) % 6
+        : max === g
+          ? (b - r) / d + 2
+          : (r - g) / d + 4;
+  return [hue * 60, s, l];
+}
+function fromHsl(h, s, l) {
+  const c = (1 - Math.abs(2 * l - 1)) * s,
+    x = c * (1 - Math.abs(((h / 60) % 2) - 1)),
+    m = l - c / 2,
+    [r, g, b] =
+      h < 60
+        ? [c, x, 0]
+        : h < 120
+          ? [x, c, 0]
+          : h < 180
+            ? [0, c, x]
+            : h < 240
+              ? [0, x, c]
+              : h < 300
+                ? [x, 0, c]
+                : [c, 0, x];
+  return toHex([r + m, g + m, b + m].map((v) => v * 255));
+}
+// The Contrast accent: the main colour saturated and brightened until it
+// stands out at 8:1 on black. A colourless main colour becomes white.
+export function amplify(colour) {
+  const [h, s] = toHsl(colour);
+  if (s < 0.12) return "#ffffff";
+  const sat = Math.min(1, s * 1.4 + 0.25);
+  for (let l = 0.5; l <= 0.9; l += 0.01) {
+    const c = fromHsl(h, sat, l);
+    if (contrast(c, "#000000") >= 8) return c;
+  }
+  return fromHsl(h, sat, 0.9);
+}
 
-// id, name, and per mode: ground (around the canvas), surface (bars, panels),
-// raised (fields, chips), line, ink (text), muted, accent, focus, and the
-// darkest/lightest ink to put on accent fills.
+const DEFAULT_LOOKS = {
+  default: {
+    ground: "#141414",
+    surface: "#1c1c1c",
+    raised: "#262626",
+    line: "#303030",
+    ink: "#ececec",
+    muted: "#a3a3a3",
+    accent: "#e6e6e6",
+    focus: "#ffffff",
+  },
+  day: {
+    ground: "#e9e9e9",
+    surface: "#f6f6f6",
+    raised: "#ffffff",
+    line: "#d9d9d9",
+    ink: "#171717",
+    muted: "#595959",
+    accent: "#1f1f1f",
+    focus: "#000000",
+  },
+  night: {
+    ground: "#080808",
+    surface: "#0f0f0f",
+    raised: "#181818",
+    line: "#242424",
+    ink: "#e8e8e8",
+    muted: "#9c9c9c",
+    accent: "#e0e0e0",
+    focus: "#ffffff",
+  },
+};
+const withAccent = (look, accent, focus) => ({ ...look, accent, focus });
+
+// id, name, and per look: ground (around the canvas), surface (bars, panels),
+// raised (fields, chips), line, ink (text), muted, accent and focus. The
+// Default look's accent is the theme's main colour, which Contrast boosts.
 export const THEMES = [
+  { id: "default", name: "Default", ...DEFAULT_LOOKS },
   {
-    id: "graphite",
-    name: "Graphite",
-    dark: {
-      ground: "#141414",
-      surface: "#1c1c1c",
-      raised: "#262626",
-      line: "#303030",
-      ink: "#ececec",
-      muted: "#a3a3a3",
-      accent: "#e6e6e6",
-      focus: "#ffffff",
-    },
-    light: {
-      ground: "#e9e9e9",
-      surface: "#f6f6f6",
-      raised: "#ffffff",
-      line: "#d9d9d9",
-      ink: "#171717",
-      muted: "#595959",
-      accent: "#1f1f1f",
-      focus: "#000000",
-    },
-  },
-  {
-    id: "contrast",
-    name: "High contrast",
-    contrast: true,
-    dark: {
-      ground: "#000000",
-      surface: "#000000",
-      raised: "#000000",
-      line: "#ffffff",
-      ink: "#ffffff",
-      muted: "#e6e6e6",
-      accent: "#ffe600",
-      focus: "#00e5ff",
-      warn: "#ffb000",
-    },
-    light: {
-      ground: "#ffffff",
-      surface: "#ffffff",
-      raised: "#ffffff",
-      line: "#000000",
-      ink: "#000000",
-      muted: "#1a1a1a",
-      accent: "#0000c8",
-      focus: "#c00000",
-      warn: "#7a3d00",
-    },
-  },
-  {
-    id: "lewd",
-    name: "Lewd",
-    dark: {
-      ground: "#141414",
-      surface: "#1c1c1c",
-      raised: "#262626",
-      line: "#303030",
-      ink: "#ececec",
-      muted: "#a3a3a3",
-      accent: "#e8802e",
-      focus: "#6ef0ff",
-    },
-    light: {
-      ground: "#e9e9e9",
-      surface: "#f6f6f6",
-      raised: "#ffffff",
-      line: "#d9d9d9",
-      ink: "#171717",
-      muted: "#595959",
-      accent: "#e8802e",
-      focus: "#007c99",
-    },
+    id: "lude",
+    name: "Lude",
+    default: withAccent(DEFAULT_LOOKS.default, "#e8802e", "#6ef0ff"),
+    day: withAccent(DEFAULT_LOOKS.day, "#e8802e", "#007c99"),
+    night: withAccent(DEFAULT_LOOKS.night, "#e8802e", "#6ef0ff"),
   },
   {
     id: "nord",
     name: "Nord",
-    dark: {
+    default: {
       ground: "#2e3440",
       surface: "#3b4252",
       raised: "#434c5e",
@@ -131,7 +148,7 @@ export const THEMES = [
       accent: "#88c0d0",
       focus: "#ebcb8b",
     },
-    light: {
+    day: {
       ground: "#d8dee9",
       surface: "#e5e9f0",
       raised: "#eceff4",
@@ -141,131 +158,21 @@ export const THEMES = [
       accent: "#5e81ac",
       focus: "#bf616a",
     },
-  },
-  {
-    id: "solarized",
-    name: "Solarized",
-    dark: {
-      ground: "#002b36",
-      surface: "#073642",
-      raised: "#0b4251",
-      line: "#24525e",
-      ink: "#eee8d5",
-      muted: "#93a1a1",
-      accent: "#268bd2",
-      focus: "#b58900",
-    },
-    light: {
-      ground: "#eee8d5",
-      surface: "#fdf6e3",
-      raised: "#fffdf7",
-      line: "#dcd4bc",
-      ink: "#073642",
-      muted: "#586e75",
-      accent: "#268bd2",
-      focus: "#cb4b16",
-    },
-  },
-  {
-    id: "dracula",
-    name: "Dracula",
-    dark: {
-      ground: "#21222c",
-      surface: "#282a36",
-      raised: "#343746",
-      line: "#44475a",
-      ink: "#f8f8f2",
-      muted: "#b6bcdc",
-      accent: "#ff79c6",
-      focus: "#8be9fd",
-    },
-    light: {
-      ground: "#f2ecd8",
-      surface: "#fffbeb",
-      raised: "#ffffff",
-      line: "#ddd6c1",
-      ink: "#1f1f1f",
-      muted: "#5d5880",
-      accent: "#a3144d",
-      focus: "#036a96",
-    },
-  },
-  {
-    id: "catppuccin",
-    name: "Catppuccin",
-    dark: {
-      ground: "#181825",
-      surface: "#1e1e2e",
-      raised: "#313244",
-      line: "#45475a",
-      ink: "#cdd6f4",
-      muted: "#a6adc8",
-      accent: "#cba6f7",
-      focus: "#89dceb",
-    },
-    light: {
-      ground: "#e6e9ef",
-      surface: "#eff1f5",
-      raised: "#ffffff",
-      line: "#ccd0da",
-      ink: "#4c4f69",
-      muted: "#6c6f85",
-      accent: "#8839ef",
-      focus: "#04a5e5",
-    },
-  },
-  {
-    id: "gruvbox",
-    name: "Gruvbox",
-    dark: {
-      ground: "#1d2021",
-      surface: "#282828",
-      raised: "#3c3836",
-      line: "#504945",
-      ink: "#ebdbb2",
-      muted: "#a89984",
-      accent: "#fabd2f",
-      focus: "#83a598",
-    },
-    light: {
-      ground: "#f2e5bc",
-      surface: "#fbf1c7",
-      raised: "#fffbe8",
-      line: "#d5c4a1",
-      ink: "#3c3836",
-      muted: "#665c54",
-      accent: "#b57614",
-      focus: "#076678",
-    },
-  },
-  {
-    id: "rose-pine",
-    name: "Rosé Pine",
-    dark: {
-      ground: "#191724",
-      surface: "#1f1d2e",
-      raised: "#26233a",
-      line: "#403d52",
-      ink: "#e0def4",
-      muted: "#908caa",
-      accent: "#ebbcba",
-      focus: "#9ccfd8",
-    },
-    light: {
-      ground: "#f2e9e1",
-      surface: "#faf4ed",
-      raised: "#fffaf3",
-      line: "#dfdad9",
-      ink: "#575279",
-      muted: "#797593",
-      accent: "#d7827e",
-      focus: "#286983",
+    night: {
+      ground: "#1b1f27",
+      surface: "#21262f",
+      raised: "#2a303b",
+      line: "#3b4252",
+      ink: "#eceff4",
+      muted: "#c2cad6",
+      accent: "#88c0d0",
+      focus: "#ebcb8b",
     },
   },
   {
     id: "everforest",
     name: "Everforest",
-    dark: {
+    default: {
       ground: "#272e33",
       surface: "#2d353b",
       raised: "#343f44",
@@ -275,7 +182,7 @@ export const THEMES = [
       accent: "#a7c080",
       focus: "#e69875",
     },
-    light: {
+    day: {
       ground: "#efebd4",
       surface: "#fdf6e3",
       raised: "#fffbef",
@@ -285,49 +192,130 @@ export const THEMES = [
       accent: "#8da101",
       focus: "#3a94c5",
     },
+    night: {
+      ground: "#1a1f22",
+      surface: "#1e2326",
+      raised: "#272e33",
+      line: "#374145",
+      ink: "#d3c6aa",
+      muted: "#9da9a0",
+      accent: "#a7c080",
+      focus: "#e69875",
+    },
   },
+  // Follows the operating system; its looks are built in systemLooks().
+  { id: "system", name: "System", system: true },
 ];
-export const DEFAULT_THEME = "graphite";
+export const MODIFIERS = [
+  { id: "default", name: "Default" },
+  { id: "day", name: "Day" },
+  { id: "night", name: "Night" },
+  { id: "contrast", name: "Contrast" },
+];
+export const DEFAULT_THEME = "default";
 export const themeById = (id) =>
   THEMES.find((t) => t.id === id) || THEMES.find((t) => t.id === DEFAULT_THEME);
 
-// Every CSS custom property the stylesheet reads, for one theme in one mode.
-export function themeTokens(id, mode) {
+// System: the OS accent on neutral surfaces. Its Default look follows the
+// OS light/dark setting; without a known accent it looks like Default.
+function systemLooks({ accent, dark } = {}) {
+  const pick = (look) => (accent ? withAccent(look, accent, look.focus) : look);
+  return {
+    default: pick(dark === false ? DEFAULT_LOOKS.day : DEFAULT_LOOKS.default),
+    day: pick(DEFAULT_LOOKS.day),
+    night: pick(DEFAULT_LOOKS.night),
+  };
+}
+// System keeps the OS accent as it is, only brightened enough to read on
+// black; the other themes boost their main colour.
+const contrastLook = (main, boost) => {
+  const accent = boost ? amplify(main) : readable(main, ["#000000"], 8);
+  return {
+    ground: "#000000",
+    surface: "#000000",
+    raised: "#000000",
+    line: "#9a9a9a",
+    ink: "#ffffff",
+    muted: "#e0e0e0",
+    accent,
+    focus: accent === "#ffffff" ? "#ffd400" : "#ffffff",
+    warn: "#ffb000",
+    contrast: true,
+  };
+};
+
+// The look for a theme and modifier: { dark, contrast, tokens }, where tokens
+// are every CSS custom property the stylesheet reads. `system` is the OS's
+// { accent, dark } for the System theme.
+export function resolveTheme(id, modifier, system) {
   const theme = themeById(id),
-    p = theme[mode],
-    dark = mode === "dark",
+    looks = theme.system ? systemLooks(system) : theme,
+    p =
+      modifier === "contrast"
+        ? contrastLook(looks.default.accent, !theme.system)
+        : looks[
+            MODIFIERS.some((m) => m.id === modifier) ? modifier : "default"
+          ],
+    dark = luminance(p.ground) < 0.2,
     { ground, surface, raised, line, ink } = p,
     panels = [ground, surface, raised];
-  // Text on an accent fill: whichever of near-black and white reads better;
-  // the fill darkens or lightens a little if neither reaches 4.5:1.
-  const darkInk = mix(dark ? ground : ink, "#000000", 0.5),
+  // Accent fills stand out from the panels (3:1, so a selected choice shows
+  // even with a dark OS accent on a dark theme). Text on them is whichever of
+  // near-black and white reads better; the fill shifts a little if neither
+  // reaches 4.5:1.
+  const fill = readable(p.accent, panels, 3),
+    darkInk = mix(dark ? ground : ink, "#000000", 0.5),
     onAccent =
-      contrast(p.accent, darkInk) >= contrast(p.accent, "#ffffff")
+      contrast(fill, darkInk) >= contrast(fill, "#ffffff")
         ? darkInk
         : "#ffffff",
-    accent = readable(p.accent, [onAccent], 4.5),
-    accentSoft = mix(surface, accent, dark ? 0.18 : 0.14);
+    accent = readable(fill, [onAccent], 4.5),
+    accentSoft = p.contrast
+      ? "#1a1a1a"
+      : mix(surface, accent, dark ? 0.18 : 0.14);
   return {
-    "--ground": ground,
-    "--surface": surface,
-    "--raised": raised,
-    "--hover": mix(raised, ink, theme.contrast ? 0.18 : 0.07),
-    "--line": line,
-    "--line-strong": theme.contrast ? ink : mix(line, ink, 0.14),
-    "--ink": readable(ink, [...panels, accentSoft], 7),
-    "--muted": readable(p.muted, panels, 4.5),
-    "--accent": accent,
-    "--on-accent": onAccent,
-    "--accent-text": readable(p.accent, [...panels, accentSoft], 4.5),
-    "--accent-soft": accentSoft,
-    "--focus": readable(p.focus, panels, 3),
-    "--warn": readable(
-      p.warn || (dark ? "#f0b54a" : "#855000"),
-      [...panels, accentSoft],
-      4.5,
-    ),
-    "--checker1": mix(ground, ink, dark ? 0.07 : 0.06),
-    "--checker2": mix(ground, ink, dark ? 0.02 : 0.015),
-    "--shadow": dark ? "0 2px 12px #00000073" : "0 2px 10px #0000001f",
+    dark,
+    contrast: !!p.contrast,
+    tokens: {
+      "--ground": ground,
+      "--surface": surface,
+      "--raised": raised,
+      "--hover": p.contrast ? "#262626" : mix(raised, ink, 0.07),
+      "--line": line,
+      "--line-strong": p.contrast ? ink : mix(line, ink, 0.14),
+      "--ink": readable(ink, [...panels, accentSoft], 7),
+      "--muted": readable(p.muted, panels, 4.5),
+      "--accent": accent,
+      "--on-accent": onAccent,
+      "--accent-text": readable(p.accent, [...panels, accentSoft], 4.5),
+      "--accent-soft": accentSoft,
+      "--focus": readable(p.focus, panels, 3),
+      "--warn": readable(
+        p.warn || (dark ? "#f0b54a" : "#855000"),
+        [...panels, accentSoft],
+        4.5,
+      ),
+      "--checker1": p.contrast
+        ? "#1a1a1a"
+        : mix(ground, ink, dark ? 0.07 : 0.06),
+      "--checker2": p.contrast
+        ? "#000000"
+        : mix(ground, ink, dark ? 0.02 : 0.015),
+      "--shadow": dark ? "0 2px 12px #00000073" : "0 2px 10px #0000001f",
+    },
   };
+}
+// The stored setting is "modifier:theme". Values from 3.0 ("dark:nord") and
+// earlier ("dark") are read as the nearest new look.
+export function parseThemeSetting(value) {
+  const [first = "", second = ""] = String(value || "").split(":"),
+    renamed = { graphite: "default", lewd: "lude" },
+    oldMode = { dark: "default", light: "day" };
+  let modifier = MODIFIERS.some((m) => m.id === first)
+      ? first
+      : oldMode[first] || null,
+    theme = renamed[second] || second;
+  if (theme === "contrast") [theme, modifier] = ["default", "contrast"];
+  if (!THEMES.some((t) => t.id === theme)) theme = DEFAULT_THEME;
+  return { modifier, theme, saved: !!value };
 }

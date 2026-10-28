@@ -41,8 +41,14 @@ import {
   replay,
   writeRecipe,
 } from "./recipe.js";
-import { screenPicker } from "./host.js";
-import { THEMES, DEFAULT_THEME, themeById, themeTokens } from "./themes.js";
+import { screenPicker, systemColours } from "./host.js";
+import {
+  THEMES,
+  MODIFIERS,
+  DEFAULT_THEME,
+  resolveTheme,
+  parseThemeSetting,
+} from "./themes.js";
 import sample from "./sample.js";
 import { makePause } from "./yield.js";
 const $ = (id) => document.getElementById(id),
@@ -2246,19 +2252,35 @@ $("dockHandle").addEventListener("keydown", (e) => {
 $("background").onchange = background;
 $("backgroundColour").oninput = background;
 $("dismissTip").onclick = () => ($("firstUse").hidden = true);
-// The theme setting is "mode:theme" (older versions stored the mode alone) and
-// stays the only thing Hex Shift keeps in storage. Without a saved choice,
-// a system asking for more contrast starts on High contrast.
-let uiTheme = DEFAULT_THEME;
+// The theme setting is "modifier:theme" and stays the only thing Hex Shift
+// keeps in storage. Without a saved modifier, a system asking for more
+// contrast starts on Contrast and a light system on Day.
+let uiTheme = DEFAULT_THEME,
+  modifier = null;
 try {
-  const saved = localStorage.getItem("hexshift-theme") || "",
-    [mode, id] = saved.split(":");
-  if (["system", "light", "dark"].includes(mode)) $("theme").value = mode;
-  if (THEMES.some((t) => t.id === id)) uiTheme = id;
-  else if (!saved && matchMedia("(prefers-contrast: more)").matches)
-    uiTheme = "contrast";
+  ({ theme: uiTheme, modifier } = parseThemeSetting(
+    localStorage.getItem("hexshift-theme"),
+  ));
 } catch {}
-const prefersDark = matchMedia("(prefers-color-scheme: dark)");
+modifier ||= matchMedia("(prefers-contrast: more)").matches
+  ? "contrast"
+  : matchMedia("(prefers-color-scheme: light)").matches
+    ? "day"
+    : "default";
+// The System theme's colours, updated live by the host or the browser.
+let system = systemColours((colours) => {
+  system = colours;
+  theme();
+});
+for (const m of MODIFIERS) {
+  const label = document.createElement("label"),
+    input = document.createElement("input");
+  input.type = "radio";
+  input.name = "theme";
+  input.value = m.id;
+  label.append(input, m.name);
+  $("theme").append(label);
+}
 for (const t of THEMES) {
   const label = document.createElement("label"),
     input = document.createElement("input"),
@@ -2273,22 +2295,20 @@ for (const t of THEMES) {
   $("uiTheme").append(label);
 }
 function theme() {
-  const mode = $("theme").value,
-    dark = mode === "dark" || (mode === "system" && prefersDark.matches),
-    root = document.documentElement,
-    tokens = themeTokens(uiTheme, dark ? "dark" : "light");
-  if (mode === "system") delete root.dataset.theme;
-  else root.dataset.theme = mode;
-  if (themeById(uiTheme).contrast) root.dataset.contrast = "high";
+  const root = document.documentElement,
+    { dark, contrast, tokens } = resolveTheme(uiTheme, modifier, system);
+  root.dataset.theme = dark ? "dark" : "light";
+  root.dataset.modifier = modifier;
+  if (contrast) root.dataset.contrast = "high";
   else delete root.dataset.contrast;
   for (const [name, value] of Object.entries(tokens))
     root.style.setProperty(name, value);
   root.style.colorScheme = dark ? "dark" : "light";
   for (const meta of document.querySelectorAll('meta[name="theme-color"]'))
     meta.content = tokens["--surface"];
-  // Each theme's swatch previews it in the current mode.
+  // Each theme's swatch previews it with the current modifier.
   for (const swatch of document.querySelectorAll(".theme-swatch")) {
-    const t = themeTokens(swatch.dataset.theme, dark ? "dark" : "light");
+    const t = resolveTheme(swatch.dataset.theme, modifier, system).tokens;
     swatch.replaceChildren(
       ...["--surface", "--raised", "--accent"].map((name) => {
         const part = document.createElement("span");
@@ -2298,18 +2318,19 @@ function theme() {
     );
   }
   setChoice("uiTheme", uiTheme);
+  setChoice("theme", modifier);
   try {
-    localStorage.setItem("hexshift-theme", mode + ":" + uiTheme);
+    localStorage.setItem("hexshift-theme", modifier + ":" + uiTheme);
   } catch {}
 }
-$("theme").onchange = theme;
+$("theme").onchange = () => {
+  modifier = choice("theme");
+  theme();
+};
 $("uiTheme").onchange = () => {
   uiTheme = choice("uiTheme");
   theme();
 };
-prefersDark.addEventListener("change", () => {
-  if ($("theme").value === "system") theme();
-});
 // The menu closes on Escape or a click elsewhere, like other menus.
 document.addEventListener("click", (e) => {
   if (!$("themeMenu").contains(e.target)) $("themeMenu").open = false;

@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import sample from "../../src/sample.js";
 import sharp from "sharp";
 import AxeBuilder from "@axe-core/playwright";
+import { THEMES, MODIFIERS, resolveTheme } from "../../src/themes.js";
 const svg = (body, attrs = "") => ({
   name: "asset.svg",
   mimeType: "image/svg+xml",
@@ -15,6 +16,19 @@ const svg = (body, attrs = "") => ({
 // segmented radio groups; the group keeps the old control id.
 const choose = (page, id, value) =>
   page.locator(`#${id} input[value="${value}"]`).check();
+// Picks a theme and modifier from the theme menu, then closes it.
+async function look(page, theme, modifier) {
+  await page.locator("#themeMenu summary").click();
+  await page.locator(`#uiTheme input[value="${theme}"]`).check();
+  await page.locator(`#theme input[value="${modifier}"]`).check();
+  await page.keyboard.press("Escape");
+}
+const token = (page, name) =>
+  page.evaluate(
+    (n) =>
+      getComputedStyle(document.documentElement).getPropertyValue(n).trim(),
+    name,
+  );
 // Reads a stored ZIP back through its central directory.
 function unzip(buffer) {
   const v = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength),
@@ -704,7 +718,7 @@ test("responsive workspace, keyboard palette and theme persist without image sto
       expect(canvas.y).toBeLessThan(controls.y);
     }
   }
-  await page.locator("#theme").selectOption("dark");
+  await look(page, "default", "night");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.locator("#palette button").first().focus();
   await page.keyboard.press("Enter");
@@ -1089,65 +1103,122 @@ test("offline shell, cache isolation and PWA manifest", async ({
   await pick(page);
   await page.context().setOffline(false);
 });
-test("colour themes apply, persist in the one theme setting and pass accessibility checks", async ({
+test("themes and modifiers apply, persist in the one theme setting and pass accessibility checks", async ({
   page,
   browserName,
 }) => {
   test.setTimeout(150000);
-  const surface = () =>
-    page.evaluate(() =>
-      getComputedStyle(document.documentElement)
-        .getPropertyValue("--surface")
-        .trim(),
-    );
   await pick(page);
   await page.locator("#themeMenu summary").click();
-  await expect(page.locator("#uiTheme label")).toHaveCount(10);
-  await page.locator('#uiTheme input[value="nord"]').check();
+  await expect(page.locator("#uiTheme label")).toHaveCount(5);
+  await expect(page.locator("#theme label")).toHaveText([
+    "Default",
+    "Day",
+    "Night",
+    "Contrast",
+  ]);
   await page.keyboard.press("Escape");
   await expect(page.locator(".theme-pop")).toBeHidden();
-  await page.locator("#theme").selectOption("dark");
-  expect(await surface()).toBe("#3b4252");
+  await look(page, "nord", "night");
+  expect(await token(page, "--surface")).toBe("#21262f");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   expect(
     await page.evaluate(() => [
       Object.keys(localStorage),
       localStorage.getItem("hexshift-theme"),
     ]),
-  ).toEqual([["hexshift-theme"], "dark:nord"]);
+  ).toEqual([["hexshift-theme"], "night:nord"]);
   await page.reload();
   await ready(page);
-  expect(await surface()).toBe("#3b4252");
+  expect(await token(page, "--surface")).toBe("#21262f");
   await expect(page.locator('#uiTheme input[value="nord"]')).toBeChecked();
-  // Every theme in both modes, in one engine (the default theme is checked
-  // in all three by the next test).
+  await expect(page.locator('#theme input[value="night"]')).toBeChecked();
+  // Contrast: pitch black with the theme's main colour boosted.
+  await look(page, "lude", "contrast");
+  expect(await token(page, "--ground")).toBe("#000000");
+  expect(await token(page, "--accent")).toBe(
+    resolveTheme("lude", "contrast").tokens["--accent"],
+  );
+  await expect(page.locator("html")).toHaveAttribute("data-contrast", "high");
+  // Every theme with every modifier, in one engine (the default look is
+  // checked in all three by the next test).
   if (browserName !== "chromium") return;
   await pick(page);
-  const ids = await page
-    .locator("#uiTheme input")
-    .evaluateAll((inputs) => inputs.map((i) => i.value));
-  for (const id of ids)
-    for (const mode of ["light", "dark"]) {
-      await page.locator("#theme").selectOption(mode);
-      await page.locator("#themeMenu summary").click();
-      await page.locator(`#uiTheme input[value="${id}"]`).check();
-      await page.keyboard.press("Escape");
+  for (const { id } of THEMES)
+    for (const { id: modifier } of MODIFIERS) {
+      await look(page, id, modifier);
       const results = await new AxeBuilder({ page })
         .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
         .analyze();
       expect(
         results.violations.map((v) => ({
-          theme: id + " " + mode,
+          theme: id + " " + modifier,
           id: v.id,
           nodes: v.nodes.map((n) => n.target),
         })),
       ).toEqual([]);
     }
 });
+test("the System theme follows the colours the Windows app sends", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const listeners = [];
+    window.chrome = window.chrome || {};
+    window.chrome.webview = {
+      postMessage() {},
+      addEventListener(type, listener) {
+        if (type === "message") listeners.push(listener);
+      },
+      reply(data) {
+        for (const listener of listeners) listener({ data });
+      },
+    };
+  });
+  await page.reload();
+  await ready(page);
+  await look(page, "system", "default");
+  const send = (data) =>
+    page.evaluate((d) => window.chrome.webview.reply(d), data);
+  await send({ type: "system-colours", accent: "#0078D4", dark: false });
+  const light = resolveTheme("system", "default", {
+    accent: "#0078d4",
+    dark: false,
+  }).tokens;
+  expect(await token(page, "--accent")).toBe(light["--accent"]);
+  expect(await token(page, "--ground")).toBe(light["--ground"]);
+  await send({ type: "system-colours", accent: "#E81123", dark: true });
+  const dark = resolveTheme("system", "default", {
+    accent: "#e81123",
+    dark: true,
+  }).tokens;
+  expect(await token(page, "--accent")).toBe(dark["--accent"]);
+  expect(await token(page, "--ground")).toBe("#141414");
+  // Contrast keeps the Windows accent over pitch black.
+  await look(page, "system", "contrast");
+  expect(await token(page, "--ground")).toBe("#000000");
+  expect(await token(page, "--accent")).toBe(
+    resolveTheme("system", "contrast", { accent: "#e81123", dark: true })
+      .tokens["--accent"],
+  );
+  // Anything else from the host is ignored.
+  for (const bad of [
+    { type: "system-colours", accent: "red", dark: true },
+    { type: "system-colours", accent: "#00FF00" },
+    { type: "other", accent: "#00FF00", dark: true },
+    "#00FF00",
+  ])
+    await send(bad);
+  expect(await token(page, "--accent")).toBe(
+    resolveTheme("system", "contrast", { accent: "#e81123", dark: true })
+      .tokens["--accent"],
+  );
+});
 test("accessibility in light/dark themes and at 200 percent zoom", async ({
   page,
 }) => {
-  for (const theme of ["light", "dark"]) {
-    await page.locator("#theme").selectOption(theme);
+  for (const theme of ["day", "default"]) {
+    await look(page, "default", theme);
     await pick(page);
     const results = await new AxeBuilder({ page })
       .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
