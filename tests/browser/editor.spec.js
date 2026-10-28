@@ -742,6 +742,7 @@ test("responsive workspace, keyboard palette and theme persist without image sto
   await page.locator("#saveCurrentColour").click();
   expect(await page.evaluate(() => Object.keys(localStorage).sort())).toEqual([
     "hexshift-colours",
+    "hexshift-layout",
     "hexshift-theme",
   ]);
 });

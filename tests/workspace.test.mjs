@@ -51,7 +51,12 @@ test("the default layout is the agreed one", () => {
   assert.equal(PRESETS.phone.bottom.length, 1);
 });
 
-test("short windows fold Swatches first, then Outline", () => {
-  assert.deepEqual(AUTO_COLLAPSE, ["swatches", "outline"]);
+test("short windows fold Swatches, then Outline, then Export and Selection", () => {
+  assert.deepEqual(AUTO_COLLAPSE, [
+    "swatches",
+    "outline",
+    "export",
+    "selection",
+  ]);
   for (const id of AUTO_COLLAPSE) assert.ok(PANELS.includes(id));
 });
