@@ -42,6 +42,7 @@ import {
   writeRecipe,
 } from "./recipe.js";
 import { screenPicker } from "./host.js";
+import { THEMES, DEFAULT_THEME, themeById, themeTokens } from "./themes.js";
 import sample from "./sample.js";
 import { makePause } from "./yield.js";
 const $ = (id) => document.getElementById(id),
@@ -2245,19 +2246,81 @@ $("dockHandle").addEventListener("keydown", (e) => {
 $("background").onchange = background;
 $("backgroundColour").oninput = background;
 $("dismissTip").onclick = () => ($("firstUse").hidden = true);
+// The theme setting is "mode:theme" (older versions stored the mode alone) and
+// stays the only thing Hex Shift keeps in storage. Without a saved choice,
+// a system asking for more contrast starts on High contrast.
+let uiTheme = DEFAULT_THEME;
 try {
-  const saved = localStorage.getItem("hexshift-theme");
-  if (["system", "light", "dark"].includes(saved)) $("theme").value = saved;
+  const saved = localStorage.getItem("hexshift-theme") || "",
+    [mode, id] = saved.split(":");
+  if (["system", "light", "dark"].includes(mode)) $("theme").value = mode;
+  if (THEMES.some((t) => t.id === id)) uiTheme = id;
+  else if (!saved && matchMedia("(prefers-contrast: more)").matches)
+    uiTheme = "contrast";
 } catch {}
+const prefersDark = matchMedia("(prefers-color-scheme: dark)");
+for (const t of THEMES) {
+  const label = document.createElement("label"),
+    input = document.createElement("input"),
+    swatch = document.createElement("span");
+  input.type = "radio";
+  input.name = "uiTheme";
+  input.value = t.id;
+  swatch.className = "theme-swatch";
+  swatch.setAttribute("aria-hidden", "true");
+  swatch.dataset.theme = t.id;
+  label.append(input, swatch, t.name);
+  $("uiTheme").append(label);
+}
 function theme() {
-  if ($("theme").value === "system")
-    delete document.documentElement.dataset.theme;
-  else document.documentElement.dataset.theme = $("theme").value;
+  const mode = $("theme").value,
+    dark = mode === "dark" || (mode === "system" && prefersDark.matches),
+    root = document.documentElement,
+    tokens = themeTokens(uiTheme, dark ? "dark" : "light");
+  if (mode === "system") delete root.dataset.theme;
+  else root.dataset.theme = mode;
+  if (themeById(uiTheme).contrast) root.dataset.contrast = "high";
+  else delete root.dataset.contrast;
+  for (const [name, value] of Object.entries(tokens))
+    root.style.setProperty(name, value);
+  root.style.colorScheme = dark ? "dark" : "light";
+  for (const meta of document.querySelectorAll('meta[name="theme-color"]'))
+    meta.content = tokens["--surface"];
+  // Each theme's swatch previews it in the current mode.
+  for (const swatch of document.querySelectorAll(".theme-swatch")) {
+    const t = themeTokens(swatch.dataset.theme, dark ? "dark" : "light");
+    swatch.replaceChildren(
+      ...["--surface", "--raised", "--accent"].map((name) => {
+        const part = document.createElement("span");
+        part.style.background = t[name];
+        return part;
+      }),
+    );
+  }
+  setChoice("uiTheme", uiTheme);
   try {
-    localStorage.setItem("hexshift-theme", $("theme").value);
+    localStorage.setItem("hexshift-theme", mode + ":" + uiTheme);
   } catch {}
 }
 $("theme").onchange = theme;
+$("uiTheme").onchange = () => {
+  uiTheme = choice("uiTheme");
+  theme();
+};
+prefersDark.addEventListener("change", () => {
+  if ($("theme").value === "system") theme();
+});
+// The menu closes on Escape or a click elsewhere, like other menus.
+document.addEventListener("click", (e) => {
+  if (!$("themeMenu").contains(e.target)) $("themeMenu").open = false;
+});
+$("themeMenu").addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && $("themeMenu").open) {
+    $("themeMenu").open = false;
+    $("themeMenu").querySelector("summary").focus();
+    e.stopPropagation();
+  }
+});
 theme();
 document.addEventListener("keydown", (e) => {
   const editing = e.target.closest(

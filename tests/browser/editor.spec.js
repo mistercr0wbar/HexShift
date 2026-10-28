@@ -1089,6 +1089,60 @@ test("offline shell, cache isolation and PWA manifest", async ({
   await pick(page);
   await page.context().setOffline(false);
 });
+test("colour themes apply, persist in the one theme setting and pass accessibility checks", async ({
+  page,
+  browserName,
+}) => {
+  test.setTimeout(150000);
+  const surface = () =>
+    page.evaluate(() =>
+      getComputedStyle(document.documentElement)
+        .getPropertyValue("--surface")
+        .trim(),
+    );
+  await pick(page);
+  await page.locator("#themeMenu summary").click();
+  await expect(page.locator("#uiTheme label")).toHaveCount(10);
+  await page.locator('#uiTheme input[value="nord"]').check();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".theme-pop")).toBeHidden();
+  await page.locator("#theme").selectOption("dark");
+  expect(await surface()).toBe("#3b4252");
+  expect(
+    await page.evaluate(() => [
+      Object.keys(localStorage),
+      localStorage.getItem("hexshift-theme"),
+    ]),
+  ).toEqual([["hexshift-theme"], "dark:nord"]);
+  await page.reload();
+  await ready(page);
+  expect(await surface()).toBe("#3b4252");
+  await expect(page.locator('#uiTheme input[value="nord"]')).toBeChecked();
+  // Every theme in both modes, in one engine (the default theme is checked
+  // in all three by the next test).
+  if (browserName !== "chromium") return;
+  await pick(page);
+  const ids = await page
+    .locator("#uiTheme input")
+    .evaluateAll((inputs) => inputs.map((i) => i.value));
+  for (const id of ids)
+    for (const mode of ["light", "dark"]) {
+      await page.locator("#theme").selectOption(mode);
+      await page.locator("#themeMenu summary").click();
+      await page.locator(`#uiTheme input[value="${id}"]`).check();
+      await page.keyboard.press("Escape");
+      const results = await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+        .analyze();
+      expect(
+        results.violations.map((v) => ({
+          theme: id + " " + mode,
+          id: v.id,
+          nodes: v.nodes.map((n) => n.target),
+        })),
+      ).toEqual([]);
+    }
+});
 test("accessibility in light/dark themes and at 200 percent zoom", async ({
   page,
 }) => {

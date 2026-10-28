@@ -8,11 +8,11 @@
   --line-strong: #c4c4c4;
   --ink: #171717;
   --muted: #595959;
-  --accent: #e8802e;
-  --on-accent: #1a1206;
-  --accent-text: #9e4c0a;
-  --accent-soft: #e8802e24;
-  --focus: #007c99;
+  --accent: #1f1f1f;
+  --on-accent: #ffffff;
+  --accent-text: #1f1f1f;
+  --accent-soft: #e0e0e0;
+  --focus: #000000;
   --warn: #855000;
   --checker1: #e0e0e0;
   --checker2: #f2f2f2;
@@ -41,9 +41,11 @@
     --line-strong: #3d3d3d;
     --ink: #ececec;
     --muted: #a3a3a3;
-    --accent-text: #e8802e;
-    --accent-soft: #e8802e2e;
-    --focus: #6ef0ff;
+    --accent: #e6e6e6;
+    --on-accent: #0a0a0a;
+    --accent-text: #e6e6e6;
+    --accent-soft: #3a3a3a;
+    --focus: #ffffff;
     --warn: #f0b54a;
     --checker1: #1f1f1f;
     --checker2: #262626;
@@ -60,9 +62,11 @@
   --line-strong: #3d3d3d;
   --ink: #ececec;
   --muted: #a3a3a3;
-  --accent-text: #e8802e;
-  --accent-soft: #e8802e2e;
-  --focus: #6ef0ff;
+  --accent: #e6e6e6;
+  --on-accent: #0a0a0a;
+  --accent-text: #e6e6e6;
+  --accent-soft: #3a3a3a;
+  --focus: #ffffff;
   --warn: #f0b54a;
   --checker1: #1f1f1f;
   --checker2: #262626;
@@ -193,7 +197,8 @@ select:hover:not(:disabled) {
   color: var(--on-accent);
 }
 .button.primary:hover:not(:disabled) {
-  background: #f08f40;
+  background: var(--accent);
+  filter: brightness(1.08);
 }
 .button.full {
   width: 100%;
@@ -1330,4 +1335,107 @@ dialog p {
       background-color 0.12s,
       color 0.12s;
   }
+}
+
+/* Colour theme menu */
+.theme-menu {
+  position: relative;
+  margin: 0;
+}
+.theme-menu > summary {
+  list-style: none;
+  min-height: 32px;
+}
+.theme-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.theme-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  background: conic-gradient(var(--accent) 0 50%, var(--surface) 0);
+}
+.theme-pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  width: 240px;
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.theme-list legend {
+  padding: 4px 8px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.theme-list label {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-weight: 400;
+}
+.theme-list label:hover {
+  background: var(--hover);
+}
+.theme-list label:has(input:checked) {
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+.theme-list input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.theme-list label:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.theme-swatch {
+  display: flex;
+  flex: none;
+  width: 42px;
+  height: 20px;
+  overflow: hidden;
+  border-radius: 5px;
+  border: 1px solid var(--line-strong);
+}
+.theme-swatch span {
+  flex: 1;
+}
+
+/* High contrast: heavier borders and focus rings. */
+:root[data-contrast="high"] .button,
+:root[data-contrast="high"] .icon-button,
+:root[data-contrast="high"] select,
+:root[data-contrast="high"] .hex,
+:root[data-contrast="high"] .segmented,
+:root[data-contrast="high"] .map-row,
+:root[data-contrast="high"] .float,
+:root[data-contrast="high"] .seed,
+:root[data-contrast="high"] input[type="color"] {
+  border-width: 2px;
+}
+:root[data-contrast="high"] :focus-visible,
+:root[data-contrast="high"] .segmented label:has(input:focus-visible) {
+  outline-width: 3px;
+}
+:root[data-contrast="high"] .segmented label:has(input:checked) {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
 }

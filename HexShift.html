@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-zPElsfYCHjs2L+fY4QjMRdE5Ig59Q6WSVPd5D1UGjIQ='; style-src 'sha256-VCY1tWNQWFPA76jo1C1TNASjZ07ihWeKdfvfxMZ6Q9Q='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-2MuEcCTg+3eNl1SHHba7jp0RkLCNiTcy5ayjd0JTodI='; style-src 'sha256-YrnQiLqnA4F9w6qD0q0ujk+qbk++ZBE6jJvxplBuPXM='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta
       name="theme-color"
@@ -31,11 +31,11 @@
   --line-strong: #c4c4c4;
   --ink: #171717;
   --muted: #595959;
-  --accent: #e8802e;
-  --on-accent: #1a1206;
-  --accent-text: #9e4c0a;
-  --accent-soft: #e8802e24;
-  --focus: #007c99;
+  --accent: #1f1f1f;
+  --on-accent: #ffffff;
+  --accent-text: #1f1f1f;
+  --accent-soft: #e0e0e0;
+  --focus: #000000;
   --warn: #855000;
   --checker1: #e0e0e0;
   --checker2: #f2f2f2;
@@ -64,9 +64,11 @@
     --line-strong: #3d3d3d;
     --ink: #ececec;
     --muted: #a3a3a3;
-    --accent-text: #e8802e;
-    --accent-soft: #e8802e2e;
-    --focus: #6ef0ff;
+    --accent: #e6e6e6;
+    --on-accent: #0a0a0a;
+    --accent-text: #e6e6e6;
+    --accent-soft: #3a3a3a;
+    --focus: #ffffff;
     --warn: #f0b54a;
     --checker1: #1f1f1f;
     --checker2: #262626;
@@ -83,9 +85,11 @@
   --line-strong: #3d3d3d;
   --ink: #ececec;
   --muted: #a3a3a3;
-  --accent-text: #e8802e;
-  --accent-soft: #e8802e2e;
-  --focus: #6ef0ff;
+  --accent: #e6e6e6;
+  --on-accent: #0a0a0a;
+  --accent-text: #e6e6e6;
+  --accent-soft: #3a3a3a;
+  --focus: #ffffff;
   --warn: #f0b54a;
   --checker1: #1f1f1f;
   --checker2: #262626;
@@ -216,7 +220,8 @@ select:hover:not(:disabled) {
   color: var(--on-accent);
 }
 .button.primary:hover:not(:disabled) {
-  background: #f08f40;
+  background: var(--accent);
+  filter: brightness(1.08);
 }
 .button.full {
   width: 100%;
@@ -1354,6 +1359,109 @@ dialog p {
       color 0.12s;
   }
 }
+
+/* Colour theme menu */
+.theme-menu {
+  position: relative;
+  margin: 0;
+}
+.theme-menu > summary {
+  list-style: none;
+  min-height: 32px;
+}
+.theme-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.theme-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  background: conic-gradient(var(--accent) 0 50%, var(--surface) 0);
+}
+.theme-pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  width: 240px;
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.theme-list legend {
+  padding: 4px 8px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.theme-list label {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-weight: 400;
+}
+.theme-list label:hover {
+  background: var(--hover);
+}
+.theme-list label:has(input:checked) {
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+.theme-list input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.theme-list label:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.theme-swatch {
+  display: flex;
+  flex: none;
+  width: 42px;
+  height: 20px;
+  overflow: hidden;
+  border-radius: 5px;
+  border: 1px solid var(--line-strong);
+}
+.theme-swatch span {
+  flex: 1;
+}
+
+/* High contrast: heavier borders and focus rings. */
+:root[data-contrast="high"] .button,
+:root[data-contrast="high"] .icon-button,
+:root[data-contrast="high"] select,
+:root[data-contrast="high"] .hex,
+:root[data-contrast="high"] .segmented,
+:root[data-contrast="high"] .map-row,
+:root[data-contrast="high"] .float,
+:root[data-contrast="high"] .seed,
+:root[data-contrast="high"] input[type="color"] {
+  border-width: 2px;
+}
+:root[data-contrast="high"] :focus-visible,
+:root[data-contrast="high"] .segmented label:has(input:focus-visible) {
+  outline-width: 3px;
+}
+:root[data-contrast="high"] .segmented label:has(input:checked) {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
 </style>
   </head>
   <body>
@@ -1445,6 +1553,17 @@ dialog p {
             <option value="light">Light</option>
             <option value="dark">Dark</option>
           </select>
+          <details class="theme-menu" id="themeMenu">
+            <summary class="icon-button" title="Colour theme">
+              <span class="theme-dot" aria-hidden="true"></span
+              ><span class="sr-only">Colour theme</span>
+            </summary>
+            <div class="theme-pop">
+              <fieldset id="uiTheme" class="theme-list">
+                <legend>Colour theme</legend>
+              </fieldset>
+            </div>
+          </details>
           <button id="export" class="button primary" disabled>
             Export PNG
           </button>
@@ -2079,8 +2198,8 @@ dialog p {
   }
   function parseColour(value) {
     const s = String(value).trim().toLowerCase();
-    const hex = parseHex(s);
-    if (hex) return hex;
+    const hex2 = parseHex(s);
+    if (hex2) return hex2;
     const m = /^(rgba?|hsla?)\(\s*([^)]*?)\s*\)$/.exec(s);
     if (!m) return null;
     const parts = m[2].split(/\s*[,/]\s*|\s+/);
@@ -2278,7 +2397,7 @@ dialog p {
     };
   }
   function rampShift(p, samples, single) {
-    const ramp = p.ramp.map((hex) => toModel(parseHex(hex), p.model)).sort((a, b) => a[2] - b[2]), groups = shadeGroups(samples, ramp.length);
+    const ramp = p.ramp.map((hex2) => toModel(parseHex(hex2), p.model)).sort((a, b) => a[2] - b[2]), groups = shadeGroups(samples, ramp.length);
     const anchors = [];
     for (const g of groups)
       if (anchors.length && g.l - anchors.at(-1).l < 1 / 255)
@@ -6388,8 +6507,8 @@ dialog p {
       id: "rainbow",
       label: "Rainbow \xB7 equal brightness",
       entries: Array.from({ length: 12 }, (_, i) => {
-        const hex = toHex(...oklchToRgb(0.7, 0.15, i * 30 + 25));
-        return { label: hex, hex };
+        const hex2 = toHex(...oklchToRgb(0.7, 0.15, i * 30 + 25));
+        return { label: hex2, hex: hex2 };
       })
     },
     tones("Fluent", [
@@ -6435,12 +6554,12 @@ dialog p {
     const add = (rgb, label = "") => {
       if (rgb.some((v) => !Number.isInteger(v)))
         throw Error("Invalid colour in palette.");
-      const hex = toHex(...rgb);
-      if (seen.has(hex)) return;
-      seen.add(hex);
+      const hex2 = toHex(...rgb);
+      if (seen.has(hex2)) return;
+      seen.add(hex2);
       if (out.length >= MAX_PALETTE_COLOURS)
         throw Error("Palettes can have at most 1,024 colours.");
-      out.push({ hex, label: label.trim().slice(0, 60) || hex });
+      out.push({ hex: hex2, label: label.trim().slice(0, 60) || hex2 });
     };
     const first = lines[0].trim();
     if (first === "GIMP Palette") {
@@ -6492,11 +6611,11 @@ dialog p {
   }
   function writeGpl(name2, entries2) {
     const clean = (s) => String(s).replace(/[\x00-\x1f\x7f]/g, " ").trim();
-    return "GIMP Palette\nName: " + (clean(name2) || "Hex Shift") + "\nColumns: 0\n#\n" + entries2.map(({ hex, label }) => {
+    return "GIMP Palette\nName: " + (clean(name2) || "Hex Shift") + "\nColumns: 0\n#\n" + entries2.map(({ hex: hex2, label }) => {
       const [r, g, b] = [1, 3, 5].map(
-        (i) => parseInt(hex.slice(i, i + 2), 16)
+        (i) => parseInt(hex2.slice(i, i + 2), 16)
       );
-      return [r, g, b].map((v) => String(v).padStart(3)).join(" ") + "	" + clean(label || hex);
+      return [r, g, b].map((v) => String(v).padStart(3)).join(" ") + "	" + clean(label || hex2);
     }).join("\n") + "\n";
   }
   var isPaletteFile = (file) => /\.(gpl|hex|pal|txt)$/i.test(file.name || "") || file.type === "text/plain";
@@ -6636,6 +6755,310 @@ dialog p {
         }
       };
     return null;
+  }
+
+  // src/themes.js
+  var hex = (h2) => h2.match(/[0-9a-f]{2}/gi).map((v) => parseInt(v, 16));
+  var toHex2 = (rgb) => "#" + rgb.map((v) => Math.round(v).toString(16).padStart(2, "0")).join("");
+  var mix = (a, b, t) => toHex2(hex(a).map((v, i) => v + (hex(b)[i] - v) * t));
+  function luminance(h2) {
+    const [r, g, b] = hex(h2).map((v) => {
+      v /= 255;
+      return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+  function contrast(a, b) {
+    const x = luminance(a), y = luminance(b);
+    return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+  }
+  function readable(colour, backgrounds, target) {
+    const worst = (c) => Math.min(...backgrounds.map((b) => contrast(c, b)));
+    if (worst(colour) >= target) return colour;
+    let best = null, bestStep = Infinity;
+    for (const end of ["#000000", "#ffffff"])
+      for (let step = 1; step <= 50; step++) {
+        const c = mix(colour, end, step / 50);
+        if (worst(c) >= target) {
+          if (step < bestStep) [best, bestStep] = [c, step];
+          break;
+        }
+      }
+    return best || (worst("#000000") > worst("#ffffff") ? "#000000" : "#ffffff");
+  }
+  var THEMES = [
+    {
+      id: "graphite",
+      name: "Graphite",
+      dark: {
+        ground: "#141414",
+        surface: "#1c1c1c",
+        raised: "#262626",
+        line: "#303030",
+        ink: "#ececec",
+        muted: "#a3a3a3",
+        accent: "#e6e6e6",
+        focus: "#ffffff"
+      },
+      light: {
+        ground: "#e9e9e9",
+        surface: "#f6f6f6",
+        raised: "#ffffff",
+        line: "#d9d9d9",
+        ink: "#171717",
+        muted: "#595959",
+        accent: "#1f1f1f",
+        focus: "#000000"
+      }
+    },
+    {
+      id: "contrast",
+      name: "High contrast",
+      contrast: true,
+      dark: {
+        ground: "#000000",
+        surface: "#000000",
+        raised: "#000000",
+        line: "#ffffff",
+        ink: "#ffffff",
+        muted: "#e6e6e6",
+        accent: "#ffe600",
+        focus: "#00e5ff",
+        warn: "#ffb000"
+      },
+      light: {
+        ground: "#ffffff",
+        surface: "#ffffff",
+        raised: "#ffffff",
+        line: "#000000",
+        ink: "#000000",
+        muted: "#1a1a1a",
+        accent: "#0000c8",
+        focus: "#c00000",
+        warn: "#7a3d00"
+      }
+    },
+    {
+      id: "lewd",
+      name: "Lewd",
+      dark: {
+        ground: "#141414",
+        surface: "#1c1c1c",
+        raised: "#262626",
+        line: "#303030",
+        ink: "#ececec",
+        muted: "#a3a3a3",
+        accent: "#e8802e",
+        focus: "#6ef0ff"
+      },
+      light: {
+        ground: "#e9e9e9",
+        surface: "#f6f6f6",
+        raised: "#ffffff",
+        line: "#d9d9d9",
+        ink: "#171717",
+        muted: "#595959",
+        accent: "#e8802e",
+        focus: "#007c99"
+      }
+    },
+    {
+      id: "nord",
+      name: "Nord",
+      dark: {
+        ground: "#2e3440",
+        surface: "#3b4252",
+        raised: "#434c5e",
+        line: "#4c566a",
+        ink: "#eceff4",
+        muted: "#d8dee9",
+        accent: "#88c0d0",
+        focus: "#ebcb8b"
+      },
+      light: {
+        ground: "#d8dee9",
+        surface: "#e5e9f0",
+        raised: "#eceff4",
+        line: "#c2cad6",
+        ink: "#2e3440",
+        muted: "#4c566a",
+        accent: "#5e81ac",
+        focus: "#bf616a"
+      }
+    },
+    {
+      id: "solarized",
+      name: "Solarized",
+      dark: {
+        ground: "#002b36",
+        surface: "#073642",
+        raised: "#0b4251",
+        line: "#24525e",
+        ink: "#eee8d5",
+        muted: "#93a1a1",
+        accent: "#268bd2",
+        focus: "#b58900"
+      },
+      light: {
+        ground: "#eee8d5",
+        surface: "#fdf6e3",
+        raised: "#fffdf7",
+        line: "#dcd4bc",
+        ink: "#073642",
+        muted: "#586e75",
+        accent: "#268bd2",
+        focus: "#cb4b16"
+      }
+    },
+    {
+      id: "dracula",
+      name: "Dracula",
+      dark: {
+        ground: "#21222c",
+        surface: "#282a36",
+        raised: "#343746",
+        line: "#44475a",
+        ink: "#f8f8f2",
+        muted: "#b6bcdc",
+        accent: "#ff79c6",
+        focus: "#8be9fd"
+      },
+      light: {
+        ground: "#f2ecd8",
+        surface: "#fffbeb",
+        raised: "#ffffff",
+        line: "#ddd6c1",
+        ink: "#1f1f1f",
+        muted: "#5d5880",
+        accent: "#a3144d",
+        focus: "#036a96"
+      }
+    },
+    {
+      id: "catppuccin",
+      name: "Catppuccin",
+      dark: {
+        ground: "#181825",
+        surface: "#1e1e2e",
+        raised: "#313244",
+        line: "#45475a",
+        ink: "#cdd6f4",
+        muted: "#a6adc8",
+        accent: "#cba6f7",
+        focus: "#89dceb"
+      },
+      light: {
+        ground: "#e6e9ef",
+        surface: "#eff1f5",
+        raised: "#ffffff",
+        line: "#ccd0da",
+        ink: "#4c4f69",
+        muted: "#6c6f85",
+        accent: "#8839ef",
+        focus: "#04a5e5"
+      }
+    },
+    {
+      id: "gruvbox",
+      name: "Gruvbox",
+      dark: {
+        ground: "#1d2021",
+        surface: "#282828",
+        raised: "#3c3836",
+        line: "#504945",
+        ink: "#ebdbb2",
+        muted: "#a89984",
+        accent: "#fabd2f",
+        focus: "#83a598"
+      },
+      light: {
+        ground: "#f2e5bc",
+        surface: "#fbf1c7",
+        raised: "#fffbe8",
+        line: "#d5c4a1",
+        ink: "#3c3836",
+        muted: "#665c54",
+        accent: "#b57614",
+        focus: "#076678"
+      }
+    },
+    {
+      id: "rose-pine",
+      name: "Ros\xE9 Pine",
+      dark: {
+        ground: "#191724",
+        surface: "#1f1d2e",
+        raised: "#26233a",
+        line: "#403d52",
+        ink: "#e0def4",
+        muted: "#908caa",
+        accent: "#ebbcba",
+        focus: "#9ccfd8"
+      },
+      light: {
+        ground: "#f2e9e1",
+        surface: "#faf4ed",
+        raised: "#fffaf3",
+        line: "#dfdad9",
+        ink: "#575279",
+        muted: "#797593",
+        accent: "#d7827e",
+        focus: "#286983"
+      }
+    },
+    {
+      id: "everforest",
+      name: "Everforest",
+      dark: {
+        ground: "#272e33",
+        surface: "#2d353b",
+        raised: "#343f44",
+        line: "#475258",
+        ink: "#d3c6aa",
+        muted: "#9da9a0",
+        accent: "#a7c080",
+        focus: "#e69875"
+      },
+      light: {
+        ground: "#efebd4",
+        surface: "#fdf6e3",
+        raised: "#fffbef",
+        line: "#e0dcc7",
+        ink: "#5c6a72",
+        muted: "#707f74",
+        accent: "#8da101",
+        focus: "#3a94c5"
+      }
+    }
+  ];
+  var DEFAULT_THEME = "graphite";
+  var themeById = (id) => THEMES.find((t) => t.id === id) || THEMES.find((t) => t.id === DEFAULT_THEME);
+  function themeTokens(id, mode) {
+    const theme2 = themeById(id), p = theme2[mode], dark = mode === "dark", { ground, surface, raised, line: line2, ink } = p, panels = [ground, surface, raised];
+    const darkInk = mix(dark ? ground : ink, "#000000", 0.5), onAccent = contrast(p.accent, darkInk) >= contrast(p.accent, "#ffffff") ? darkInk : "#ffffff", accent = readable(p.accent, [onAccent], 4.5), accentSoft = mix(surface, accent, dark ? 0.18 : 0.14);
+    return {
+      "--ground": ground,
+      "--surface": surface,
+      "--raised": raised,
+      "--hover": mix(raised, ink, theme2.contrast ? 0.18 : 0.07),
+      "--line": line2,
+      "--line-strong": theme2.contrast ? ink : mix(line2, ink, 0.14),
+      "--ink": readable(ink, [...panels, accentSoft], 7),
+      "--muted": readable(p.muted, panels, 4.5),
+      "--accent": accent,
+      "--on-accent": onAccent,
+      "--accent-text": readable(p.accent, [...panels, accentSoft], 4.5),
+      "--accent-soft": accentSoft,
+      "--focus": readable(p.focus, panels, 3),
+      "--warn": readable(
+        p.warn || (dark ? "#f0b54a" : "#855000"),
+        [...panels, accentSoft],
+        4.5
+      ),
+      "--checker1": mix(ground, ink, dark ? 0.07 : 0.06),
+      "--checker2": mix(ground, ink, dark ? 0.02 : 0.015),
+      "--shadow": dark ? "0 2px 12px #00000073" : "0 2px 10px #0000001f"
+    };
   }
 
   // src/sample.js
@@ -6806,11 +7229,11 @@ dialog p {
     ["feather", "Spatial feather", 0, 8, "pixels"]
   ])
     makeSlider("selectionSliders", ...args);
-  function swatch(hex, label, fn) {
+  function swatch(hex2, label, fn) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "swatch";
-    button.style.backgroundColor = hex;
+    button.style.backgroundColor = hex2;
     button.title = label;
     button.setAttribute("aria-label", label);
     button.addEventListener("click", fn);
@@ -6865,10 +7288,10 @@ dialog p {
     const box = $("colourMap");
     box.replaceChildren();
     edit.rows.forEach((row, k) => {
-      const item = document.createElement("div"), select = document.createElement("button"), { from, to } = rowText(row), chip = (hex, kind) => {
+      const item = document.createElement("div"), select = document.createElement("button"), { from, to } = rowText(row), chip = (hex2, kind) => {
         const c = document.createElement("span");
         c.className = "chip" + (kind ? " " + kind : "");
-        if (hex) c.style.backgroundColor = hex;
+        if (hex2) c.style.backgroundColor = hex2;
         return c;
       }, text2 = document.createElement("span"), count = document.createElement("span"), pixelsOwned = result?.counts?.[k];
       item.className = "map-row" + (k === edit.active ? " active" : "");
@@ -6968,9 +7391,9 @@ dialog p {
       status("Could not map the colours: " + e.message);
     }
   }
-  function rememberTarget(hex) {
-    if (!parseHex(hex)) return;
-    recent = [hex, ...recent.filter((v) => v !== hex)].slice(0, 8);
+  function rememberTarget(hex2) {
+    if (!parseHex(hex2)) return;
+    recent = [hex2, ...recent.filter((v) => v !== hex2)].slice(0, 8);
     $("recentGroup").hidden = false;
     $("recent").replaceChildren(
       ...recent.map(
@@ -7035,10 +7458,10 @@ dialog p {
     const [r, g, b, a] = probe.getImageData(0, 0, 1, 1).data;
     return a === 255 ? [r, g, b] : null;
   }
-  function deltasTo(hex, model) {
+  function deltasTo(hex2, model) {
     if (!seeds.length) return null;
     const sd = seeds.at(-1), o = (sd.y * w + sd.x) * 4;
-    return deltasFor([...pixels.subarray(o, o + 3)], parseHex(hex), model);
+    return deltasFor([...pixels.subarray(o, o + 3)], parseHex(hex2), model);
   }
   function targetDeltas() {
     if (params.manual) return;
@@ -7083,8 +7506,8 @@ dialog p {
     renderMap();
     buttons();
   }
-  function setTarget(hex) {
-    const rgb = parseHex(hex);
+  function setTarget(hex2) {
+    const rgb = parseHex(hex2);
     if (!rgb) return;
     action("Target colour", () => {
       params.target = toHex(...rgb);
@@ -7560,11 +7983,11 @@ dialog p {
   var previewGrounds = [
     ["Dark chat", "#313338"],
     ["Light chat", "#FFFFFF"],
-    ...DISCORD_BUTTONS.map(([label, hex]) => [label + " button", hex])
+    ...DISCORD_BUTTONS.map(([label, hex2]) => [label + " button", hex2])
   ];
-  for (const [label, hex] of previewGrounds) {
+  for (const [label, hex2] of previewGrounds) {
     const option = document.createElement("option");
-    option.value = hex;
+    option.value = hex2;
     option.textContent = label;
     $("previewGround").append(option);
   }
@@ -7634,14 +8057,14 @@ dialog p {
       outlineControls();
     }
   });
-  for (const [label, hex] of [
+  for (const [label, hex2] of [
     ["White", "#FFFFFF"],
     ["Black", "#000000"]
   ])
     $("outlineSwatches").append(
-      swatch(hex, label + " outline", () => {
-        $("outlineHex").value = hex;
-        $("outlineColour").value = hex.toLowerCase();
+      swatch(hex2, label + " outline", () => {
+        $("outlineHex").value = hex2;
+        $("outlineColour").value = hex2.toLowerCase();
         $("outline").checked = true;
         outlineControls();
       })
@@ -7775,8 +8198,8 @@ dialog p {
   };
   $("savePalette").onclick = () => {
     const set = currentSet(), entries2 = set.entries.flatMap(
-      (e) => e.ramp ? e.ramp.map((hex, i) => ({
-        hex,
+      (e) => e.ramp ? e.ramp.map((hex2, i) => ({
+        hex: hex2,
         label: e.label + (i ? " shade " + i : "")
       })) : [e]
     ), filename = safeStem(set.label.replace(/ · /g, " ")) + ".gpl";
@@ -7788,8 +8211,8 @@ dialog p {
     );
     status("Prepared " + filename + ". Choose where to save it.");
   };
-  function screenPicked(hex) {
-    const rgb = typeof hex === "string" ? readColour(hex) : null;
+  function screenPicked(hex2) {
+    const rgb = typeof hex2 === "string" ? readColour(hex2) : null;
     if (rgb) setTarget(toHex(...rgb));
     else status("No colour was picked.");
   }
@@ -8461,21 +8884,72 @@ dialog p {
   $("background").onchange = background;
   $("backgroundColour").oninput = background;
   $("dismissTip").onclick = () => $("firstUse").hidden = true;
+  var uiTheme = DEFAULT_THEME;
   try {
-    const saved = localStorage.getItem("hexshift-theme");
-    if (["system", "light", "dark"].includes(saved)) $("theme").value = saved;
+    const saved = localStorage.getItem("hexshift-theme") || "", [mode, id] = saved.split(":");
+    if (["system", "light", "dark"].includes(mode)) $("theme").value = mode;
+    if (THEMES.some((t) => t.id === id)) uiTheme = id;
+    else if (!saved && matchMedia("(prefers-contrast: more)").matches)
+      uiTheme = "contrast";
   } catch {
   }
+  var prefersDark = matchMedia("(prefers-color-scheme: dark)");
+  for (const t of THEMES) {
+    const label = document.createElement("label"), input = document.createElement("input"), swatch2 = document.createElement("span");
+    input.type = "radio";
+    input.name = "uiTheme";
+    input.value = t.id;
+    swatch2.className = "theme-swatch";
+    swatch2.setAttribute("aria-hidden", "true");
+    swatch2.dataset.theme = t.id;
+    label.append(input, swatch2, t.name);
+    $("uiTheme").append(label);
+  }
   function theme() {
-    if ($("theme").value === "system")
-      delete document.documentElement.dataset.theme;
-    else document.documentElement.dataset.theme = $("theme").value;
+    const mode = $("theme").value, dark = mode === "dark" || mode === "system" && prefersDark.matches, root = document.documentElement, tokens = themeTokens(uiTheme, dark ? "dark" : "light");
+    if (mode === "system") delete root.dataset.theme;
+    else root.dataset.theme = mode;
+    if (themeById(uiTheme).contrast) root.dataset.contrast = "high";
+    else delete root.dataset.contrast;
+    for (const [name2, value] of Object.entries(tokens))
+      root.style.setProperty(name2, value);
+    root.style.colorScheme = dark ? "dark" : "light";
+    for (const meta2 of document.querySelectorAll('meta[name="theme-color"]'))
+      meta2.content = tokens["--surface"];
+    for (const swatch2 of document.querySelectorAll(".theme-swatch")) {
+      const t = themeTokens(swatch2.dataset.theme, dark ? "dark" : "light");
+      swatch2.replaceChildren(
+        ...["--surface", "--raised", "--accent"].map((name2) => {
+          const part = document.createElement("span");
+          part.style.background = t[name2];
+          return part;
+        })
+      );
+    }
+    setChoice("uiTheme", uiTheme);
     try {
-      localStorage.setItem("hexshift-theme", $("theme").value);
+      localStorage.setItem("hexshift-theme", mode + ":" + uiTheme);
     } catch {
     }
   }
   $("theme").onchange = theme;
+  $("uiTheme").onchange = () => {
+    uiTheme = choice("uiTheme");
+    theme();
+  };
+  prefersDark.addEventListener("change", () => {
+    if ($("theme").value === "system") theme();
+  });
+  document.addEventListener("click", (e) => {
+    if (!$("themeMenu").contains(e.target)) $("themeMenu").open = false;
+  });
+  $("themeMenu").addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && $("themeMenu").open) {
+      $("themeMenu").open = false;
+      $("themeMenu").querySelector("summary").focus();
+      e.stopPropagation();
+    }
+  });
   theme();
   document.addEventListener("keydown", (e) => {
     const editing = e.target.closest(
@@ -8586,6 +9060,10 @@ dialog p {
 ## Microsoft Fluent Emoji
 
 The sample red heart is from https://github.com/microsoft/fluentui-emoji . Copyright (c) Microsoft Corporation. MIT licence; the permission and warranty terms are included in LICENSE.
+
+## Colour theme palettes
+
+The Nord, Solarized, Dracula, Catppuccin, Gruvbox, Rosé Pine and Everforest themes use colours from these open-source palettes, each MIT licensed: Nord (Copyright (c) 2016-present Sven Greb, https://www.nordtheme.com), Solarized (Copyright (c) 2011 Ethan Schoonover, https://ethanschoonover.com/solarized), Dracula (Copyright (c) 2016 Dracula Theme, https://draculatheme.com), Catppuccin (Copyright (c) 2021 Catppuccin, https://catppuccin.com), Gruvbox (Copyright (c) 2017 Pavel Pertsev, https://github.com/morhetz/gruvbox), Rosé Pine (Copyright (c) 2023 Rosé Pine, https://rosepinetheme.com) and Everforest (Copyright (c) 2019 sainnhe, https://github.com/sainnhe/everforest). Some shades are adjusted so text meets WCAG AA contrast. The MIT permission and warranty terms are included in LICENSE.
 
 ## DOMPurify 3.4.17
 
