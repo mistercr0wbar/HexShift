@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-2MuEcCTg+3eNl1SHHba7jp0RkLCNiTcy5ayjd0JTodI='; style-src 'sha256-YrnQiLqnA4F9w6qD0q0ujk+qbk++ZBE6jJvxplBuPXM='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-XB7Qf6D1mMqsIkpxG2Fb/mMSse6xYz5f55OPY1n/eZk='; style-src 'sha256-sNu4SBcl7eXTdug3EN6cHyUnynB2qpRTuLdZm7qhKaE='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta
       name="theme-color"
@@ -1239,8 +1239,8 @@ dialog p {
   #open {
     padding: 5px 8px;
   }
-  #theme {
-    width: 74px;
+  .theme-menu .label {
+    display: none;
   }
   .main {
     display: block;
@@ -1384,8 +1384,8 @@ dialog p {
   right: 0;
   top: calc(100% + 6px);
   z-index: 20;
-  width: 240px;
-  max-height: min(70vh, 520px);
+  width: 300px;
+  max-height: min(80vh, 560px);
   overflow-y: auto;
   padding: 6px;
   border: 1px solid var(--line);
@@ -1461,6 +1461,13 @@ dialog p {
 :root[data-contrast="high"] .segmented label:has(input:checked) {
   outline: 2px solid var(--ink);
   outline-offset: -2px;
+}
+
+.theme-pop .modifier {
+  margin: 8px 4px 4px;
+}
+.theme-pop .modifier legend {
+  margin: 4px 4px 6px;
 }
 </style>
   </head>
@@ -1547,20 +1554,17 @@ dialog p {
               <svg class="icon" aria-hidden="true"><use href="#i-redo" /></svg>
             </button>
           </div>
-          <label class="sr-only" for="theme">Theme</label
-          ><select id="theme" class="compact">
-            <option value="system">System theme</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
           <details class="theme-menu" id="themeMenu">
-            <summary class="icon-button" title="Colour theme">
+            <summary class="button" title="Theme">
               <span class="theme-dot" aria-hidden="true"></span
-              ><span class="sr-only">Colour theme</span>
+              ><span class="label">Theme</span>
             </summary>
             <div class="theme-pop">
               <fieldset id="uiTheme" class="theme-list">
-                <legend>Colour theme</legend>
+                <legend>Theme</legend>
+              </fieldset>
+              <fieldset id="theme" class="segmented labelled modifier">
+                <legend>Modifier</legend>
               </fieldset>
             </div>
           </details>
@@ -6737,6 +6741,30 @@ dialog p {
   }
 
   // src/host.js
+  function systemColours(onChange) {
+    const scheme = matchMedia("(prefers-color-scheme: dark)"), webview = window.chrome?.webview;
+    if (webview)
+      webview.addEventListener("message", (e) => {
+        const d = e.data;
+        if (d?.type === "system-colours" && (d.accent === null || /^#[0-9a-f]{6}$/i.test(d.accent)) && typeof d.dark === "boolean")
+          onChange({ accent: d.accent?.toLowerCase() ?? null, dark: d.dark });
+      });
+    else
+      scheme.addEventListener(
+        "change",
+        () => onChange({ accent: cssAccent(), dark: scheme.matches })
+      );
+    return { accent: cssAccent(), dark: scheme.matches };
+  }
+  function cssAccent() {
+    if (!CSS.supports("color", "AccentColor")) return null;
+    const probe2 = document.createElement("i");
+    probe2.style.color = "AccentColor";
+    document.body.append(probe2);
+    const rgb = getComputedStyle(probe2).color.match(/\d+/g);
+    probe2.remove();
+    return rgb ? "#" + rgb.slice(0, 3).map((v) => Number(v).toString(16).padStart(2, "0")).join("") : null;
+  }
   function screenPicker(onPicked, onError) {
     const webview = window.chrome?.webview;
     if (webview) {
@@ -6786,86 +6814,72 @@ dialog p {
       }
     return best || (worst("#000000") > worst("#ffffff") ? "#000000" : "#ffffff");
   }
+  function toHsl(h2) {
+    const [r, g, b] = hex(h2).map((v) => v / 255), max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min;
+    if (!d) return [0, 0, l];
+    const s = d / (1 - Math.abs(2 * l - 1)), hue = max === r ? ((g - b) / d + 6) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return [hue * 60, s, l];
+  }
+  function fromHsl(h2, s, l) {
+    const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs(h2 / 60 % 2 - 1)), m = l - c / 2, [r, g, b] = h2 < 60 ? [c, x, 0] : h2 < 120 ? [x, c, 0] : h2 < 180 ? [0, c, x] : h2 < 240 ? [0, x, c] : h2 < 300 ? [x, 0, c] : [c, 0, x];
+    return toHex2([r + m, g + m, b + m].map((v) => v * 255));
+  }
+  function amplify(colour) {
+    const [h2, s] = toHsl(colour);
+    if (s < 0.12) return "#ffffff";
+    const sat = Math.min(1, s * 1.4 + 0.25);
+    for (let l = 0.5; l <= 0.9; l += 0.01) {
+      const c = fromHsl(h2, sat, l);
+      if (contrast(c, "#000000") >= 8) return c;
+    }
+    return fromHsl(h2, sat, 0.9);
+  }
+  var DEFAULT_LOOKS = {
+    default: {
+      ground: "#141414",
+      surface: "#1c1c1c",
+      raised: "#262626",
+      line: "#303030",
+      ink: "#ececec",
+      muted: "#a3a3a3",
+      accent: "#e6e6e6",
+      focus: "#ffffff"
+    },
+    day: {
+      ground: "#e9e9e9",
+      surface: "#f6f6f6",
+      raised: "#ffffff",
+      line: "#d9d9d9",
+      ink: "#171717",
+      muted: "#595959",
+      accent: "#1f1f1f",
+      focus: "#000000"
+    },
+    night: {
+      ground: "#080808",
+      surface: "#0f0f0f",
+      raised: "#181818",
+      line: "#242424",
+      ink: "#e8e8e8",
+      muted: "#9c9c9c",
+      accent: "#e0e0e0",
+      focus: "#ffffff"
+    }
+  };
+  var withAccent = (look, accent, focus) => ({ ...look, accent, focus });
   var THEMES = [
+    { id: "default", name: "Default", ...DEFAULT_LOOKS },
     {
-      id: "graphite",
-      name: "Graphite",
-      dark: {
-        ground: "#141414",
-        surface: "#1c1c1c",
-        raised: "#262626",
-        line: "#303030",
-        ink: "#ececec",
-        muted: "#a3a3a3",
-        accent: "#e6e6e6",
-        focus: "#ffffff"
-      },
-      light: {
-        ground: "#e9e9e9",
-        surface: "#f6f6f6",
-        raised: "#ffffff",
-        line: "#d9d9d9",
-        ink: "#171717",
-        muted: "#595959",
-        accent: "#1f1f1f",
-        focus: "#000000"
-      }
-    },
-    {
-      id: "contrast",
-      name: "High contrast",
-      contrast: true,
-      dark: {
-        ground: "#000000",
-        surface: "#000000",
-        raised: "#000000",
-        line: "#ffffff",
-        ink: "#ffffff",
-        muted: "#e6e6e6",
-        accent: "#ffe600",
-        focus: "#00e5ff",
-        warn: "#ffb000"
-      },
-      light: {
-        ground: "#ffffff",
-        surface: "#ffffff",
-        raised: "#ffffff",
-        line: "#000000",
-        ink: "#000000",
-        muted: "#1a1a1a",
-        accent: "#0000c8",
-        focus: "#c00000",
-        warn: "#7a3d00"
-      }
-    },
-    {
-      id: "lewd",
-      name: "Lewd",
-      dark: {
-        ground: "#141414",
-        surface: "#1c1c1c",
-        raised: "#262626",
-        line: "#303030",
-        ink: "#ececec",
-        muted: "#a3a3a3",
-        accent: "#e8802e",
-        focus: "#6ef0ff"
-      },
-      light: {
-        ground: "#e9e9e9",
-        surface: "#f6f6f6",
-        raised: "#ffffff",
-        line: "#d9d9d9",
-        ink: "#171717",
-        muted: "#595959",
-        accent: "#e8802e",
-        focus: "#007c99"
-      }
+      id: "lude",
+      name: "Lude",
+      default: withAccent(DEFAULT_LOOKS.default, "#e8802e", "#6ef0ff"),
+      day: withAccent(DEFAULT_LOOKS.day, "#e8802e", "#007c99"),
+      night: withAccent(DEFAULT_LOOKS.night, "#e8802e", "#6ef0ff")
     },
     {
       id: "nord",
       name: "Nord",
-      dark: {
+      default: {
         ground: "#2e3440",
         surface: "#3b4252",
         raised: "#434c5e",
@@ -6875,7 +6889,7 @@ dialog p {
         accent: "#88c0d0",
         focus: "#ebcb8b"
       },
-      light: {
+      day: {
         ground: "#d8dee9",
         surface: "#e5e9f0",
         raised: "#eceff4",
@@ -6884,132 +6898,22 @@ dialog p {
         muted: "#4c566a",
         accent: "#5e81ac",
         focus: "#bf616a"
-      }
-    },
-    {
-      id: "solarized",
-      name: "Solarized",
-      dark: {
-        ground: "#002b36",
-        surface: "#073642",
-        raised: "#0b4251",
-        line: "#24525e",
-        ink: "#eee8d5",
-        muted: "#93a1a1",
-        accent: "#268bd2",
-        focus: "#b58900"
       },
-      light: {
-        ground: "#eee8d5",
-        surface: "#fdf6e3",
-        raised: "#fffdf7",
-        line: "#dcd4bc",
-        ink: "#073642",
-        muted: "#586e75",
-        accent: "#268bd2",
-        focus: "#cb4b16"
-      }
-    },
-    {
-      id: "dracula",
-      name: "Dracula",
-      dark: {
-        ground: "#21222c",
-        surface: "#282a36",
-        raised: "#343746",
-        line: "#44475a",
-        ink: "#f8f8f2",
-        muted: "#b6bcdc",
-        accent: "#ff79c6",
-        focus: "#8be9fd"
-      },
-      light: {
-        ground: "#f2ecd8",
-        surface: "#fffbeb",
-        raised: "#ffffff",
-        line: "#ddd6c1",
-        ink: "#1f1f1f",
-        muted: "#5d5880",
-        accent: "#a3144d",
-        focus: "#036a96"
-      }
-    },
-    {
-      id: "catppuccin",
-      name: "Catppuccin",
-      dark: {
-        ground: "#181825",
-        surface: "#1e1e2e",
-        raised: "#313244",
-        line: "#45475a",
-        ink: "#cdd6f4",
-        muted: "#a6adc8",
-        accent: "#cba6f7",
-        focus: "#89dceb"
-      },
-      light: {
-        ground: "#e6e9ef",
-        surface: "#eff1f5",
-        raised: "#ffffff",
-        line: "#ccd0da",
-        ink: "#4c4f69",
-        muted: "#6c6f85",
-        accent: "#8839ef",
-        focus: "#04a5e5"
-      }
-    },
-    {
-      id: "gruvbox",
-      name: "Gruvbox",
-      dark: {
-        ground: "#1d2021",
-        surface: "#282828",
-        raised: "#3c3836",
-        line: "#504945",
-        ink: "#ebdbb2",
-        muted: "#a89984",
-        accent: "#fabd2f",
-        focus: "#83a598"
-      },
-      light: {
-        ground: "#f2e5bc",
-        surface: "#fbf1c7",
-        raised: "#fffbe8",
-        line: "#d5c4a1",
-        ink: "#3c3836",
-        muted: "#665c54",
-        accent: "#b57614",
-        focus: "#076678"
-      }
-    },
-    {
-      id: "rose-pine",
-      name: "Ros\xE9 Pine",
-      dark: {
-        ground: "#191724",
-        surface: "#1f1d2e",
-        raised: "#26233a",
-        line: "#403d52",
-        ink: "#e0def4",
-        muted: "#908caa",
-        accent: "#ebbcba",
-        focus: "#9ccfd8"
-      },
-      light: {
-        ground: "#f2e9e1",
-        surface: "#faf4ed",
-        raised: "#fffaf3",
-        line: "#dfdad9",
-        ink: "#575279",
-        muted: "#797593",
-        accent: "#d7827e",
-        focus: "#286983"
+      night: {
+        ground: "#1b1f27",
+        surface: "#21262f",
+        raised: "#2a303b",
+        line: "#3b4252",
+        ink: "#eceff4",
+        muted: "#c2cad6",
+        accent: "#88c0d0",
+        focus: "#ebcb8b"
       }
     },
     {
       id: "everforest",
       name: "Everforest",
-      dark: {
+      default: {
         ground: "#272e33",
         surface: "#2d353b",
         raised: "#343f44",
@@ -7019,7 +6923,7 @@ dialog p {
         accent: "#a7c080",
         focus: "#e69875"
       },
-      light: {
+      day: {
         ground: "#efebd4",
         surface: "#fdf6e3",
         raised: "#fffbef",
@@ -7028,37 +6932,89 @@ dialog p {
         muted: "#707f74",
         accent: "#8da101",
         focus: "#3a94c5"
+      },
+      night: {
+        ground: "#1a1f22",
+        surface: "#1e2326",
+        raised: "#272e33",
+        line: "#374145",
+        ink: "#d3c6aa",
+        muted: "#9da9a0",
+        accent: "#a7c080",
+        focus: "#e69875"
       }
-    }
+    },
+    // Follows the operating system; its looks are built in systemLooks().
+    { id: "system", name: "System", system: true }
   ];
-  var DEFAULT_THEME = "graphite";
+  var MODIFIERS = [
+    { id: "default", name: "Default" },
+    { id: "day", name: "Day" },
+    { id: "night", name: "Night" },
+    { id: "contrast", name: "Contrast" }
+  ];
+  var DEFAULT_THEME = "default";
   var themeById = (id) => THEMES.find((t) => t.id === id) || THEMES.find((t) => t.id === DEFAULT_THEME);
-  function themeTokens(id, mode) {
-    const theme2 = themeById(id), p = theme2[mode], dark = mode === "dark", { ground, surface, raised, line: line2, ink } = p, panels = [ground, surface, raised];
-    const darkInk = mix(dark ? ground : ink, "#000000", 0.5), onAccent = contrast(p.accent, darkInk) >= contrast(p.accent, "#ffffff") ? darkInk : "#ffffff", accent = readable(p.accent, [onAccent], 4.5), accentSoft = mix(surface, accent, dark ? 0.18 : 0.14);
+  function systemLooks({ accent, dark } = {}) {
+    const pick2 = (look) => accent ? withAccent(look, accent, look.focus) : look;
     return {
-      "--ground": ground,
-      "--surface": surface,
-      "--raised": raised,
-      "--hover": mix(raised, ink, theme2.contrast ? 0.18 : 0.07),
-      "--line": line2,
-      "--line-strong": theme2.contrast ? ink : mix(line2, ink, 0.14),
-      "--ink": readable(ink, [...panels, accentSoft], 7),
-      "--muted": readable(p.muted, panels, 4.5),
-      "--accent": accent,
-      "--on-accent": onAccent,
-      "--accent-text": readable(p.accent, [...panels, accentSoft], 4.5),
-      "--accent-soft": accentSoft,
-      "--focus": readable(p.focus, panels, 3),
-      "--warn": readable(
-        p.warn || (dark ? "#f0b54a" : "#855000"),
-        [...panels, accentSoft],
-        4.5
-      ),
-      "--checker1": mix(ground, ink, dark ? 0.07 : 0.06),
-      "--checker2": mix(ground, ink, dark ? 0.02 : 0.015),
-      "--shadow": dark ? "0 2px 12px #00000073" : "0 2px 10px #0000001f"
+      default: pick2(dark === false ? DEFAULT_LOOKS.day : DEFAULT_LOOKS.default),
+      day: pick2(DEFAULT_LOOKS.day),
+      night: pick2(DEFAULT_LOOKS.night)
     };
+  }
+  var contrastLook = (main, boost) => {
+    const accent = boost ? amplify(main) : readable(main, ["#000000"], 8);
+    return {
+      ground: "#000000",
+      surface: "#000000",
+      raised: "#000000",
+      line: "#9a9a9a",
+      ink: "#ffffff",
+      muted: "#e0e0e0",
+      accent,
+      focus: accent === "#ffffff" ? "#ffd400" : "#ffffff",
+      warn: "#ffb000",
+      contrast: true
+    };
+  };
+  function resolveTheme(id, modifier2, system2) {
+    const theme2 = themeById(id), looks = theme2.system ? systemLooks(system2) : theme2, p = modifier2 === "contrast" ? contrastLook(looks.default.accent, !theme2.system) : looks[MODIFIERS.some((m) => m.id === modifier2) ? modifier2 : "default"], dark = luminance(p.ground) < 0.2, { ground, surface, raised, line: line2, ink } = p, panels = [ground, surface, raised];
+    const fill = readable(p.accent, panels, 3), darkInk = mix(dark ? ground : ink, "#000000", 0.5), onAccent = contrast(fill, darkInk) >= contrast(fill, "#ffffff") ? darkInk : "#ffffff", accent = readable(fill, [onAccent], 4.5), accentSoft = p.contrast ? "#1a1a1a" : mix(surface, accent, dark ? 0.18 : 0.14);
+    return {
+      dark,
+      contrast: !!p.contrast,
+      tokens: {
+        "--ground": ground,
+        "--surface": surface,
+        "--raised": raised,
+        "--hover": p.contrast ? "#262626" : mix(raised, ink, 0.07),
+        "--line": line2,
+        "--line-strong": p.contrast ? ink : mix(line2, ink, 0.14),
+        "--ink": readable(ink, [...panels, accentSoft], 7),
+        "--muted": readable(p.muted, panels, 4.5),
+        "--accent": accent,
+        "--on-accent": onAccent,
+        "--accent-text": readable(p.accent, [...panels, accentSoft], 4.5),
+        "--accent-soft": accentSoft,
+        "--focus": readable(p.focus, panels, 3),
+        "--warn": readable(
+          p.warn || (dark ? "#f0b54a" : "#855000"),
+          [...panels, accentSoft],
+          4.5
+        ),
+        "--checker1": p.contrast ? "#1a1a1a" : mix(ground, ink, dark ? 0.07 : 0.06),
+        "--checker2": p.contrast ? "#000000" : mix(ground, ink, dark ? 0.02 : 0.015),
+        "--shadow": dark ? "0 2px 12px #00000073" : "0 2px 10px #0000001f"
+      }
+    };
+  }
+  function parseThemeSetting(value) {
+    const [first = "", second = ""] = String(value || "").split(":"), renamed = { graphite: "default", lewd: "lude" }, oldMode = { dark: "default", light: "day" };
+    let modifier2 = MODIFIERS.some((m) => m.id === first) ? first : oldMode[first] || null, theme2 = renamed[second] || second;
+    if (theme2 === "contrast") [theme2, modifier2] = ["default", "contrast"];
+    if (!THEMES.some((t) => t.id === theme2)) theme2 = DEFAULT_THEME;
+    return { modifier: modifier2, theme: theme2, saved: !!value };
   }
 
   // src/sample.js
@@ -8885,15 +8841,26 @@ dialog p {
   $("backgroundColour").oninput = background;
   $("dismissTip").onclick = () => $("firstUse").hidden = true;
   var uiTheme = DEFAULT_THEME;
+  var modifier = null;
   try {
-    const saved = localStorage.getItem("hexshift-theme") || "", [mode, id] = saved.split(":");
-    if (["system", "light", "dark"].includes(mode)) $("theme").value = mode;
-    if (THEMES.some((t) => t.id === id)) uiTheme = id;
-    else if (!saved && matchMedia("(prefers-contrast: more)").matches)
-      uiTheme = "contrast";
+    ({ theme: uiTheme, modifier } = parseThemeSetting(
+      localStorage.getItem("hexshift-theme")
+    ));
   } catch {
   }
-  var prefersDark = matchMedia("(prefers-color-scheme: dark)");
+  modifier ||= matchMedia("(prefers-contrast: more)").matches ? "contrast" : matchMedia("(prefers-color-scheme: light)").matches ? "day" : "default";
+  var system = systemColours((colours) => {
+    system = colours;
+    theme();
+  });
+  for (const m of MODIFIERS) {
+    const label = document.createElement("label"), input = document.createElement("input");
+    input.type = "radio";
+    input.name = "theme";
+    input.value = m.id;
+    label.append(input, m.name);
+    $("theme").append(label);
+  }
   for (const t of THEMES) {
     const label = document.createElement("label"), input = document.createElement("input"), swatch2 = document.createElement("span");
     input.type = "radio";
@@ -8906,10 +8873,10 @@ dialog p {
     $("uiTheme").append(label);
   }
   function theme() {
-    const mode = $("theme").value, dark = mode === "dark" || mode === "system" && prefersDark.matches, root = document.documentElement, tokens = themeTokens(uiTheme, dark ? "dark" : "light");
-    if (mode === "system") delete root.dataset.theme;
-    else root.dataset.theme = mode;
-    if (themeById(uiTheme).contrast) root.dataset.contrast = "high";
+    const root = document.documentElement, { dark, contrast: contrast2, tokens } = resolveTheme(uiTheme, modifier, system);
+    root.dataset.theme = dark ? "dark" : "light";
+    root.dataset.modifier = modifier;
+    if (contrast2) root.dataset.contrast = "high";
     else delete root.dataset.contrast;
     for (const [name2, value] of Object.entries(tokens))
       root.style.setProperty(name2, value);
@@ -8917,7 +8884,7 @@ dialog p {
     for (const meta2 of document.querySelectorAll('meta[name="theme-color"]'))
       meta2.content = tokens["--surface"];
     for (const swatch2 of document.querySelectorAll(".theme-swatch")) {
-      const t = themeTokens(swatch2.dataset.theme, dark ? "dark" : "light");
+      const t = resolveTheme(swatch2.dataset.theme, modifier, system).tokens;
       swatch2.replaceChildren(
         ...["--surface", "--raised", "--accent"].map((name2) => {
           const part = document.createElement("span");
@@ -8927,19 +8894,20 @@ dialog p {
       );
     }
     setChoice("uiTheme", uiTheme);
+    setChoice("theme", modifier);
     try {
-      localStorage.setItem("hexshift-theme", mode + ":" + uiTheme);
+      localStorage.setItem("hexshift-theme", modifier + ":" + uiTheme);
     } catch {
     }
   }
-  $("theme").onchange = theme;
+  $("theme").onchange = () => {
+    modifier = choice("theme");
+    theme();
+  };
   $("uiTheme").onchange = () => {
     uiTheme = choice("uiTheme");
     theme();
   };
-  prefersDark.addEventListener("change", () => {
-    if ($("theme").value === "system") theme();
-  });
   document.addEventListener("click", (e) => {
     if (!$("themeMenu").contains(e.target)) $("themeMenu").open = false;
   });
@@ -9063,7 +9031,7 @@ The sample red heart is from https://github.com/microsoft/fluentui-emoji . Copyr
 
 ## Colour theme palettes
 
-The Nord, Solarized, Dracula, Catppuccin, Gruvbox, Rosé Pine and Everforest themes use colours from these open-source palettes, each MIT licensed: Nord (Copyright (c) 2016-present Sven Greb, https://www.nordtheme.com), Solarized (Copyright (c) 2011 Ethan Schoonover, https://ethanschoonover.com/solarized), Dracula (Copyright (c) 2016 Dracula Theme, https://draculatheme.com), Catppuccin (Copyright (c) 2021 Catppuccin, https://catppuccin.com), Gruvbox (Copyright (c) 2017 Pavel Pertsev, https://github.com/morhetz/gruvbox), Rosé Pine (Copyright (c) 2023 Rosé Pine, https://rosepinetheme.com) and Everforest (Copyright (c) 2019 sainnhe, https://github.com/sainnhe/everforest). Some shades are adjusted so text meets WCAG AA contrast. The MIT permission and warranty terms are included in LICENSE.
+The Nord and Everforest themes use colours from these open-source palettes, both MIT licensed: Nord (Copyright (c) 2016-present Sven Greb, https://www.nordtheme.com) and Everforest (Copyright (c) 2019 sainnhe, https://github.com/sainnhe/everforest). Some shades are adjusted so text meets WCAG AA contrast, and the Night and Contrast looks are derived from them. The MIT permission and warranty terms are included in LICENSE.
 
 ## DOMPurify 3.4.17
 

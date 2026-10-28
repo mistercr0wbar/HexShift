@@ -108,20 +108,17 @@
               <svg class="icon" aria-hidden="true"><use href="#i-redo" /></svg>
             </button>
           </div>
-          <label class="sr-only" for="theme">Theme</label
-          ><select id="theme" class="compact">
-            <option value="system">System theme</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
           <details class="theme-menu" id="themeMenu">
-            <summary class="icon-button" title="Colour theme">
+            <summary class="button" title="Theme">
               <span class="theme-dot" aria-hidden="true"></span
-              ><span class="sr-only">Colour theme</span>
+              ><span class="label">Theme</span>
             </summary>
             <div class="theme-pop">
               <fieldset id="uiTheme" class="theme-list">
-                <legend>Colour theme</legend>
+                <legend>Theme</legend>
+              </fieldset>
+              <fieldset id="theme" class="segmented labelled modifier">
+                <legend>Modifier</legend>
               </fieldset>
             </div>
           </details>

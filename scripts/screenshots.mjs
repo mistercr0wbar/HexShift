@@ -1,13 +1,13 @@
 // Screenshots of the built HexShift.html for review and for the website.
-//   npm run screenshots             sizes from a phone to 2560 × 1440, light and dark
-//   npm run screenshots -- themes   every colour theme, light and dark, at 1280 × 840
+//   npm run screenshots             sizes from a phone to 2560 × 1440, Day and Default
+//   npm run screenshots -- themes   every theme with every modifier at 1280 × 840
 //   npm run screenshots -- website  the website's 1280 × 720 pair
 // Images go to screenshots/ (git-ignored). Run `npm run build` first.
 import { chromium } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { THEMES, DEFAULT_THEME } from "../src/themes.js";
+import { THEMES, MODIFIERS, DEFAULT_THEME } from "../src/themes.js";
 
 const kind = ["themes", "website"].find((k) => process.argv.includes(k));
 const sizes =
@@ -28,7 +28,9 @@ await mkdir(out, { recursive: true });
 const browser = await chromium.launch();
 for (const [label, width, height] of sizes)
   for (const theme of themes)
-    for (const mode of ["light", "dark"]) {
+    for (const mode of kind === "themes"
+      ? MODIFIERS.map((m) => m.id)
+      : ["day", "default"]) {
       const page = await browser.newPage({
         viewport: { width, height },
         deviceScaleFactor: 1,
@@ -55,7 +57,7 @@ for (const [label, width, height] of sizes)
       await page.waitForTimeout(400);
       const name =
         kind === "website"
-          ? `hexshift-editor-${mode}.png`
+          ? `hexshift-editor-${mode === "day" ? "light" : "dark"}.png`
           : kind === "themes"
             ? `theme-${theme}-${mode}.png`
             : `${label}-${width}x${height}-${mode}.png`;
