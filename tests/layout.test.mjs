@@ -15,6 +15,7 @@ import {
   showPanel,
   applyPreset,
   validateLayout,
+  fitSavedSizes,
 } from "../src/layout.js";
 
 const presets = {
@@ -162,4 +163,43 @@ test("phone tab order moves without touching regions, and a preset restores them
   assert.equal(restored.layout.mode, "dock");
   assert.deepEqual(restored.layout.hidden, []);
   assert.equal(restored.layout.regions.bottom.length, 3);
+});
+
+test("saved column sizes fit the window and the stored choice is not rewritten", () => {
+  const preferred = { left: 520, right: 520, dock: 600 };
+  const narrow = fitSavedSizes(preferred, {
+    width: 800,
+    height: 640,
+    left: true,
+    right: true,
+    bottom: true,
+  });
+  assert.equal(narrow.left + narrow.right, 440);
+  assert.ok(narrow.left < 520 && narrow.right < 520);
+  assert.equal(narrow.dock, 420);
+  assert.deepEqual(preferred, { left: 520, right: 520, dock: 600 });
+  const wide = fitSavedSizes(preferred, {
+    width: 1920,
+    height: 1000,
+    left: true,
+    right: true,
+    bottom: false,
+  });
+  assert.deepEqual(
+    { left: wide.left, right: wide.right, dock: wide.dock },
+    { left: 520, right: 520, dock: null },
+  );
+  const one = fitSavedSizes(
+    { left: null, right: 520, dock: null },
+    { width: 800, height: 720, left: false, right: true, bottom: false },
+  );
+  assert.deepEqual(one, { left: null, right: 440, dock: null });
+  const unknown = fitSavedSizes(preferred, {
+    width: 0,
+    height: 0,
+    left: true,
+    right: true,
+    bottom: true,
+  });
+  assert.deepEqual(unknown, preferred);
 });

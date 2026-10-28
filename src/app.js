@@ -291,10 +291,13 @@ function stash() {
     },
     variants: {
       key: variantsKey,
+      set: variantSet,
       nodes: [...$("variants").children],
       hidden: $("variants").hidden,
       exportHidden: $("exportVariants").hidden,
       stale: $("variants").classList.contains("stale"),
+      label: $("variantsLabel").textContent,
+      labelHidden: $("variantsLabel").hidden,
       note: $("variantsNote").textContent,
       noteHidden: $("variantsNote").hidden,
     },
@@ -354,10 +357,13 @@ function unstash(doc) {
     canvas.height = h;
   }
   variantsKey = doc.variants?.key ?? null;
+  variantSet = doc.variants?.set ?? null;
   $("variants").replaceChildren(...(doc.variants?.nodes || []));
   $("variants").hidden = doc.variants?.hidden ?? true;
   $("exportVariants").hidden = doc.variants?.exportHidden ?? true;
   $("variants").classList.toggle("stale", !!doc.variants?.stale);
+  $("variantsLabel").textContent = doc.variants?.label || "";
+  $("variantsLabel").hidden = doc.variants?.labelHidden ?? true;
   $("variantsNote").textContent = doc.variants?.note || "";
   $("variantsNote").hidden = doc.variants?.noteHidden ?? true;
   sync();
@@ -847,7 +853,7 @@ function renderSavedSets() {
     $("paletteSet").value = selected;
   $("savedEmpty").hidden = !!colourStore.saved().length;
   // Saving an unrelated colour must not discard the current variant previews.
-  if (JSON.stringify(currentSet()) !== renderedPalette) renderSet();
+  if (JSON.stringify(currentSet()) !== renderedPalette) renderSet(false);
 }
 createSavedGrid($("savedColours"), { store: colourStore, onUse: setTarget });
 colourStore.subscribe(renderSavedSets);
@@ -856,7 +862,7 @@ function useEntry(entry) {
   if (entry.ramp) setRamp(entry.ramp);
   else setTarget(entry.hex);
 }
-function renderSet() {
+function renderSet(clear = false) {
   const set = currentSet(),
     named =
       set.entries.length <= 8 && set.entries.some((e) => e.label !== e.hex),
@@ -894,9 +900,9 @@ function renderSet() {
       return b;
     }),
   );
-  clearVariants();
+  if (clear) clearVariants();
 }
-$("paletteSet").onchange = renderSet;
+$("paletteSet").onchange = () => renderSet(true);
 // Typed colours: hex, rgb() and hsl() directly; colour names and newer CSS
 // syntax through the browser's own parser (opaque colours only).
 const probe = document
@@ -2046,7 +2052,7 @@ async function openPalette(source, label) {
     $("paletteSet").value = set.id;
     // A palette that was just opened is shown, even if the panel was collapsed.
     workspace.setCollapsed("swatches", false);
-    renderSet();
+    renderSet(true);
     status(
       "Opened " +
         set.label +
@@ -2088,7 +2094,7 @@ $("paletteForm").onsubmit = (e) => {
   e.preventDefault();
   if (colourStore.savePalette($("paletteName").value, paletteToKeep)) {
     $("paletteSet").value = "my-" + (colourStore.get().palettes.length - 1);
-    renderSet();
+    renderSet(true);
     $("paletteDialog").close();
   } else $("paletteNameError").textContent = colourStore.error;
 };
@@ -2141,7 +2147,23 @@ if (pickFromScreen) {
 const MAX_VARIANTS = 64;
 let variantRun = 0,
   variantsKey = null,
+  variantSet = null,
   mainImage = null;
+function cloneVariantSet(set) {
+  return {
+    id: set.id,
+    label: set.label,
+    entries: set.entries.slice(0, MAX_VARIANTS).map((entry) => ({
+      label: entry.label,
+      hex: entry.hex,
+      ramp: entry.ramp ? entry.ramp.slice() : null,
+    })),
+  };
+}
+function showVariantSet(set) {
+  $("variantsLabel").hidden = false;
+  $("variantsLabel").textContent = "Variants: " + set.label;
+}
 function variantParams(entry) {
   const p = structuredClone(params);
   p.ramp = entry.ramp ? entry.ramp.slice() : null;
@@ -2189,10 +2211,13 @@ async function variantImage() {
 function clearVariants() {
   variantRun++;
   variantsKey = null;
+  variantSet = null;
   $("variants").hidden =
     $("exportVariants").hidden =
     $("variantsNote").hidden =
+    $("variantsLabel").hidden =
       true;
+  $("variantsLabel").textContent = "";
   $("variants").replaceChildren();
 }
 function markVariants() {
@@ -2203,12 +2228,13 @@ function markVariants() {
   $("variants").classList.toggle("stale", stale);
   $("variantsNote").hidden = !stale;
   $("variantsNote").textContent =
-    "The selection, treatment or outline changed. Make variants again to update the previews; export always uses the current settings.";
+    "The selection, treatment or outline changed. Make variants again to update the previews. Export refreshes these previews, then saves them.";
 }
-async function makeVariants() {
-  if (!pixels || batchAbort) return;
+// `set` is the captured palette. Previews and the ZIP both use it, so a later
+// change to the palette selector cannot export a different set of colours.
+async function paintVariants(set) {
   const run = ++variantRun,
-    entries = currentSet().entries.slice(0, MAX_VARIANTS);
+    entries = set.entries;
   commit("Adjust colour");
   try {
     const image = await variantImage(),
@@ -2219,7 +2245,7 @@ async function makeVariants() {
       fit = box / Math.max(w, h),
       tw = Math.max(1, Math.round(w * fit)),
       th = Math.max(1, Math.round(h * fit));
-    if (run !== variantRun) return;
+    if (run !== variantRun) return false;
     const tiles = entries.map((entry) => {
       const tile = document.createElement("button"),
         canvas = document.createElement("canvas"),
@@ -2238,7 +2264,9 @@ async function makeVariants() {
     $("variants").classList.remove("stale");
     $("variants").hidden = false;
     $("variantsNote").hidden = true;
+    variantSet = set;
     variantsKey = key;
+    showVariantSet(set);
     status("Making " + entries.length + " variants…");
     for (const { canvas, entry } of tiles) {
       const r = await processEdit(
@@ -2249,7 +2277,7 @@ async function makeVariants() {
         pause,
         () => run !== variantRun,
       );
-      if (run !== variantRun) return;
+      if (run !== variantRun) return false;
       // With the outline on, a tile shows the variant as it will be exported,
       // outline included, fitted into the tile.
       if (settings.outline)
@@ -2262,7 +2290,7 @@ async function makeVariants() {
             (box - tw) >> 1,
             (box - th) >> 1,
           );
-      if (run !== variantRun) return;
+      if (run !== variantRun) return false;
     }
     $("exportVariants").hidden = false;
     status(
@@ -2270,21 +2298,33 @@ async function makeVariants() {
         entries.length +
         " variants. Click one to use it, or export them all.",
     );
+    return true;
   } catch (e) {
     if (run === variantRun) status("Could not make variants: " + e.message);
+    return false;
   }
 }
+async function makeVariants() {
+  if (!pixels || batchAbort || !currentSet().entries.length) return;
+  await paintVariants(cloneVariantSet(currentSet()));
+}
 async function exportVariants() {
-  if (batchAbort || !pixels) return;
-  const iid = imageId,
-    revision = editId,
-    valid = () => iid === imageId && revision === editId;
+  if (batchAbort || !pixels || !variantSet) return;
   const button = $("exportVariants");
   if (button.dataset.busy) return;
   button.dataset.busy = "true";
   try {
-    const set = currentSet(),
-      entries = set.entries.slice(0, MAX_VARIANTS),
+    // A stale preview would otherwise save different pixels from the ones on
+    // screen. Refresh that same captured palette first, then export it.
+    if (selectionKey() !== variantsKey) {
+      const painted = await paintVariants(variantSet);
+      if (!painted) return;
+    }
+    const iid = imageId,
+      revision = editId,
+      valid = () => iid === imageId && revision === editId,
+      set = variantSet,
+      entries = set.entries,
       image = await variantImage(),
       settings = finishSettings(),
       files = [];

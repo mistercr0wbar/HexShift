@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-PdcodWtpuDDpsiG/d8GK3oPr3nu2L8bY+LpaM/FzzKs='; style-src 'sha256-Pry8E2C6YHJZaVAo44+RuCPVc10AQuARcFPFWdgfa0w='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-RxxEBYsJosv6tJvzFg85A0vvH2AjwQNFPf97ZmRX0Qc='; style-src 'sha256-le1mylaUmrLj5BRpF6NOqfwqsT2+nKmU1mjpqhCrJOA='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta
       name="theme-color"
@@ -900,7 +900,23 @@ summary::marker {
 .panel {
   flex: none;
   min-width: 0;
+  min-height: 0;
   border-bottom: 1px solid var(--line);
+}
+/* A chosen panel height is a limit, not a suggestion. The header stays put
+   and the body scrolls, so a short panel cannot paint over the one below it. */
+.panel[style*="height:"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.panel[style*="height:"] > .panel-head {
+  flex: none;
+}
+.panel[style*="height:"] > .panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }
 .panel-head {
   display: flex;
@@ -3106,6 +3122,7 @@ dialog details {
                   >
                     Make a variant for each colour
                   </button>
+                  <p id="variantsLabel" class="readout" hidden></p>
                   <p id="variantsNote" class="readout" hidden></p>
                   <div id="variants" class="variants" hidden></div>
                   <button
@@ -8838,6 +8855,39 @@ dialog details {
   var MODES = ["auto", "side", "column", "dock", "custom"];
   var SIZE_LIMITS = { left: [200, 520], right: [200, 520], dock: [120, 600] };
   var SPAN_LIMITS = [80, 800];
+  var EDITOR_RESERVE = 360;
+  var CENTRE_MIN = 220;
+  function fitSavedSizes(preferred, { width, height, left = false, right = false, bottom = false }) {
+    const out = { left: null, right: null, dock: null };
+    if (!(width > 0) || !(height > 0)) {
+      if (left && preferred.left != null) out.left = preferred.left;
+      if (right && preferred.right != null) out.right = preferred.right;
+      if (bottom && preferred.dock != null) out.dock = preferred.dock;
+      return out;
+    }
+    const shown = [];
+    if (left && preferred.left != null) shown.push("left");
+    if (right && preferred.right != null) shown.push("right");
+    const room = Math.max(0, width - EDITOR_RESERVE);
+    if (shown.length === 2) {
+      const sum = preferred.left + preferred.right;
+      if (sum > room && sum > 0) {
+        out.left = Math.floor(preferred.left * room / sum);
+        out.right = room - out.left;
+      } else {
+        out.left = preferred.left;
+        out.right = preferred.right;
+      }
+    } else if (shown.length === 1) {
+      const key = shown[0];
+      out[key] = Math.min(preferred[key], room);
+    }
+    if (bottom && preferred.dock != null) {
+      const maxDock = Math.max(SIZE_LIMITS.dock[0], height - CENTRE_MIN);
+      out.dock = Math.min(preferred.dock, maxDock);
+    }
+    return out;
+  }
   var TITLES = {
     selection: "Selection",
     colour: "Colour",
@@ -9440,11 +9490,28 @@ dialog details {
         main.style.gridTemplateAreas = `"${top.join(" ")}"`;
       }
     }
-    function applySizes() {
+    function applySizes({ replace = true } = {}) {
       const names = { left: "--col-left", right: "--col-right", dock: "--dock-h" };
+      if (preset === "phone") {
+        if (replace)
+          for (const cssName of Object.values(names))
+            app.style.removeProperty(cssName);
+        return;
+      }
+      const fitted2 = fitSavedSizes(layout2.sizes, {
+        width: main.clientWidth,
+        height: main.clientHeight,
+        left: !regions.left.hidden,
+        right: !regions.right.hidden,
+        bottom: !regions.bottom.hidden
+      });
       for (const [key, cssName] of Object.entries(names)) {
-        if (layout2.sizes[key] == null) app.style.removeProperty(cssName);
-        else app.style.setProperty(cssName, layout2.sizes[key] + "px");
+        const value = fitted2[key];
+        if (layout2.sizes[key] == null || value == null) {
+          if (replace) app.style.removeProperty(cssName);
+          continue;
+        }
+        app.style.setProperty(cssName, value + "px");
       }
     }
     function syncPhoneTabs() {
@@ -9493,7 +9560,6 @@ dialog details {
       preset = next;
       main.dataset.preset = next;
       clearInlineGrid();
-      applySizes();
       if (next === "phone") {
         const ids = phoneOrder();
         place({ left: [], right: [], bottom: ids.length ? [ids] : [] });
@@ -9507,6 +9573,7 @@ dialog details {
       syncPhoneTabs();
       refreshSplits();
       syncLocks();
+      applySizes({ replace: true });
     }
     const overflowing = () => [...main.querySelectorAll(".region:not([hidden]) .stack")].some(
       (s) => s.scrollHeight > s.clientHeight + 1
@@ -10002,7 +10069,10 @@ dialog details {
       reset: reset2,
       refresh() {
         const next = presented();
-        if (next === preset) return false;
+        if (next === preset) {
+          applySizes({ replace: false });
+          return false;
+        }
         applyCurrent();
         fit2();
         onPreset?.(next);
@@ -10869,7 +10939,7 @@ dialog details {
   // src/app.js
   var $ = (id) => document.getElementById(id);
   var pause = makePause();
-  var VERSION = "3.5.0";
+  var VERSION = "3.5.1";
   var w = 0;
   var h = 0;
   var name = "";
@@ -11067,10 +11137,13 @@ dialog details {
       },
       variants: {
         key: variantsKey,
+        set: variantSet,
         nodes: [...$("variants").children],
         hidden: $("variants").hidden,
         exportHidden: $("exportVariants").hidden,
         stale: $("variants").classList.contains("stale"),
+        label: $("variantsLabel").textContent,
+        labelHidden: $("variantsLabel").hidden,
         note: $("variantsNote").textContent,
         noteHidden: $("variantsNote").hidden
       }
@@ -11127,10 +11200,13 @@ dialog details {
       canvas.height = h;
     }
     variantsKey = doc.variants?.key ?? null;
+    variantSet = doc.variants?.set ?? null;
     $("variants").replaceChildren(...doc.variants?.nodes || []);
     $("variants").hidden = doc.variants?.hidden ?? true;
     $("exportVariants").hidden = doc.variants?.exportHidden ?? true;
     $("variants").classList.toggle("stale", !!doc.variants?.stale);
+    $("variantsLabel").textContent = doc.variants?.label || "";
+    $("variantsLabel").hidden = doc.variants?.labelHidden ?? true;
     $("variantsNote").textContent = doc.variants?.note || "";
     $("variantsNote").hidden = doc.variants?.noteHidden ?? true;
     sync();
@@ -11560,7 +11636,7 @@ dialog details {
     if ([...$("paletteSet").options].some((option) => option.value === selected))
       $("paletteSet").value = selected;
     $("savedEmpty").hidden = !!colourStore.saved().length;
-    if (JSON.stringify(currentSet()) !== renderedPalette) renderSet();
+    if (JSON.stringify(currentSet()) !== renderedPalette) renderSet(false);
   }
   createSavedGrid($("savedColours"), { store: colourStore, onUse: setTarget });
   colourStore.subscribe(renderSavedSets);
@@ -11569,7 +11645,7 @@ dialog details {
     if (entry.ramp) setRamp(entry.ramp);
     else setTarget(entry.hex);
   }
-  function renderSet() {
+  function renderSet(clear = false) {
     const set = currentSet(), named = set.entries.length <= 8 && set.entries.some((e) => e.label !== e.hex), box = $("presets");
     renderedPalette = JSON.stringify(set);
     $("makeVariants").disabled = !pixels || params.mode === "transparent" || !set.entries.length;
@@ -11594,9 +11670,9 @@ dialog details {
         return b;
       })
     );
-    clearVariants();
+    if (clear) clearVariants();
   }
-  $("paletteSet").onchange = renderSet;
+  $("paletteSet").onchange = () => renderSet(true);
   var probe = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
   function readColour(value) {
     const direct = parseColour(value);
@@ -12555,7 +12631,7 @@ dialog details {
       addSetOption(set);
       $("paletteSet").value = set.id;
       workspace.setCollapsed("swatches", false);
-      renderSet();
+      renderSet(true);
       status(
         "Opened " + set.label + " with " + entries2.length + (entries2.length === 1 ? " colour." : " colours.")
       );
@@ -12589,7 +12665,7 @@ dialog details {
     e.preventDefault();
     if (colourStore.savePalette($("paletteName").value, paletteToKeep)) {
       $("paletteSet").value = "my-" + (colourStore.get().palettes.length - 1);
-      renderSet();
+      renderSet(true);
       $("paletteDialog").close();
     } else $("paletteNameError").textContent = colourStore.error;
   };
@@ -12633,7 +12709,23 @@ dialog details {
   var MAX_VARIANTS = 64;
   var variantRun = 0;
   var variantsKey = null;
+  var variantSet = null;
   var mainImage = null;
+  function cloneVariantSet(set) {
+    return {
+      id: set.id,
+      label: set.label,
+      entries: set.entries.slice(0, MAX_VARIANTS).map((entry) => ({
+        label: entry.label,
+        hex: entry.hex,
+        ramp: entry.ramp ? entry.ramp.slice() : null
+      }))
+    };
+  }
+  function showVariantSet(set) {
+    $("variantsLabel").hidden = false;
+    $("variantsLabel").textContent = "Variants: " + set.label;
+  }
   function variantParams(entry) {
     const p = structuredClone(params);
     p.ramp = entry.ramp ? entry.ramp.slice() : null;
@@ -12676,7 +12768,9 @@ dialog details {
   function clearVariants() {
     variantRun++;
     variantsKey = null;
-    $("variants").hidden = $("exportVariants").hidden = $("variantsNote").hidden = true;
+    variantSet = null;
+    $("variants").hidden = $("exportVariants").hidden = $("variantsNote").hidden = $("variantsLabel").hidden = true;
+    $("variantsLabel").textContent = "";
     $("variants").replaceChildren();
   }
   function markVariants() {
@@ -12685,15 +12779,14 @@ dialog details {
     const stale = selectionKey() !== variantsKey;
     $("variants").classList.toggle("stale", stale);
     $("variantsNote").hidden = !stale;
-    $("variantsNote").textContent = "The selection, treatment or outline changed. Make variants again to update the previews; export always uses the current settings.";
+    $("variantsNote").textContent = "The selection, treatment or outline changed. Make variants again to update the previews. Export refreshes these previews, then saves them.";
   }
-  async function makeVariants() {
-    if (!pixels || batchAbort) return;
-    const run = ++variantRun, entries2 = currentSet().entries.slice(0, MAX_VARIANTS);
+  async function paintVariants(set) {
+    const run = ++variantRun, entries2 = set.entries;
     commit("Adjust colour");
     try {
       const image = await variantImage(), key = selectionKey(), settings = finishSettings(), dpr = window.devicePixelRatio || 1, box = Math.round(56 * dpr), fit2 = box / Math.max(w, h), tw = Math.max(1, Math.round(w * fit2)), th = Math.max(1, Math.round(h * fit2));
-      if (run !== variantRun) return;
+      if (run !== variantRun) return false;
       const tiles = entries2.map((entry) => {
         const tile = document.createElement("button"), canvas = document.createElement("canvas"), label2 = document.createElement("span");
         tile.type = "button";
@@ -12710,7 +12803,9 @@ dialog details {
       $("variants").classList.remove("stale");
       $("variants").hidden = false;
       $("variantsNote").hidden = true;
+      variantSet = set;
       variantsKey = key;
+      showVariantSet(set);
       status("Making " + entries2.length + " variants\u2026");
       for (const { canvas, entry } of tiles) {
         const r = await processEdit(
@@ -12721,7 +12816,7 @@ dialog details {
           pause,
           () => run !== variantRun
         );
-        if (run !== variantRun) return;
+        if (run !== variantRun) return false;
         if (settings.outline)
           drawFitted(canvas, await outlinedBase(r.pixels, settings), box);
         else
@@ -12730,24 +12825,33 @@ dialog details {
             box - tw >> 1,
             box - th >> 1
           );
-        if (run !== variantRun) return;
+        if (run !== variantRun) return false;
       }
       $("exportVariants").hidden = false;
       status(
         "Made " + entries2.length + " variants. Click one to use it, or export them all."
       );
+      return true;
     } catch (e) {
       if (run === variantRun) status("Could not make variants: " + e.message);
+      return false;
     }
   }
+  async function makeVariants() {
+    if (!pixels || batchAbort || !currentSet().entries.length) return;
+    await paintVariants(cloneVariantSet(currentSet()));
+  }
   async function exportVariants() {
-    if (batchAbort || !pixels) return;
-    const iid = imageId, revision = editId, valid = () => iid === imageId && revision === editId;
+    if (batchAbort || !pixels || !variantSet) return;
     const button2 = $("exportVariants");
     if (button2.dataset.busy) return;
     button2.dataset.busy = "true";
     try {
-      const set = currentSet(), entries2 = set.entries.slice(0, MAX_VARIANTS), image = await variantImage(), settings = finishSettings(), files = [];
+      if (selectionKey() !== variantsKey) {
+        const painted = await paintVariants(variantSet);
+        if (!painted) return;
+      }
+      const iid = imageId, revision = editId, valid = () => iid === imageId && revision === editId, set = variantSet, entries2 = set.entries, image = await variantImage(), settings = finishSettings(), files = [];
       if (!valid()) throw Error("The image changed. Export the variants again.");
       for (const [i, entry] of entries2.entries()) {
         if (!valid())
@@ -14479,6 +14583,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 Original C# port and code by Christian Winnerlein (CodesInChaos), public domain, https://github.com/CodesInChaos/Chaos.NaCl . Poly1305 by Andrew M. (floodyberry), MIT or public domain. Curve25519, Ed25519, Salsa20 and HSalsa20 from SUPERCOP ref10 by Dan Bernstein, public domain (http://bench.cr.yp.to/supercop.html). SHA512 by Christian Winnerlein, public domain.</pre></template>
     <template id="release-notes"><pre># Hex Shift 3
+
+**New in 3.5.1:** Three repairs. Variant previews keep the palette they were made from: switching tabs and choosing another palette no longer exports that other palette, and the line above the previews names the set ("Variants: Discord buttons"). Changing or deleting a saved palette does not change variants already made. If the selection, treatment or outline changed, export refreshes those same previews and then saves them. A panel resized very short scrolls inside itself instead of covering the panel below. Column widths you chose are remembered, and a narrower window fits them around the picture instead of squeezing the picture to nothing; widening the window brings the chosen widths back.
 
 **New in 3.5.0:** Panels can be arranged. Each header has a drag grip, the fold control, and a **…** menu: Move to left column, Move to right column, Move to bottom, Move up, Move down, and Hide. Drop a panel on the left column, the right column, or the bottom dock; a marker shows where it will land. Empty columns disappear. Handles resize the columns, the dock, and stacked panels. **View → Panels** shows or hides a panel, and **View → Layout** picks Side columns, Bottom dock, or One right column, locks the arrangement, or resets it. The choice is kept on this device as `hexshift-layout` and is checked when it is read; a file that cannot be read is ignored. It stores no images. On a phone the same menu reorders the sheet's tabs. Reset layout returns to the automatic arrangement, which still follows the window: two columns when it is wide, one column when it is narrower, a dock when it is tall, and the phone sheet when it is small. Folding a panel yourself is remembered; the automatic fold is not. On a short window Swatches folds, then Outline. In one right column Export folds as well, and Selection after that if the column is still too short.
 

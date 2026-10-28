@@ -21,7 +21,51 @@ export const LAYOUT_KEY = "hexshift-layout",
   REGIONS = ["left", "right", "bottom"],
   MODES = ["auto", "side", "column", "dock", "custom"],
   SIZE_LIMITS = { left: [200, 520], right: [200, 520], dock: [120, 600] },
-  SPAN_LIMITS = [80, 800];
+  SPAN_LIMITS = [80, 800],
+  // The picture keeps this much width while saved column sizes are fitted.
+  // 360 is the same reserve the column handles already use while dragging.
+  EDITOR_RESERVE = 360,
+  // The dock preset's centre row is minmax(220px, 1fr). Fitting a saved dock
+  // height leaves at least that much for the picture.
+  CENTRE_MIN = 220;
+
+// Saved column and dock sizes are what the person chose. The sizes applied to
+// the page can be smaller while the window cannot hold them. Null stays null
+// so the stylesheet's own clamp is left alone. The stored sizes are not changed.
+export function fitSavedSizes(
+  preferred,
+  { width, height, left = false, right = false, bottom = false },
+) {
+  const out = { left: null, right: null, dock: null };
+  if (!(width > 0) || !(height > 0)) {
+    if (left && preferred.left != null) out.left = preferred.left;
+    if (right && preferred.right != null) out.right = preferred.right;
+    if (bottom && preferred.dock != null) out.dock = preferred.dock;
+    return out;
+  }
+  const shown = [];
+  if (left && preferred.left != null) shown.push("left");
+  if (right && preferred.right != null) shown.push("right");
+  const room = Math.max(0, width - EDITOR_RESERVE);
+  if (shown.length === 2) {
+    const sum = preferred.left + preferred.right;
+    if (sum > room && sum > 0) {
+      out.left = Math.floor((preferred.left * room) / sum);
+      out.right = room - out.left;
+    } else {
+      out.left = preferred.left;
+      out.right = preferred.right;
+    }
+  } else if (shown.length === 1) {
+    const key = shown[0];
+    out[key] = Math.min(preferred[key], room);
+  }
+  if (bottom && preferred.dock != null) {
+    const maxDock = Math.max(SIZE_LIMITS.dock[0], height - CENTRE_MIN);
+    out.dock = Math.min(preferred.dock, maxDock);
+  }
+  return out;
+}
 
 const TITLES = {
   selection: "Selection",

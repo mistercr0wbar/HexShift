@@ -877,7 +877,23 @@ summary::marker {
 .panel {
   flex: none;
   min-width: 0;
+  min-height: 0;
   border-bottom: 1px solid var(--line);
+}
+/* A chosen panel height is a limit, not a suggestion. The header stays put
+   and the body scrolls, so a short panel cannot paint over the one below it. */
+.panel[style*="height:"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.panel[style*="height:"] > .panel-head {
+  flex: none;
+}
+.panel[style*="height:"] > .panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }
 .panel-head {
   display: flex;
