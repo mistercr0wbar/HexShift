@@ -145,6 +145,13 @@ fieldset {
   clip-path: inset(50%);
   white-space: nowrap;
 }
+#dropIndicator {
+  position: fixed;
+  z-index: 30;
+  pointer-events: none;
+  background: var(--accent);
+  border-radius: 2px;
+}
 .sprite {
   position: absolute;
   width: 0;
@@ -832,6 +839,39 @@ summary::marker {
   align-self: start;
   margin-top: -3px;
 }
+.main[data-preset="custom"] #splitLeft {
+  display: block;
+  grid-area: left;
+  justify-self: end;
+  margin-right: -3px;
+}
+.main[data-preset="custom"] #splitRight {
+  display: block;
+  grid-area: right;
+  justify-self: start;
+  margin-left: -3px;
+}
+.main[data-preset="custom"] #dockHandle {
+  display: block;
+  grid-area: bottom;
+  align-self: start;
+  margin-top: -3px;
+}
+.panel-split {
+  flex: none;
+  height: 6px;
+  margin: -3px 0;
+  cursor: row-resize;
+  touch-action: none;
+  position: relative;
+  z-index: 2;
+}
+.panel-split:hover,
+.panel-split:focus-visible,
+.panel-split.dragging {
+  background: var(--accent);
+  outline: none;
+}
 
 /* Panels */
 .panel {
@@ -842,27 +882,70 @@ summary::marker {
 .panel-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px;
+  gap: 4px;
+  min-width: 0;
   min-height: var(--head);
-  padding: 0 6px 0 2px;
+  padding: 0 4px 0 2px;
+  overflow: hidden;
 }
 .panel-head h2 {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
 }
+.panel-grip {
+  flex: none;
+  width: 12px;
+  align-self: stretch;
+  min-height: 18px;
+  margin: 4px 0;
+  border-radius: 4px;
+  background-image: radial-gradient(circle, var(--muted) 1px, transparent 1.25px);
+  background-size: 4px 4px;
+  background-position: center;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.panel-grip:active {
+  cursor: grabbing;
+}
+.panel-menu {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  line-height: 1;
+}
+.panel-menu:hover,
+.panel-menu[aria-expanded="true"] {
+  background: var(--hover);
+  color: var(--ink);
+}
+.panel-head .text-button {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .panel-toggle {
   display: flex;
   align-items: center;
   gap: 4px;
   width: 100%;
+  min-width: 0;
   min-height: var(--head);
-  padding: 0 8px;
+  padding: 0 4px;
+  overflow: hidden;
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -2064,6 +2147,9 @@ dialog details {
 .main[data-preset="phone"] .panel-toggle {
   cursor: default;
   pointer-events: none;
+}
+.main[data-preset="phone"] .panel-grip {
+  display: none;
 }
 .main[data-preset="phone"] .chev {
   display: none;

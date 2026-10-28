@@ -277,6 +277,209 @@ test("panels collapse by their headers, and the layout follows the window", asyn
   await expect(page.locator("#size")).toBeVisible();
 });
 
+async function openView(page) {
+  await page
+    .getByRole("menubar")
+    .getByRole("menuitem", { name: "View", exact: true })
+    .click();
+}
+async function chooseLayout(page, name) {
+  await openView(page);
+  await page.getByRole("menuitem", { name: "Layout", exact: true }).click();
+  await page.getByRole("menuitemradio", { name, exact: true }).click();
+}
+
+test("dragging a panel to another column shows where it will land", async ({
+  page,
+}) => {
+  const grip = page.locator('[data-panel="selection"] .panel-grip'),
+    from = await grip.boundingBox(),
+    colour = await page.locator('[data-panel="colour"]').boundingBox();
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(colour.x + 30, colour.y + 12, { steps: 12 });
+  await expect(page.locator("#dropIndicator")).toBeVisible();
+  await page.mouse.up();
+  await expect(page.locator("#layoutLive")).toHaveText(
+    "Selection moved to the right column.",
+  );
+  await expect(
+    page.locator('[data-region="right"] [data-panel="selection"]'),
+  ).toHaveCount(1);
+  await expect(page.locator('[data-region="left"]')).toBeHidden();
+});
+
+test("keyboard moves persist across a reload and reset clears them", async ({
+  page,
+}) => {
+  await page.locator('[data-panel="adjust"] .panel-menu').click();
+  await page.getByRole("menuitem", { name: "Move up", exact: true }).click();
+  await expect(page.locator("#layoutLive")).toHaveText("Adjust moved up.");
+  const adjust = await page.locator('[data-panel="adjust"]').boundingBox(),
+    colour = await page.locator('[data-panel="colour"]').boundingBox();
+  expect(adjust.y).toBeLessThan(colour.y);
+
+  await page.locator('[data-panel="outline"] .panel-menu').click();
+  await page
+    .getByRole("menuitem", { name: "Move to left column", exact: true })
+    .click();
+  await expect(page.locator("#layoutLive")).toHaveText(
+    "Outline moved to the left column.",
+  );
+  await page.reload();
+  await ready(page);
+  await expect(
+    page.locator('[data-region="left"] [data-panel="outline"]'),
+  ).toHaveCount(1);
+  await expect(page.locator("#main")).toHaveAttribute("data-preset", "custom");
+
+  await openView(page);
+  await page.getByRole("menuitem", { name: "Panels", exact: true }).click();
+  await page
+    .getByRole("menuitemcheckbox", { name: "Swatches", exact: true })
+    .click();
+  await expect(page.locator("#layoutLive")).toHaveText("Swatches hidden.");
+  await expect(page.locator('[data-panel="swatches"]')).toBeHidden();
+
+  await openView(page);
+  await page.getByRole("menuitem", { name: "Layout", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Reset layout", exact: true }).click();
+  await expect(page.locator("#layoutLive")).toHaveText("Layout reset.");
+  await expect(
+    page.locator('[data-region="left"] [data-panel="selection"]'),
+  ).toHaveCount(1);
+  await expect(
+    page.locator('[data-region="left"] [data-panel="outline"]'),
+  ).toHaveCount(0);
+  await expect(page.locator('[data-panel="swatches"]')).toBeVisible();
+  expect(
+    await page.evaluate(() => localStorage.getItem("hexshift-layout")),
+  ).toBeNull();
+});
+
+test("a locked layout ignores moves, and reset still clears it", async ({
+  page,
+}) => {
+  await openView(page);
+  await page.getByRole("menuitem", { name: "Layout", exact: true }).click();
+  await page
+    .getByRole("menuitemcheckbox", { name: "Lock layout", exact: true })
+    .click();
+  await expect(page.locator("#layoutLive")).toHaveText("Layout locked.");
+  await page.locator('[data-panel="outline"] .panel-menu').click();
+  const move = page.getByRole("menuitem", {
+    name: "Move to left column",
+    exact: true,
+  });
+  await expect(move).toHaveAttribute("aria-disabled", "true");
+  await move.click({ force: true });
+  await expect(
+    page.locator('[data-region="right"] [data-panel="outline"]'),
+  ).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  await openView(page);
+  await page.getByRole("menuitem", { name: "Layout", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Reset layout", exact: true }).click();
+  await expect(page.locator("#layoutLive")).toHaveText("Layout reset.");
+  await openView(page);
+  await page.getByRole("menuitem", { name: "Layout", exact: true }).click();
+  await expect(
+    page.getByRole("menuitemcheckbox", { name: "Lock layout", exact: true }),
+  ).toHaveAttribute("aria-checked", "false");
+});
+
+test("an unreadable layout is ignored and left untouched", async ({ page }) => {
+  await page.evaluate(() => localStorage.setItem("hexshift-layout", "{"));
+  await page.reload();
+  await ready(page);
+  await expect(page.locator("#status")).toContainText(
+    "Saved layout could not be read and was ignored.",
+  );
+  await expect(page.locator("#main")).toHaveAttribute("data-preset", "side");
+  expect(
+    await page.evaluate(() => localStorage.getItem("hexshift-layout")),
+  ).toBe("{");
+});
+
+test("phone tabs move from the keyboard and the order is kept", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await expect(page.locator("#main")).toHaveAttribute("data-preset", "phone");
+  await page.locator('.dock-tabs [data-tab="swatches"]').click();
+  await page.locator('[data-panel="swatches"] .panel-menu').click();
+  await page
+    .getByRole("menuitem", { name: "Move tab later", exact: true })
+    .click();
+  await expect(page.locator("#layoutLive")).toHaveText(
+    "Swatches tab moved later.",
+  );
+  await expect(page.locator(".dock-tabs button")).toHaveText([
+    "Selection",
+    "Colour",
+    "Export",
+    "Swatches",
+  ]);
+  await page.reload();
+  await settled(page);
+  await expect(page.locator(".dock-tabs button")).toHaveText([
+    "Selection",
+    "Colour",
+    "Export",
+    "Swatches",
+  ]);
+  expect(
+    await page.evaluate(
+      () => JSON.parse(localStorage.getItem("hexshift-layout")).mode,
+    ),
+  ).toBe("auto");
+});
+
+test("each layout fits without scrolling at the desktop sizes and on a phone", async ({
+  page,
+}) => {
+  test.setTimeout(90000);
+  const fits = () =>
+    page.evaluate(() => {
+      const gone = (el) =>
+        !!el.closest("[hidden]") || getComputedStyle(el).display === "none";
+      const stacks = [...document.querySelectorAll(".stack")].filter(
+        (el) => !gone(el),
+      );
+      const bodies = [...document.querySelectorAll(".panel-body")].filter(
+        (el) => !gone(el),
+      );
+      return (
+        document.documentElement.scrollWidth <= innerWidth &&
+        stacks.every((el) => el.scrollHeight <= el.clientHeight + 1) &&
+        bodies.every((el) => el.scrollHeight <= el.clientHeight + 1)
+      );
+    });
+  for (const [name, preset] of [
+    ["Side columns", "side"],
+    ["One right column", "column"],
+    ["Bottom dock", "dock"],
+  ])
+    for (const [width, height] of [
+      [1920, 1080],
+      [1366, 768],
+      [1280, 720],
+    ]) {
+      await page.setViewportSize({ width, height });
+      await chooseLayout(page, name);
+      await expect(page.locator("#main")).toHaveAttribute(
+        "data-preset",
+        preset,
+      );
+      await expect
+        .poll(fits, { message: `${name} at ${width}×${height}` })
+        .toBe(true);
+    }
+  await page.setViewportSize({ width: 360, height: 800 });
+  await expect(page.locator("#main")).toHaveAttribute("data-preset", "phone");
+  await expect.poll(fits, { message: "phone at 360" }).toBe(true);
+});
+
 test("the tools sit on the canvas, with their keys, and a brush shows its size", async ({
   page,
 }) => {
@@ -378,7 +581,9 @@ test("the menu bar opens with the mouse, switches by hover and closes with Escap
   // Clicking elsewhere closes a menu too.
   await top(page, "View").click();
   await expect(menu(page, "View")).toBeVisible();
-  await page.locator("#viewport").click({ position: { x: 5, y: 300 } });
+  // The View menu is tall enough to cover the left edge of the canvas, so the
+  // click that means "elsewhere" sits further across the picture.
+  await page.locator("#viewport").click({ position: { x: 320, y: 160 } });
   await expect(menu(page, "View")).toHaveCount(0);
 });
 

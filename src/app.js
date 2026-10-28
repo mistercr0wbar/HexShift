@@ -54,6 +54,7 @@ import {
 import { screenPicker, systemColours, updateChannel } from "./host.js";
 import { createMenubar } from "./menu.js";
 import { createWorkspace } from "./workspace.js";
+import { PANELS, panelTitle } from "./layout.js";
 import { createColourStore } from "./colours.js";
 import { createPicker, createSavedGrid } from "./picker.js";
 import {
@@ -3173,7 +3174,9 @@ for (const tab of document.querySelectorAll(".dock-tabs button"))
     for (const other of document.querySelectorAll(".dock-tabs button"))
       other.setAttribute("aria-pressed", String(other === tab));
   };
-// Column widths and the dock's height last for the session only (workspace.js).
+// Where the panels sit, which are folded or hidden, and the column sizes are kept
+// in hexshift-layout when the person changes them (workspace.js). Fitting a short
+// window is not written.
 $("background").onchange = background;
 $("backgroundColour").oninput = background;
 $("dismissTip").onclick = () => ($("firstUse").hidden = true);
@@ -3475,7 +3478,11 @@ async function pasteFromClipboard() {
   }
 }
 // The panels sit where the window's size says (workspace.js); the image refits after.
-const workspace = createWorkspace($("main"), { onPreset: () => layout() });
+const workspace = createWorkspace($("main"), {
+  storage: () => localStorage,
+  report: (message) => status(message),
+  onPreset: () => layout(),
+});
 window.addEventListener("resize", () => {
   workspace.refresh();
   layout();
@@ -3831,6 +3838,48 @@ createMenubar({
         { type: "separator" },
         {
           type: "sub",
+          label: "Panels",
+          items: PANELS.map((id) => ({
+            type: "check",
+            label: panelTitle(id),
+            checked: () => !workspace.isHidden(id),
+            enabled: () =>
+              !workspace.isLocked() &&
+              (workspace.isHidden(id) || workspace.shownCount() > 1),
+            run: () => workspace.toggleHidden(id),
+          })),
+        },
+        {
+          type: "sub",
+          label: "Layout",
+          items: [
+            ...[
+              ["side", "Side columns"],
+              ["dock", "Bottom dock"],
+              ["column", "One right column"],
+            ].map(([name, label]) => ({
+              type: "radio",
+              label,
+              checked: () => workspace.chosen() === name,
+              enabled: () => !workspace.isLocked(),
+              run: () => workspace.usePreset(name),
+            })),
+            { type: "separator" },
+            {
+              type: "check",
+              label: "Lock layout",
+              checked: () => workspace.isLocked(),
+              run: () => workspace.setLocked(!workspace.isLocked()),
+            },
+            {
+              type: "item",
+              label: "Reset layout",
+              run: () => workspace.reset(),
+            },
+          ],
+        },
+        {
+          type: "sub",
           label: "Background",
           items: [
             radio("background", "Checkerboard", "checker"),
@@ -3961,5 +4010,6 @@ openBlob(
   "red_heart.png",
   true,
 ).then(() => {
-  if (coloursWarning) status(coloursWarning);
+  const notes = [coloursWarning, workspace.warning].filter(Boolean);
+  if (notes.length) status(notes.join(" "));
 });
