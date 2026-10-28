@@ -132,10 +132,14 @@ namespace HexShift
             set { settings.AutoCheck = value; settings.Save(dataDir); }
         }
 
-        internal bool IsCheckDue()
+        // Whether a check belongs at this launch: every launch, when automatic checks are on.
+        internal bool CheckAtLaunch
         {
-            return Enabled && UpdatePolicy.IsCheckDue(settings.AutoCheck, settings.LastCheckUtc, DateTime.UtcNow);
+            get { return Enabled && UpdatePolicy.ShouldCheckAtLaunch(settings.AutoCheck); }
         }
+
+        // When the last successful check finished (UTC), or DateTime.MinValue if none has.
+        internal DateTime LastCheckUtc { get { return settings.LastCheckUtc; } }
 
         // Blocks, so call it from a worker thread. Network and verification problems come back as
         // Failed with a sentence for the user; only cancellation is thrown.

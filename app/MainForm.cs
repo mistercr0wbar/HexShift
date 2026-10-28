@@ -49,6 +49,7 @@ namespace HexShift
             Controls.Add(web);
             // The update notice docks above the page; it is added after the page so Fill still gets the rest.
             updates = new UpdateController(this, dataDir, dark);
+            updates.StateChanged = PostToPage;
             Controls.Add(updates.Bar);
             FormClosing += delegate { updates.Cancel(); };
             Load += OnLoad;
@@ -58,7 +59,6 @@ namespace HexShift
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            updates.AttachSystemMenu(Handle);
             if (dark) DarkTitleBar(Handle);
         }
 
@@ -71,13 +71,6 @@ namespace HexShift
                 if (DwmSetWindowAttribute(handle, 20, ref on, 4) != 0) DwmSetWindowAttribute(handle, 19, ref on, 4);
             }
             catch (Exception) { }
-        }
-
-        // The "Check for updates" commands live in the window's system menu.
-        protected override void WndProc(ref Message m)
-        {
-            if (m.Msg == 0x112 && updates != null && updates.HandleSysCommand(m.WParam)) return;
-            base.WndProc(ref m);
         }
 
         async void OnLoad(object sender, EventArgs e)
@@ -107,7 +100,8 @@ namespace HexShift
             core.Settings.IsZoomControlEnabled = true;
             core.Settings.AreBrowserAcceleratorKeysEnabled = true;
             core.Settings.AreHostObjectsAllowed = false;
-            // The page may send only "pick-colour"; the host also sends it the Windows colours for the System theme.
+            // The page may send only the few exact words in HostMessages; the host also sends it the Windows
+            // colours for the System theme and where the update check stands.
             core.Settings.IsWebMessageEnabled = true;
             core.Settings.IsGeneralAutofillEnabled = false;
             core.Settings.IsPasswordAutosaveEnabled = false;
@@ -119,8 +113,17 @@ namespace HexShift
             core.DownloadStarting += OnDownloadStarting;
             core.NewWindowRequested += OnNewWindow;
             core.WebMessageReceived += OnWebMessage;
+            // File > Exit in the page is window.close(); the page has already asked about unsaved work.
+            core.WindowCloseRequested += delegate { BeginInvoke(new Action(Close)); };
             // The System theme follows the Windows accent and app mode, now and whenever they change.
-            core.NavigationCompleted += delegate { SendSystemColours(); };
+            // Once the page is up, the update schedule starts (a check a couple of seconds on) and the page
+            // is told where it stands.
+            core.NavigationCompleted += delegate
+            {
+                SendSystemColours();
+                updates.StartAutomaticChecks();
+                updates.Publish();
+            };
             SystemEvents.UserPreferenceChanged += OnPreferenceChanged;
             FormClosed += delegate { SystemEvents.UserPreferenceChanged -= OnPreferenceChanged; };
             core.LaunchingExternalUriScheme += delegate(object s, CoreWebView2LaunchingExternalUriSchemeEventArgs args) { args.Cancel = true; };
@@ -135,7 +138,6 @@ namespace HexShift
                 args.Handled = true;
             };
             core.Navigate(Origin + "/");
-            updates.StartAutomaticCheck();
         }
 
         internal static bool IsAppDocument(string value)
@@ -240,13 +242,18 @@ namespace HexShift
             e.Handled = true;
         }
 
-        // The page's screen-picker button. WebView2 will not open the browser's own screen picker, so
-        // the host shows one (ScreenPicker.cs) and sends back the colour, or null.
+        // What the page may ask of the host: the exact words in HostMessages, from the app's own document,
+        // and nothing else. The screen-picker button is one (WebView2 will not open the browser's own
+        // screen picker, so the host shows one, ScreenPicker.cs, and sends back the colour, or null); the
+        // rest belong to the update check shown in the page's status bar and Help menu.
         void OnWebMessage(object sender, CoreWebView2WebMessageReceivedEventArgs e)
         {
             string message = null;
             try { message = e.TryGetWebMessageAsString(); } catch (ArgumentException) { }
-            if (!ScreenPick.IsRequest(e.Source, message) || picker.Busy) return;
+            PageMessage kind = HostMessages.Parse(e.Source, message);
+            if (kind == PageMessage.None) return;
+            if (kind != PageMessage.PickColour) { updates.HandlePageMessage(kind); return; }
+            if (picker.Busy) return;
             // Only while someone is using Hex Shift: the page cannot cover the screen behind their back.
             if (GetForegroundWindow() != Handle) { SendPick(null); return; }
             picker.Start(delegate(string hex)
@@ -255,6 +262,11 @@ namespace HexShift
                 web.Focus();
                 SendPick(hex);
             });
+        }
+
+        void PostToPage(string json)
+        {
+            if (web.CoreWebView2 != null) web.CoreWebView2.PostWebMessageAsJson(json);
         }
 
         void OnPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)

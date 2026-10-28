@@ -1,7 +1,9 @@
 import http from "node:http";
 import { readFile } from "node:fs/promises";
 import { resolve, extname } from "node:path";
-const root = resolve("."),
+// HEXSHIFT_PORT lets this run beside another server already using 4173.
+const port = Number(process.env.HEXSHIFT_PORT) || 4173,
+  root = resolve("."),
   types = {
     ".html": "text/html; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
@@ -44,6 +46,6 @@ http
       res.end("Not found");
     }
   })
-  .listen(4173, "127.0.0.1", () =>
-    console.log("HexShift: http://127.0.0.1:4173"),
+  .listen(port, "127.0.0.1", () =>
+    console.log("HexShift: http://127.0.0.1:" + port),
   );

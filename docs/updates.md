@@ -6,9 +6,16 @@ version in the website's Hex Shift page.
 
 ## What the app does
 
-- At most once a day when it starts (and any time you pick **Check for updates...**
-  in the window's system menu: right-click the title bar, or Alt+Space) it asks
-  `https://thecr0wbar.xyz/updates/hexshift/appcast.json` and its `.signature`.
+- With automatic checks on, it asks
+  `https://thecr0wbar.xyz/updates/hexshift/appcast.json` and its `.signature` about two
+  seconds after its window has loaded, on **every launch** (version 3.2.0 and newer; before
+  that, at most once a day), and again **every six hours** while the window stays open. A
+  scheduled check never starts while another check or a download is running, or once an
+  update has been found. Picking **Help > Check for updates...** checks at any time.
+- How a check went is shown in the page's status bar: "Checking for updates...", then
+  "Hex Shift 3.2.0 is up to date" (it fades after six seconds), or a quiet "Couldn't check
+  for updates" when it failed (a check you asked for also says why). None of these opens a
+  window.
 - If a newer version exists it shows a notice bar with **Release notes**,
   **Download update** and **Later**. Nothing is downloaded without a click and
   nothing is installed without a second, separate confirmation that reminds the
@@ -16,9 +23,31 @@ version in the website's Hex Shift page.
 - An installed copy runs the installer silently and closes itself; Setup asks
   "open it now?". A portable copy only opens the normal installer window and
   keeps running; it never replaces itself.
-- Offline or failing checks are silent in the background. Editing is never blocked.
-- "Check for updates automatically" can be switched off in the same system menu.
-  The choice and the last-check time live in `%LOCALAPPDATA%\HexShift\update-settings.json`.
+- Offline or failing checks never get in the way: they only say so in the status bar.
+  Editing is never blocked.
+- **Help > Check for updates automatically** switches the scheduled checks off and on.
+  The choice and the time of the last successful check live in
+  `%LOCALAPPDATA%\HexShift\update-settings.json`. Before 3.2.0 these commands were in the
+  window's system menu (right-click the title bar); the system menu is Windows' own again,
+  so a copy older than 3.2.0 needs that menu once, to find 3.2.0.
+
+## What the page may ask of the app
+
+The page is the app's own document, served from `https://hexshift.invalid`. It may send
+the host exactly these words, case and spelling included, and nothing else: `pick-colour`
+(the screen colour picker), `check-updates`, `auto-updates-on`, `auto-updates-off` and
+`update-state` (a request for the latest state). Anything else, and anything from another
+address, is ignored (`app/HostMessages.cs`; `tests/native/HostMessageTests.cs` checks it).
+
+The host answers with `update-state` messages built from fixed fields (never from text the
+page supplied): `phase` (`idle`, `checking`, `current`, `available`, `downloading`,
+`ready` or `failed`), `version`, `checkedAt` (UTC, the last successful check), `auto`,
+`enabled` (false in a build with no update key), `manual` (the check was asked for), and a
+`detail` sentence for a failure or a `percent` for a download. The page checks every field
+again before showing anything, and shows it as text.
+
+`window.close()` in the page (File > Exit) closes the window; the page has asked about
+unsaved work first.
 
 ## What the app trusts
 
@@ -88,7 +117,7 @@ dotnet tool install NetSparkleUpdater.Tools.AppCastGenerator --version 2.9.0 --t
   when `--key-path` is given; delete it if it is empty.)
 - `NetSparkle_Ed25519.pub` is one line, 44 characters of base64 (a 32-byte key). Put
   exactly that line in `app/update-public-key.txt` and commit it. A build whose file
-  still says `NOT-SET` has updates **switched off** (the menu says so).
+  still says `NOT-SET` has updates **switched off** (**Help > Check for updates...** says so).
 - `NetSparkle_Ed25519.priv` is base64 of the 32-byte seed. It must **never** be
   committed, put in the repository, or left on a build machine. Keep an offline backup
   in two places. Store it as a secret named `SPARKLE_PRIVATE_KEY` in a protected GitHub

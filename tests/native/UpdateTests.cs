@@ -180,14 +180,18 @@ static partial class UpdateTests
         Is(false, UpdatePolicy.IsStagedInstaller(null, Path.Combine(folder, name), "2.1.0"), "staged null folder");
         Is(false, UpdatePolicy.IsStagedInstaller(folder, Path.Combine(folder, name), null), "staged null version");
 
-        DateTime now = new DateTime(2026, 10, 22, 12, 0, 0, DateTimeKind.Utc);
-        Is(true, UpdatePolicy.IsCheckDue(true, DateTime.MinValue, now), "check due: never checked");
-        Is(true, UpdatePolicy.IsCheckDue(true, now.AddHours(-24), now), "check due: exactly 24h");
-        Is(true, UpdatePolicy.IsCheckDue(true, now.AddDays(-3), now), "check due: days ago");
-        Is(false, UpdatePolicy.IsCheckDue(true, now.AddHours(-23), now), "check not due: 23h");
-        Is(false, UpdatePolicy.IsCheckDue(true, now.AddMinutes(-1), now), "check not due: a minute ago");
-        Is(true, UpdatePolicy.IsCheckDue(true, now.AddHours(5), now), "check due: last check in the future (clock changed)");
-        Is(false, UpdatePolicy.IsCheckDue(false, DateTime.MinValue, now), "check never due when automatic checks are off");
+        // A check on every launch (no daily gate any more), a repeat every 6 hours, and never two at once.
+        Is(true, UpdatePolicy.ShouldCheckAtLaunch(true), "a check belongs at launch when automatic checks are on");
+        Is(false, UpdatePolicy.ShouldCheckAtLaunch(false), "no check at launch when automatic checks are off");
+        Is(true, UpdatePolicy.LaunchDelay == TimeSpan.FromSeconds(2), "the launch check waits 2 seconds");
+        Is(true, UpdatePolicy.RecheckInterval == TimeSpan.FromHours(6), "the check repeats every 6 hours");
+        Is(true, UpdatePolicy.RecheckInterval.TotalMilliseconds < int.MaxValue, "the repeat interval fits a WinForms timer");
+        Is(true, UpdatePolicy.CanRunScheduledCheck(true, false, false, false), "a scheduled check runs when idle");
+        Is(false, UpdatePolicy.CanRunScheduledCheck(false, false, false, false), "no scheduled check when automatic checks are off");
+        Is(false, UpdatePolicy.CanRunScheduledCheck(true, true, false, false), "no scheduled check while another check is running");
+        Is(false, UpdatePolicy.CanRunScheduledCheck(true, true, true, false), "no scheduled check while a download is running");
+        Is(false, UpdatePolicy.CanRunScheduledCheck(true, false, true, false), "no scheduled check during a download, even if busy is clear");
+        Is(false, UpdatePolicy.CanRunScheduledCheck(true, false, false, true), "no scheduled check once an update has been found");
 
         Same("/SP- /SILENT /NORESTART /CLOSEAPPLICATIONS /NORESTARTAPPLICATIONS /RESTARTEXITCODE=3010", UpdatePolicy.InstallerArguments, "fixed installer switches");
 

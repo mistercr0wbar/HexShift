@@ -1,4 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
+// HEXSHIFT_PORT lets the tests run beside another server already using 4173.
+const origin = `http://127.0.0.1:${Number(process.env.HEXSHIFT_PORT) || 4173}`;
 export default defineConfig({
   testDir: "tests/browser",
   timeout: 45000,
@@ -6,7 +8,7 @@ export default defineConfig({
   fullyParallel: true,
   workers: 3,
   reporter: "list",
-  use: { baseURL: "http://127.0.0.1:4173", trace: "retain-on-failure" },
+  use: { baseURL: origin, trace: "retain-on-failure" },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
     { name: "firefox", use: { ...devices["Desktop Firefox"] } },
@@ -14,7 +16,7 @@ export default defineConfig({
   ],
   webServer: {
     command: "node scripts/serve.mjs",
-    url: "http://127.0.0.1:4173",
+    url: origin,
     reuseExistingServer: !process.env.CI,
   },
 });

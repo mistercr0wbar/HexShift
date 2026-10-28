@@ -42,6 +42,49 @@ function cssAccent() {
     : null;
 }
 
+// The Windows app checks for updates at every launch and tells the page how it went;
+// the page can ask for a check by hand and switch the automatic ones on or off.
+// Returns null outside the app (a browser updates itself). Every message is
+// checked field by field before onState hears it. The words the page may send
+// are exactly these three and "update-state" (a request for the latest state).
+const PHASES = [
+  "idle",
+  "checking",
+  "current",
+  "available",
+  "downloading",
+  "ready",
+  "failed",
+];
+export function updateChannel(onState) {
+  const webview = window.chrome?.webview;
+  if (!webview) return null;
+  webview.addEventListener("message", (e) => {
+    const d = e.data;
+    if (d?.type !== "update-state" || !PHASES.includes(d.phase)) return;
+    onState({
+      phase: d.phase,
+      version:
+        typeof d.version === "string" &&
+        /^\d{1,5}\.\d{1,5}\.\d{1,5}$/.test(d.version)
+          ? d.version
+          : null,
+      checkedAt: typeof d.checkedAt === "string" ? d.checkedAt : null,
+      auto: typeof d.auto === "boolean" ? d.auto : true,
+      enabled: typeof d.enabled === "boolean" ? d.enabled : true,
+      manual: d.manual === true,
+      detail: typeof d.detail === "string" ? d.detail.slice(0, 300) : null,
+      percent: Number.isFinite(d.percent) ? d.percent : 0,
+    });
+  });
+  return {
+    check: () => webview.postMessage("check-updates"),
+    setAuto: (on) =>
+      webview.postMessage(on ? "auto-updates-on" : "auto-updates-off"),
+    request: () => webview.postMessage("update-state"),
+  };
+}
+
 // Returns a function that starts a screen pick, or null when picking from the
 // screen isn't possible. onPicked gets "#RRGGBB", or null when nothing was
 // picked; onError gets an unexpected failure.

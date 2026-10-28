@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ltVNOxHZDwNYw+RWUgkSjOdxNBzOUzj7WSHOoVOyruY='; style-src 'sha256-sNu4SBcl7eXTdug3EN6cHyUnynB2qpRTuLdZm7qhKaE='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-0pu3MWzlusBueL5CXdA4FqETrStWwI5/2aucjUqIq90='; style-src 'sha256-b/Rk/kGsIVr4ZkeKVKO33Cv3PszVN0HAmwUTqOlrgKs='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta
       name="theme-color"
@@ -40,18 +40,32 @@
   --checker1: #e0e0e0;
   --checker2: #f2f2f2;
   --shadow: 0 2px 10px #0000001f;
+  /* Sizes. Every control height and gap comes from these, so the whole page
+     tightens or loosens in one place: compact with a mouse, finger-sized on touch. */
+  --ctl: 26px;
+  --ctl-sm: 24px;
+  --gap: 6px;
+  --pad: 10px;
+  --head: 28px;
+  --bar: 40px;
+  --status: 28px;
   --dock-h: clamp(210px, 32vh, 300px);
+  --col-left: clamp(220px, 20vw, 280px);
+  --col-right: clamp(280px, 24vw, 340px);
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
   font:
-    13px/1.45 "Segoe UI Variable Text",
+    13px/1.4 "Segoe UI Variable Text",
     "Segoe UI",
     system-ui,
     -apple-system,
     Roboto,
     sans-serif;
+  /* Digits are all one width, so a number changing while you drag never
+     changes the width of the line it sits in. */
+  font-variant-numeric: tabular-nums;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -185,7 +199,7 @@ fieldset {
 }
 .help {
   font-size: 12px;
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 /* Controls */
@@ -194,7 +208,7 @@ fieldset {
 select,
 .hex,
 #customSize {
-  min-height: 32px;
+  min-height: var(--ctl);
   border: 1px solid var(--line-strong);
   border-radius: 6px;
   background: var(--raised);
@@ -204,7 +218,7 @@ select,
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 5px 12px;
+  padding: 0 12px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -225,13 +239,12 @@ select:hover:not(:disabled) {
 }
 .button.full {
   width: 100%;
-  margin-top: 10px;
 }
 .icon-button {
   display: inline-grid;
   place-items: center;
-  min-width: 32px;
-  padding: 0 6px;
+  min-width: var(--ctl);
+  padding: 0 4px;
 }
 .icon-button[aria-pressed="true"],
 .segmented.buttons button[aria-pressed="true"] {
@@ -240,8 +253,8 @@ select:hover:not(:disabled) {
   color: var(--on-accent);
 }
 .text-button {
-  min-height: 28px;
-  padding: 3px 8px;
+  min-height: var(--ctl-sm);
+  padding: 0 8px;
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -251,22 +264,20 @@ select:hover:not(:disabled) {
 }
 select {
   max-width: 100%;
-  padding: 4px 8px;
+  padding: 0 6px;
 }
 select.compact {
-  min-height: 30px;
-  padding: 3px 6px;
+  min-height: var(--ctl-sm);
 }
 label {
   display: block;
-  margin: 10px 0 4px;
+  margin: 0;
   font-weight: 600;
 }
 .check {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  margin: 8px 0 0;
   font-weight: 400;
 }
 .check input {
@@ -277,12 +288,12 @@ label {
 input[type="range"] {
   width: 100%;
   min-height: 20px;
-  margin: 2px 0;
+  margin: 0;
   accent-color: var(--accent);
 }
 input[type="color"] {
-  width: 40px;
-  height: 34px;
+  width: var(--ctl);
+  height: var(--ctl);
   flex: none;
   padding: 2px;
   border: 1px solid var(--line-strong);
@@ -292,8 +303,8 @@ input[type="color"] {
 .hex {
   width: 100%;
   min-width: 0;
-  padding: 5px 9px;
-  font-size: 15px;
+  padding: 0 8px;
+  font-size: 13px;
   text-transform: uppercase;
 }
 .hex[aria-invalid="true"],
@@ -302,12 +313,22 @@ input[type="color"] {
 }
 #customSize {
   width: 100%;
-  padding: 4px 8px;
+  padding: 0 8px;
+}
+/* Number boxes show no spinner: it only adds a target that changes the value. */
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 .small-label,
 .labelled legend {
   display: block;
-  margin: 12px 0 6px;
+  margin: 0 0 4px;
   padding: 0;
   font-size: 12px;
   font-weight: 600;
@@ -315,8 +336,7 @@ input[type="color"] {
 }
 .readout {
   font-size: 12px;
-  margin-top: 8px;
-  line-height: 1.55;
+  line-height: 1.4;
 }
 .notice {
   margin-top: 8px;
@@ -327,10 +347,10 @@ input[type="color"] {
   font-size: 12px;
 }
 details {
-  margin-top: 12px;
+  margin: 0;
 }
 summary {
-  min-height: 26px;
+  min-height: var(--ctl-sm);
   font-weight: 600;
   color: var(--ink);
 }
@@ -366,9 +386,11 @@ summary::marker {
   flex: 1;
   display: grid;
   place-items: center;
-  min-height: 28px;
+  /* With the segment's own 2 px padding and 1 px border, a 20 px label makes the
+     whole control as tall as the other controls (26 px). */
+  min-height: calc(var(--ctl-sm) - 4px);
   margin: 0;
-  padding: 3px 10px;
+  padding: 0 10px;
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -393,31 +415,19 @@ summary::marker {
   background: var(--accent);
   color: var(--on-accent);
 }
-.segmented.buttons {
-  margin: 0 0 8px;
-}
-.labelled {
-  display: block;
-  padding: 0;
-  border: 0;
-  background: none;
-}
-.labelled > label {
-  display: inline-grid;
-}
-.labelled > legend + label,
-.labelled > label {
-  min-width: 0;
-}
 .labelled {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
   gap: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
 }
 .labelled > legend {
   grid-column: 1 / -1;
 }
 .labelled > label {
+  min-width: 0;
   border: 1px solid var(--line-strong);
   background: var(--ground);
 }
@@ -426,16 +436,18 @@ summary::marker {
 .app {
   height: 100dvh;
   display: grid;
+  /* A column that may shrink, so a wide top bar wraps instead of widening the page. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
 .topbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 14px;
-  min-height: 52px;
-  padding: calc(8px + var(--safe-top)) calc(14px + var(--safe-right)) 8px
-    calc(14px + var(--safe-left));
+  gap: 4px 12px;
+  min-height: var(--bar);
+  padding: calc(4px + var(--safe-top)) calc(10px + var(--safe-right)) 4px
+    calc(10px + var(--safe-left));
   background: var(--surface);
   border-bottom: 1px solid var(--line);
   z-index: 4;
@@ -443,16 +455,16 @@ summary::marker {
 .brand {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   white-space: nowrap;
 }
 .mark {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   flex: none;
 }
 .brand h1 {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 650;
   letter-spacing: -0.2px;
 }
@@ -468,7 +480,7 @@ summary::marker {
   align-items: baseline;
   gap: 8px;
   min-width: 0;
-  padding: 3px 10px;
+  padding: 2px 10px;
   border-radius: 6px;
   background: var(--raised);
   border: 1px solid var(--line);
@@ -479,6 +491,9 @@ summary::marker {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+#fileName {
+  max-width: 28ch;
+}
 #fileDims {
   color: var(--muted);
 }
@@ -487,17 +502,614 @@ summary::marker {
   flex-wrap: wrap;
   justify-content: flex-end;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin-left: auto;
 }
 .history-buttons {
   display: flex;
   gap: 2px;
 }
-.main {
+
+/* The menu bar */
+.menubar {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+.menu-top,
+.menu-fold {
+  height: var(--ctl);
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font-weight: 500;
+}
+.menu-top:hover,
+.menu-fold:hover,
+.menu-top[aria-expanded="true"],
+.menu-fold[aria-expanded="true"] {
+  background: var(--hover);
+}
+.menu-fold {
+  display: none;
+}
+.menubar .mnemonic {
+  text-decoration: none;
+}
+.menubar.show-keys .mnemonic {
+  text-decoration: underline;
+}
+.menu-pop {
+  position: fixed;
+  z-index: 40;
+  min-width: 230px;
+  max-width: min(360px, calc(100vw - 8px));
+  padding: 4px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  outline: none;
+}
+.menu-item {
   display: grid;
-  grid-template-rows: minmax(220px, 1fr) auto auto var(--dock-h);
+  grid-template-columns: 16px minmax(0, 1fr) auto 12px;
+  align-items: center;
+  column-gap: 6px;
+  width: 100%;
+  min-height: var(--ctl-sm);
+  padding: 0 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  white-space: nowrap;
+}
+.menu-item:focus {
+  background: var(--hover);
+  outline: none;
+}
+.menu-item:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.menu-item[aria-disabled="true"] {
+  color: var(--muted);
+  opacity: 0.6;
+  cursor: default;
+}
+.menu-mark {
+  text-align: center;
+  font-size: 12px;
+}
+.menu-item[aria-checked="true"][role="menuitemcheckbox"] .menu-mark::before {
+  content: "✓";
+}
+.menu-item[aria-checked="true"][role="menuitemradio"] .menu-mark::before {
+  content: "●";
+  font-size: 8px;
+}
+.menu-shortcut {
+  grid-column: 3;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.menu-arrow {
+  grid-column: 4;
+  color: var(--muted);
+  font-size: 11px;
+}
+.menu-item[aria-haspopup] .menu-label {
+  grid-column: 2 / 4;
+}
+.menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--line);
+}
+.menu-back {
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 5px 5px 0 0;
+  color: var(--muted);
+  font-weight: 600;
+}
+.menu-heading {
+  padding: 4px 6px 2px 28px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* The workspace: the image in the middle, panels in regions around it. The
+   layout (data-preset) is chosen by the page from the window's size. */
+.main {
+  position: relative;
+  display: grid;
   min-height: 0;
+}
+.main[data-preset="side"] {
+  grid-template-columns: var(--col-left) minmax(0, 1fr) var(--col-right);
+  grid-template-areas: "left centre right";
+}
+.main[data-preset="column"] {
+  grid-template-columns: minmax(0, 1fr) var(--col-right);
+  grid-template-areas: "centre right";
+}
+.main[data-preset="dock"] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(220px, 1fr) var(--dock-h);
+  grid-template-areas: "centre" "bottom";
+}
+.main[data-preset="phone"] {
+  display: block;
+}
+.region[data-region="left"] {
+  grid-area: left;
+}
+.region[data-region="right"] {
+  grid-area: right;
+}
+.region[data-region="bottom"] {
+  grid-area: bottom;
+}
+.centre {
+  grid-area: centre;
+  display: grid;
+  /* A column that may shrink: without minmax(0, ...) it would not go narrower than
+     the colour map bar, and the stage would paint over the panels beside it. */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+  container: centre / inline-size;
+}
+.stage,
+.mapbar {
+  min-width: 0;
+}
+/* A narrow stage: the colour map bar sheds what it can do without. */
+@container centre (max-width: 920px) {
+  .mapbar-title,
+  .map-select .map-count {
+    display: none;
+  }
+}
+@container centre (max-width: 640px) {
+  #mapAll,
+  #editState {
+    display: none;
+  }
+}
+.region {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--surface);
+  overflow: hidden;
+}
+.region[data-region="left"] {
+  border-right: 1px solid var(--line);
+}
+.region[data-region="right"] {
+  border-left: 1px solid var(--line);
+}
+.region[data-region="bottom"] {
+  border-top: 1px solid var(--line);
+}
+.stacks {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.stack {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  background: var(--surface);
+}
+.main[data-preset="dock"] .stacks {
+  gap: 1px;
+  background: var(--line);
+}
+.dock-tabs {
+  display: none;
+}
+
+/* Handles that resize the columns and the dock. */
+.splitter {
+  position: relative;
+  z-index: 3;
+  touch-action: none;
+  display: none;
+}
+.splitter:hover,
+.splitter:focus-visible,
+.splitter.dragging {
+  background: var(--accent);
+  outline: none;
+}
+.splitter.v {
+  width: 6px;
+  cursor: col-resize;
+}
+.splitter.h {
+  height: 6px;
+  cursor: row-resize;
+}
+.main[data-preset="side"] #splitLeft {
+  display: block;
+  grid-area: left;
+  justify-self: end;
+  margin-right: -3px;
+}
+.main[data-preset="side"] #splitRight,
+.main[data-preset="column"] #splitRight {
+  display: block;
+  grid-area: right;
+  justify-self: start;
+  margin-left: -3px;
+}
+.main[data-preset="dock"] #dockHandle {
+  display: block;
+  grid-area: bottom;
+  align-self: start;
+  margin-top: -3px;
+}
+
+/* Panels */
+.panel {
+  flex: none;
+  min-width: 0;
+  border-bottom: 1px solid var(--line);
+}
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: var(--head);
+  padding: 0 6px 0 2px;
+}
+.panel-head h2 {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.panel-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-height: var(--head);
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  text-transform: inherit;
+}
+.panel-toggle:hover {
+  color: var(--ink);
+}
+.chev {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.12s;
+}
+.panel-toggle[aria-expanded="false"] .chev {
+  transform: rotate(-90deg);
+}
+.head-check {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.head-check input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+.panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  padding: 0 var(--pad) 8px;
+}
+.panel-body > * {
+  margin: 0;
+}
+.panel select,
+.panel .segmented {
+  width: 100%;
+}
+.field-grid {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--gap) 8px;
+}
+.field-grid > label {
+  margin: 0;
+}
+.field-row {
+  display: contents;
+}
+.slider-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+}
+/* One row to a slider: its name, the track, and the number. */
+.slider {
+  display: grid;
+  grid-template-columns: 7.6em minmax(0, 1fr) 4.4em;
+  align-items: center;
+  column-gap: 6px;
+  min-height: var(--ctl-sm);
+}
+.slider label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 400;
+}
+.slider input[type="range"] {
+  height: var(--ctl-sm);
+}
+.slider input[type="number"],
+.slider > span {
+  width: 100%;
+  min-width: 0;
+  text-align: right;
+}
+.slider input[type="number"] {
+  height: 22px;
+  padding: 0 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  background: var(--raised);
+  font:
+    12px "Cascadia Mono",
+    Consolas,
+    monospace;
+}
+.slider > span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.target-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.target-row > label {
+  flex: none;
+  min-width: 3.4em;
+  font-weight: 600;
+}
+.target-row .icon-button {
+  flex: none;
+}
+#targetResult {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 1.4em;
+}
+#targetText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cap-mark {
+  flex: none;
+  color: var(--warn);
+  cursor: help;
+}
+#coverage {
+  min-height: 1.4em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#brushSizeValue {
+  color: var(--muted);
+}
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.swatch {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 2px solid var(--surface);
+  border-radius: 6px;
+  outline: 1px solid var(--line-strong);
+}
+.swatch:hover {
+  outline: 2px solid var(--accent);
+}
+.named .swatch {
+  width: 64px;
+}
+.swatch span {
+  position: absolute;
+  inset: 2px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  text-shadow: 0 1px 3px #000;
+}
+.palette-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+}
+.seed-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 4px;
+  min-height: var(--ctl-sm);
+  max-height: 56px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  font-size: 12px;
+}
+.seed-list > .muted {
+  align-self: center;
+}
+.seed {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 4px 0 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--raised);
+  font-size: 12px;
+}
+.seed .dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid #0006;
+}
+.seed button {
+  border: 0;
+  padding: 0 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+}
+.variants {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 6px;
+}
+.variants.stale {
+  opacity: 0.45;
+}
+.variant {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 5px 3px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--raised);
+  font-size: 12px;
+  line-height: 1.2;
+}
+.variant:hover {
+  border-color: var(--accent);
+}
+.variant canvas {
+  width: 56px;
+  height: 56px;
+}
+.variant span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Two lines are always reserved, so the answer arriving later moves nothing. */
+#sizeReadout {
+  min-height: 2.5em;
+}
+#sizeReadout p {
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#sizeReadout .over {
+  color: var(--warn);
+  font-weight: 600;
+}
+.output-preview {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--gap) 8px;
+}
+.output-preview .small-label {
+  margin: 0;
+}
+.preview-tiles {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.preview-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.preview-tile canvas {
+  display: block;
+}
+/* The 96 px tile sets the height of the whole row; short windows drop it so the
+   Export panel fits without scrolling (taller ones keep it). */
+@media (max-height: 800px) {
+  .preview-tile:last-child {
+    display: none;
+  }
+}
+#recipePanel > summary {
+  min-height: var(--ctl-sm);
+}
+#recipePanel .button,
+#recipePanel .palette-actions,
+#recipePanel .readout {
+  margin-top: 6px;
 }
 
 /* Stage: the canvas with floating tools */
@@ -510,34 +1122,57 @@ summary::marker {
 }
 .stage-tools {
   position: absolute;
-  top: 10px;
-  left: 10px;
-  right: 10px;
+  top: 8px;
+  left: 8px;
+  right: 8px;
   z-index: 3;
   display: flex;
-  justify-content: space-between;
   align-items: flex-start;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
   pointer-events: none;
+}
+.canvas-tools {
+  margin-left: auto;
 }
 .float {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px;
+  gap: 3px;
+  padding: 3px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--surface);
   box-shadow: var(--shadow);
   pointer-events: auto;
 }
+.canvas-toolbar .icon-button,
 .canvas-tools .icon-button {
   border-color: transparent;
   background: transparent;
 }
+.canvas-toolbar .icon-button[aria-pressed="true"] {
+  background: var(--accent);
+}
 .canvas-tools .text-button {
   color: var(--ink);
+}
+.brush-size {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px 0 4px;
+  font-size: 12px;
+}
+.brush-size label {
+  font-weight: 600;
+  color: var(--muted);
+}
+.brush-size input {
+  width: 84px;
+}
+.brush-size #brushSizeValue {
+  min-width: 4.2em;
 }
 #zoomReadout {
   min-width: 44px;
@@ -548,7 +1183,7 @@ summary::marker {
 }
 .first-use {
   position: absolute;
-  top: 60px;
+  top: calc(var(--tools-h, 44px) + 14px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 3;
@@ -556,7 +1191,7 @@ summary::marker {
   align-items: center;
   gap: 10px;
   max-width: min(560px, calc(100% - 20px));
-  padding: 6px 6px 6px 14px;
+  padding: 4px 4px 4px 14px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--surface);
@@ -612,13 +1247,17 @@ summary::marker {
 }
 canvas#beforeCanvas,
 canvas#resultCanvas,
-canvas#wipeCanvas {
+canvas#wipeCanvas,
+canvas#outlineCanvas {
   position: absolute;
   left: 50%;
   top: 50%;
   transform-origin: center;
   image-rendering: auto;
   touch-action: none;
+}
+canvas#outlineCanvas {
+  pointer-events: none;
 }
 .viewport.pixelated canvas {
   image-rendering: pixelated;
@@ -639,7 +1278,7 @@ canvas#wipeCanvas {
   left: 10px;
   bottom: 10px;
   z-index: 2;
-  padding: 3px 9px;
+  padding: 2px 9px;
   border-radius: 999px;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -663,14 +1302,14 @@ canvas#wipeCanvas {
 }
 .swatch-choice label {
   flex: none;
-  min-height: 30px;
-  width: 30px;
+  min-height: var(--ctl-sm);
+  width: var(--ctl-sm);
   padding: 0;
 }
 .bg-chip {
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
   border: 1px solid var(--line-strong);
 }
 .swatch-choice label:has(input:checked) {
@@ -690,8 +1329,8 @@ canvas#wipeCanvas {
   background: conic-gradient(#e8802e, #6ef0ff, #e8802e);
 }
 .backgrounds input[type="color"] {
-  width: 30px;
-  height: 30px;
+  width: var(--ctl-sm);
+  height: var(--ctl-sm);
 }
 .wipe-control {
   position: absolute;
@@ -699,9 +1338,9 @@ canvas#wipeCanvas {
   bottom: 10px;
   transform: translateX(-50%);
   z-index: 3;
-  width: min(420px, calc(100% - 180px));
+  width: min(420px, calc(100% - 200px));
   margin: 0;
-  padding: 4px 12px;
+  padding: 3px 12px;
   gap: 10px;
   font-size: 12px;
   font-weight: 600;
@@ -728,18 +1367,19 @@ canvas#wipeCanvas {
   transform: translate(-50%, -50%);
 }
 
-/* Colour map strip */
+/* Colour map strip. Nothing in it wraps or changes width as numbers change. */
 .mapbar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 10px;
-  min-height: 50px;
-  padding: 7px 14px;
+  gap: 8px;
+  min-height: 40px;
+  padding: 4px 10px;
   background: var(--surface);
   border-top: 1px solid var(--line);
 }
 .mapbar-title {
+  flex: none;
   font-size: 12px;
   font-weight: 600;
   color: var(--muted);
@@ -747,10 +1387,11 @@ canvas#wipeCanvas {
 }
 .colour-map {
   display: flex;
+  flex: 1 1 auto;
   gap: 6px;
   min-width: 0;
   overflow-x: auto;
-  scrollbar-width: thin;
+  scrollbar-width: none;
 }
 .map-row {
   display: flex;
@@ -768,8 +1409,8 @@ canvas#wipeCanvas {
   display: flex;
   align-items: center;
   gap: 6px;
-  min-height: 32px;
-  padding: 3px 10px;
+  min-height: var(--ctl);
+  padding: 0 8px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -778,8 +1419,8 @@ canvas#wipeCanvas {
 }
 .map-select .chip {
   flex: none;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-radius: 4px;
   border: 1px solid #0006;
 }
@@ -798,12 +1439,15 @@ canvas#wipeCanvas {
   white-space: nowrap;
 }
 .map-select .map-count {
+  min-width: 9ch;
   color: var(--muted);
+  text-align: right;
+  white-space: nowrap;
 }
 .map-remove {
   display: grid;
   place-items: center;
-  min-width: 28px;
+  min-width: 26px;
   padding: 0 8px 0 2px;
   border: 0;
   border-radius: 0 8px 8px 0;
@@ -813,286 +1457,27 @@ canvas#wipeCanvas {
 }
 .map-actions {
   display: flex;
+  flex: none;
   gap: 2px;
 }
 .mapbar #editState {
-  margin-left: auto;
+  flex: none;
+  min-width: 8.6em;
+  text-align: center;
+}
+.mapbar #apply {
+  flex: none;
 }
 
-/* Dock */
-.dock-handle {
-  height: 6px;
-  margin: -3px 0;
-  position: relative;
-  z-index: 3;
-  cursor: row-resize;
-  touch-action: none;
-}
-.dock-handle:hover,
-.dock-handle:focus-visible {
-  background: var(--accent);
-  outline: none;
-}
-.dock {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1px;
-  min-height: 0;
-  background: var(--line);
-  border-top: 1px solid var(--line);
-}
-.dock-tabs {
-  display: none;
-}
-.panel {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  min-width: 0;
-  background: var(--surface);
-}
-.panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 38px;
-  padding: 6px 10px 2px 16px;
-}
-.panel-head h2 {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.panel-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 2px 16px 16px;
-  scrollbar-width: thin;
-}
-.panel-body > :first-child,
-.panel-body > :first-child > label:first-child {
-  margin-top: 0;
-}
-.panel select,
-.panel .segmented:not(.buttons) {
-  width: 100%;
-}
-.field-grid {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 6px 10px;
-}
-.field-grid > label {
-  margin: 0;
-}
-.field-row {
-  display: contents;
-}
-.slider-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-  gap: 2px 16px;
-  margin-top: 8px;
-}
-.slider {
-  margin-top: 4px;
-}
-.slider-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-}
-.slider-head label {
-  margin: 2px 0;
-  font-weight: 400;
-}
-.slider-head input {
-  width: 70px;
-  padding: 2px 5px;
-  border: 1px solid var(--line-strong);
-  border-radius: 5px;
-  background: var(--raised);
-  text-align: right;
-  font:
-    12px "Cascadia Mono",
-    Consolas,
-    monospace;
-}
-.target-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.target-row .icon-button {
-  min-height: 34px;
-  min-width: 34px;
-}
-#brushSizeValue {
-  float: right;
-  font-weight: 400;
-  color: var(--muted);
-}
-.swatches {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.swatch {
-  position: relative;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 2px solid var(--surface);
-  border-radius: 6px;
-  outline: 1px solid var(--line-strong);
-}
-.swatch:hover {
-  outline: 2px solid var(--accent);
-}
-.named .swatch {
-  width: 64px;
-}
-.swatch span {
-  position: absolute;
-  inset: 2px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 600;
-  text-shadow: 0 1px 3px #000;
-}
-.palette-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 8px;
-  margin: 8px 0 0;
-}
-#presets {
-  margin-top: 8px;
-}
-.seed-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  font-size: 12px;
-}
-.seed {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 2px 4px 2px 6px;
-  border: 1px solid var(--line-strong);
-  border-radius: 6px;
-  background: var(--raised);
-  font-size: 12px;
-}
-.seed .dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-  border: 1px solid #0006;
-}
-.seed button {
-  border: 0;
-  padding: 0 4px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 14px;
-}
-.variants {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
-  gap: 6px;
-  margin-top: 8px;
-}
-.variants.stale {
-  opacity: 0.45;
-}
-.variant {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  min-width: 0;
-  padding: 5px 3px;
-  border: 1px solid var(--line-strong);
-  border-radius: 8px;
-  background: var(--raised);
-  font-size: 12px;
-  line-height: 1.2;
-}
-.variant:hover {
-  border-color: var(--accent);
-}
-.variant canvas {
-  width: 56px;
-  height: 56px;
-}
-.variant span {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-#sizeReadout p + p {
-  margin-top: 2px;
-}
-#sizeReadout .over {
-  color: var(--warn);
-  font-weight: 600;
-}
-.output-preview {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-}
-.output-preview .small-label {
-  margin: 0;
-}
-.output-preview select {
-  width: auto;
-  flex: 1;
-}
-.preview-tiles {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-}
-.preview-tile {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-}
-.preview-tile canvas {
-  display: block;
-}
-#recipePanel .button {
-  margin-top: 8px;
-}
-
-/* Status bar */
+/* Status bar: one fixed-height line, so nothing above it ever moves. */
 .statusbar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 12px;
-  min-height: 30px;
-  padding: 4px calc(14px + var(--safe-right)) calc(4px + var(--safe-bottom))
-    calc(14px + var(--safe-left));
+  height: calc(var(--status) + var(--safe-bottom));
+  padding: 0 calc(10px + var(--safe-right)) var(--safe-bottom)
+    calc(10px + var(--safe-left));
   background: var(--surface);
   border-top: 1px solid var(--line);
   font-size: 12px;
@@ -1105,15 +1490,34 @@ canvas#wipeCanvas {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Cancel keeps its place; it only shows once processing has taken a while. */
+#cancel {
+  flex: none;
+  width: 56px;
+  min-height: 0;
+  height: 20px;
+  padding: 0;
+  visibility: hidden;
+}
+#cancel.shown {
+  visibility: visible;
+}
 #pixelReadout {
+  flex: none;
+  width: 39ch;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .statusbar .notice {
+  flex: none;
   margin: 0;
   padding: 2px 8px;
 }
 .privacy {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: 5px;
   white-space: nowrap;
@@ -1124,6 +1528,7 @@ canvas#wipeCanvas {
 }
 .workspace-help {
   position: relative;
+  flex: none;
   margin: 0;
 }
 .workspace-help summary {
@@ -1135,7 +1540,9 @@ canvas#wipeCanvas {
   right: 0;
   bottom: calc(100% + 8px);
   z-index: 10;
-  width: min(460px, 90vw);
+  width: min(520px, 94vw);
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
   padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -1143,9 +1550,28 @@ canvas#wipeCanvas {
   box-shadow: var(--shadow);
   color: var(--ink);
 }
-.help-pop p + p {
-  margin-top: 8px;
+.help-pop p {
+  margin-top: 10px;
   color: var(--muted);
+}
+.keys {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 18px;
+  margin: 0;
+}
+.keys > div {
+  display: grid;
+  grid-template-columns: 7.5em minmax(0, 1fr);
+  gap: 8px;
+}
+.keys dt {
+  font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--accent-text);
+}
+.keys dd {
+  margin: 0;
 }
 
 /* Overlays */
@@ -1164,13 +1590,15 @@ canvas#wipeCanvas {
   pointer-events: none;
 }
 dialog {
-  max-width: 420px;
+  max-width: min(480px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
   padding: 22px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--surface);
   color: var(--ink);
   box-shadow: var(--shadow);
+  overflow-y: auto;
 }
 dialog::backdrop {
   background: #0008;
@@ -1181,6 +1609,32 @@ dialog h2 {
 }
 dialog p {
   color: var(--muted);
+}
+dialog p + p,
+dialog details {
+  margin-top: 10px;
+}
+.notices {
+  max-height: 40vh;
+  margin: 8px 0 0;
+  overflow: auto;
+  font:
+    11px/1.4 "Cascadia Mono",
+    Consolas,
+    monospace;
+  white-space: pre-wrap;
+  color: var(--muted);
+}
+.notes {
+  max-height: 55vh;
+  overflow-y: auto;
+}
+.notes p {
+  margin: 0 0 10px;
+}
+.notes code {
+  font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+  font-size: 12px;
 }
 .dialog-actions {
   display: flex;
@@ -1198,21 +1652,23 @@ dialog p {
     display: none;
   }
 }
+@container app (max-width: 960px) {
+  .mapbar-title {
+    display: none;
+  }
+}
 @container app (max-width: 900px) {
   .file-info,
   #pixelReadout {
     display: none;
   }
-  .mapbar-title {
+  .version {
     display: none;
-  }
-  .mapbar {
-    flex-wrap: wrap;
   }
 }
 
 /* Phone layout (also the Android port): the page scrolls; the canvas, the colour
-   map and one panel at a time, chosen from a tab bar at the bottom. */
+   map and one group of panels at a time, chosen from a tab bar at the bottom. */
 @container app (max-width: 759px) {
   .app {
     height: auto;
@@ -1222,12 +1678,19 @@ dialog p {
     position: sticky;
     top: 0;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 6px 8px;
     padding-left: calc(10px + var(--safe-left));
     padding-right: calc(10px + var(--safe-right));
   }
   .version {
     display: none;
+  }
+  .menu-top {
+    display: none;
+  }
+  .menu-fold {
+    display: inline-flex;
+    align-items: center;
   }
   .top-actions {
     gap: 4px;
@@ -1237,13 +1700,10 @@ dialog p {
     display: none;
   }
   #open {
-    padding: 5px 8px;
+    padding: 0 8px;
   }
   .theme-menu .label {
     display: none;
-  }
-  .main {
-    display: block;
   }
   .stage {
     height: max(320px, 58svh);
@@ -1251,6 +1711,9 @@ dialog p {
   .stage-tools {
     position: static;
     padding: 8px;
+  }
+  .canvas-tools {
+    margin-left: 0;
   }
   .float {
     flex-wrap: wrap;
@@ -1265,63 +1728,93 @@ dialog p {
     width: calc(100% - 20px);
     bottom: 54px;
   }
-  .dock-handle {
-    display: none;
-  }
-  .dock {
-    display: flex;
-    flex-direction: column;
-    background: var(--surface);
-  }
-  .dock-tabs {
-    order: 2;
-    position: sticky;
-    bottom: 0;
-    z-index: 4;
-    display: flex;
-    gap: 4px;
-    padding: 6px 8px calc(6px + var(--safe-bottom));
-    background: var(--surface);
-    border-top: 1px solid var(--line);
-  }
-  .dock-tabs button {
-    flex: 1;
-    min-height: 40px;
-    border: 0;
-    border-radius: 8px;
-    background: transparent;
-    color: var(--muted);
-    font-weight: 600;
-  }
-  .dock-tabs button[aria-pressed="true"] {
-    background: var(--accent);
-    color: var(--on-accent);
-  }
-  .dock[data-tab="selection"] .panel:not([data-panel="selection"]),
-  .dock[data-tab="colour"] .panel:not([data-panel="colour"]),
-  .dock[data-tab="export"] .panel:not([data-panel="export"]) {
-    display: none;
-  }
-  .panel-body {
-    overflow: visible;
-  }
-  .statusbar {
+  .mapbar {
     flex-wrap: wrap;
   }
+  .statusbar {
+    height: auto;
+    min-height: calc(var(--status) + var(--safe-bottom));
+    flex-wrap: wrap;
+    padding-top: 4px;
+    padding-bottom: calc(4px + var(--safe-bottom));
+  }
+}
+.main[data-preset="phone"] .region.bottom {
+  display: flex;
+  flex-direction: column;
+  border-top: 0;
+  overflow: visible;
+}
+.main[data-preset="phone"] .stacks {
+  order: 1;
+}
+.main[data-preset="phone"] .stack {
+  overflow: visible;
+}
+.main[data-preset="phone"] .centre {
+  display: block;
+}
+.main[data-preset="phone"] .dock-tabs {
+  order: 2;
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px calc(6px + var(--safe-bottom));
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+.main[data-preset="phone"] .dock-tabs button {
+  flex: 1;
+  min-height: 40px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+}
+.main[data-preset="phone"] .dock-tabs button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.main[data-preset="phone"]
+  .dock[data-tab="selection"]
+  .panel:not([data-tabgroup="selection"]),
+.main[data-preset="phone"]
+  .dock[data-tab="colour"]
+  .panel:not([data-tabgroup="colour"]),
+.main[data-preset="phone"]
+  .dock[data-tab="swatches"]
+  .panel:not([data-tabgroup="swatches"]),
+.main[data-preset="phone"]
+  .dock[data-tab="export"]
+  .panel:not([data-tabgroup="export"]) {
+  display: none;
+}
+.main[data-preset="phone"] .panel-toggle {
+  cursor: default;
+  pointer-events: none;
+}
+.main[data-preset="phone"] .chev {
+  display: none;
 }
 
 /* Touch screens: bigger targets, nothing that needs a hover. */
 @media (pointer: coarse) {
-  .button,
-  .icon-button,
-  select,
-  .hex,
-  #customSize,
+  :root {
+    --ctl: 44px;
+    --ctl-sm: 44px;
+    --gap: 8px;
+    --pad: 14px;
+    --head: 44px;
+    --bar: 52px;
+  }
   .segmented label,
   .segmented.buttons button,
   .map-select,
   .map-remove,
-  .text-button {
+  .menu-item {
     min-height: 44px;
   }
   .icon-button,
@@ -1339,16 +1832,23 @@ dialog p {
     width: 44px;
     min-height: 44px;
   }
-  input[type="color"],
-  .backgrounds input[type="color"] {
-    width: 44px;
-    height: 44px;
-  }
   input[type="range"] {
     min-height: 32px;
   }
-  .dock-tabs button {
+  .slider {
+    grid-template-columns: 7.6em minmax(0, 1fr) 4.6em;
+  }
+  .slider input[type="number"] {
+    height: 36px;
+  }
+  .main[data-preset="phone"] .dock-tabs button {
     min-height: 48px;
+  }
+  .seed {
+    height: 32px;
+  }
+  .seed-list {
+    max-height: 76px;
   }
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -1357,6 +1857,11 @@ dialog p {
     transition:
       background-color 0.12s,
       color 0.12s;
+  }
+  /* A theme change is instant (see theme() in app.js). */
+  .theming,
+  .theming * {
+    transition: none !important;
   }
 }
 
@@ -1367,14 +1872,16 @@ dialog p {
 }
 .theme-menu > summary {
   list-style: none;
-  min-height: 32px;
+  min-height: var(--ctl);
+  display: inline-flex;
+  align-items: center;
 }
 .theme-menu > summary::-webkit-details-marker {
   display: none;
 }
 .theme-dot {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   border: 1px solid var(--line-strong);
   background: conic-gradient(var(--accent) 0 50%, var(--surface) 0);
@@ -1491,6 +1998,35 @@ dialog p {
         <path d="M17 3.5a2.1 2.1 0 0 1 3 3L17.5 9l-3-3z" />
         <path d="M15 7.5 6 16.5 5 20l3.5-1 9-9" />
       </symbol>
+      <symbol id="i-sample" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="5" />
+        <path d="M12 3v4M12 17v4M3 12h4M17 12h4" />
+      </symbol>
+      <symbol id="i-sample-add" viewBox="0 0 24 24">
+        <circle cx="10" cy="10" r="4" />
+        <path d="M10 2.5v3M10 14.5v3M2.5 10h3M14.5 10h3" />
+        <path d="M19 15v6M16 18h6" />
+      </symbol>
+      <symbol id="i-brush" viewBox="0 0 24 24">
+        <path d="M18.4 3.6a2 2 0 0 1 2.8 2.8L12 15.6 8.4 12z" />
+        <path
+          d="M8.4 12c-2.2 0-3.9 1.7-3.9 3.9 0 1.2-.7 2.3-1.5 3 2.5.4 4.7.3 6.2-1.2.9-.9 1.2-1.8 1.2-2.7"
+        />
+      </symbol>
+      <symbol id="i-brush-add" viewBox="0 0 24 24">
+        <path d="M16.6 2.8a2 2 0 0 1 2.8 2.8L11 14l-3.2-3.2z" />
+        <path
+          d="M7.8 10.8c-2 0-3.5 1.5-3.5 3.5 0 1.1-.6 2-1.3 2.7 2.3.4 4.2.2 5.6-1.1.8-.8 1.1-1.6 1.1-2.4"
+        />
+        <path d="M19 15v6M16 18h6" />
+      </symbol>
+      <symbol id="i-brush-sub" viewBox="0 0 24 24">
+        <path d="M16.6 2.8a2 2 0 0 1 2.8 2.8L11 14l-3.2-3.2z" />
+        <path
+          d="M7.8 10.8c-2 0-3.5 1.5-3.5 3.5 0 1.1-.6 2-1.3 2.7 2.3.4 4.2.2 5.6-1.1.8-.8 1.1-1.6 1.1-2.4"
+        />
+        <path d="M16 18h6" />
+      </symbol>
       <symbol id="i-pan" viewBox="0 0 24 24">
         <path d="M12 3v18M3 12h18" />
         <path d="m9 6 3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3" />
@@ -1502,11 +2038,14 @@ dialog p {
       <symbol id="i-close" viewBox="0 0 24 24">
         <path d="m6 6 12 12M18 6 6 18" />
       </symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24">
+        <path d="m6 9 6 6 6-6" />
+      </symbol>
       <symbol id="i-shield" viewBox="0 0 24 24">
         <path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6z" />
       </symbol>
     </svg>
-    <div class="app">
+    <div class="app" data-busy="false">
       <header class="topbar">
         <div class="brand">
           <svg class="mark" viewBox="0 0 100 100" aria-hidden="true">
@@ -1525,6 +2064,7 @@ dialog p {
           </svg>
           <h1>Hex Shift<span class="version"> / 03</span></h1>
         </div>
+        <div id="menubar" class="menubar"></div>
         <div class="file-info">
           <span id="fileName">Loading sample…</span><span id="fileDims"></span>
         </div>
@@ -1579,181 +2119,743 @@ dialog p {
           hidden
         />
       </header>
-      <main class="main">
-        <section class="stage" aria-label="Image">
-          <div class="stage-tools" id="stageTools">
-            <div class="float view-tools">
-              <fieldset id="view" class="segmented">
-                <legend class="sr-only">Comparison view</legend>
-                <label
+      <main class="main" id="main" data-preset="side">
+        <div class="region left" data-region="left">
+          <div class="stacks">
+            <div class="stack">
+              <section
+                class="panel"
+                data-panel="selection"
+                data-tabgroup="selection"
+                aria-labelledby="selectionTitle"
+              >
+                <div class="panel-head">
+                  <h2>
+                    <button
+                      type="button"
+                      class="panel-toggle"
+                      id="selectionTitle"
+                      aria-expanded="true"
+                      aria-controls="selectionBody"
+                    >
+                      <svg class="chev" aria-hidden="true">
+                        <use href="#i-chevron" /></svg
+                      >Selection
+                    </button>
+                  </h2>
+                  <button
+                    class="text-button"
+                    id="clear"
+                    type="button"
+                    title="Clear the selection (Esc)"
+                  >
+                    Clear
+                  </button>
+                </div>
+                <div class="panel-body" id="selectionBody">
+                  <div id="seeds" class="seed-list">
+                    <span class="muted">Nothing picked yet</span>
+                  </div>
+                  <div>
+                    <p class="small-label">Colours in your image</p>
+                    <div id="palette" class="swatches"></div>
+                  </div>
+                  <div id="selectionSliders" class="slider-grid"></div>
+                  <label class="check"
+                    ><input type="checkbox" id="connected" /> Only connected
+                    regions</label
+                  >
+                  <p id="coverage" class="readout">
+                    Click a colour on the image, or choose a swatch.
+                  </p>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+        <div
+          id="splitLeft"
+          class="splitter v"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize the left column"
+          aria-valuemin="200"
+          aria-valuemax="480"
+          aria-valuenow="280"
+          tabindex="0"
+        ></div>
+        <div class="centre">
+          <section class="stage" aria-label="Image">
+            <div class="stage-tools" id="stageTools">
+              <div
+                class="float canvas-toolbar"
+                role="toolbar"
+                aria-label="Tools"
+              >
+                <button
+                  id="replaceSample"
+                  type="button"
+                  class="icon-button"
+                  aria-pressed="true"
+                  aria-keyshortcuts="I"
+                  title="Pick: click the image to choose the colour to change (I)"
+                >
+                  <svg class="icon" aria-hidden="true">
+                    <use href="#i-sample" /></svg
+                  ><span class="sr-only">Replace sample</span></button
+                ><button
+                  id="addSample"
+                  type="button"
+                  class="icon-button"
+                  aria-pressed="false"
+                  aria-keyshortcuts="A"
+                  title="Add sample: click to add another colour to the selection (A, or Shift-click)"
+                >
+                  <svg class="icon" aria-hidden="true">
+                    <use href="#i-sample-add" /></svg
+                  ><span class="sr-only">Add sample</span></button
+                ><button
+                  id="brushAdd"
+                  type="button"
+                  class="icon-button"
+                  aria-pressed="false"
+                  aria-keyshortcuts="B"
+                  title="Brush: paint pixels into the selection (B)"
+                >
+                  <svg class="icon" aria-hidden="true">
+                    <use href="#i-brush-add" /></svg
+                  ><span class="sr-only">Brush: add</span></button
+                ><button
+                  id="brushSubtract"
+                  type="button"
+                  class="icon-button"
+                  aria-pressed="false"
+                  aria-keyshortcuts="E"
+                  title="Erase brush: paint pixels out of the selection (E)"
+                >
+                  <svg class="icon" aria-hidden="true">
+                    <use href="#i-brush-sub" /></svg
+                  ><span class="sr-only">Brush: subtract</span></button
+                ><button
+                  id="pan"
+                  type="button"
+                  class="icon-button"
+                  aria-label="Pan tool"
+                  aria-pressed="false"
+                  aria-keyshortcuts="H"
+                  title="Pan (H, or hold Space to pan for a moment)"
+                >
+                  <svg class="icon" aria-hidden="true">
+                    <use href="#i-pan" />
+                  </svg>
+                </button>
+                <span class="brush-size" id="brushSizeGroup" hidden>
+                  <label for="brushSize">Brush</label>
+                  <input
+                    id="brushSize"
+                    type="range"
+                    min="1"
+                    max="128"
+                    value="16"
+                  />
+                  <span id="brushSizeValue">16 px</span>
+                </span>
+              </div>
+              <div class="float view-tools">
+                <fieldset id="view" class="segmented">
+                  <legend class="sr-only">Comparison view</legend>
+                  <label
+                    ><input
+                      type="radio"
+                      name="view"
+                      value="result"
+                    />Result</label
+                  ><label
+                    ><input type="radio" name="view" value="side" checked />Side
+                    by side</label
+                  ><label
+                    ><input type="radio" name="view" value="wipe" />Wipe</label
+                  >
+                </fieldset>
+                <label class="sr-only" for="compare">Compare with</label
+                ><select id="compare" class="compact">
+                  <option value="working">Before current edit</option>
+                  <option value="original">Original</option>
+                </select>
+                <fieldset
+                  id="overlay"
+                  class="segmented"
+                  title="How the selected pixels are shown"
+                >
+                  <legend class="sr-only">Show selection</legend>
+                  <label
+                    ><input
+                      type="radio"
+                      name="overlay"
+                      value="overlay"
+                    />Tinted</label
+                  ><label
+                    ><input
+                      type="radio"
+                      name="overlay"
+                      value="only"
+                    />Only</label
+                  ><label
+                    ><input
+                      type="radio"
+                      name="overlay"
+                      value="normal"
+                      checked
+                    />Off</label
+                  >
+                </fieldset>
+              </div>
+              <div class="float canvas-tools">
+                <button
+                  id="zoomOut"
+                  class="icon-button"
+                  aria-label="Zoom out"
+                  title="Zoom out (−)"
+                >
+                  <svg class="icon" aria-hidden="true">
+                    <use href="#i-minus" />
+                  </svg></button
+                ><button id="fit" class="text-button" title="Fit (F)">
+                  Fit</button
+                ><button
+                  id="actual"
+                  class="text-button"
+                  title="Actual size (1)"
+                >
+                  100%</button
+                ><button
+                  id="zoomIn"
+                  class="icon-button"
+                  aria-label="Zoom in"
+                  title="Zoom in (+)"
+                >
+                  <svg class="icon" aria-hidden="true">
+                    <use href="#i-plus" />
+                  </svg></button
+                ><span id="zoomReadout">100%</span>
+              </div>
+            </div>
+            <div class="first-use" id="firstUse">
+              <p>
+                <strong>Pick a colour. Make it yours.</strong> Click the image,
+                set a target colour, then export.
+              </p>
+              <button
+                id="dismissTip"
+                class="icon-button"
+                aria-label="Dismiss getting started tip"
+              >
+                <svg class="icon" aria-hidden="true">
+                  <use href="#i-close" />
+                </svg>
+              </button>
+            </div>
+            <div id="viewport" class="viewport checker" data-view="side">
+              <div class="pane before">
+                <div class="canvas-space">
+                  <canvas
+                    id="beforeCanvas"
+                    aria-label="Source image; use the image palette for keyboard colour selection"
+                  ></canvas>
+                </div>
+                <div class="canvas-label" id="beforeLabel">
+                  Before current edit
+                </div>
+              </div>
+              <div class="pane after">
+                <div class="canvas-space">
+                  <canvas id="outlineCanvas" aria-hidden="true" hidden></canvas
+                  ><canvas
+                    id="resultCanvas"
+                    aria-label="Recoloured image preview"
+                  ></canvas
+                  ><canvas id="wipeCanvas" aria-hidden="true"></canvas>
+                  <div id="brushCursor" hidden></div>
+                </div>
+                <div class="canvas-label">
+                  Result <span id="resultNote"></span>
+                </div>
+              </div>
+              <canvas
+                id="loupe"
+                width="132"
+                height="164"
+                hidden
+                aria-hidden="true"
+              ></canvas>
+            </div>
+            <label id="wipeControl" class="float wipe-control" hidden
+              >Original
+              <input id="wipe" type="range" min="0" max="100" value="50" />
+              Result</label
+            >
+            <div class="float backgrounds">
+              <fieldset id="background" class="segmented swatch-choice">
+                <legend class="sr-only">Preview background</legend>
+                <label title="Checkerboard"
                   ><input
                     type="radio"
-                    name="view"
-                    value="result"
-                  />Result</label
-                ><label
-                  ><input type="radio" name="view" value="side" checked />Side
-                  by side</label
-                ><label
-                  ><input type="radio" name="view" value="wipe" />Wipe</label
+                    name="background"
+                    value="checker"
+                    checked
+                  /><span class="bg-chip checker-chip"></span
+                  ><span class="sr-only">Checkerboard</span></label
+                ><label title="White"
+                  ><input type="radio" name="background" value="white" /><span
+                    class="bg-chip white-chip"
+                  ></span
+                  ><span class="sr-only">White</span></label
+                ><label title="Dark"
+                  ><input type="radio" name="background" value="dark" /><span
+                    class="bg-chip dark-chip"
+                  ></span
+                  ><span class="sr-only">Dark</span></label
+                ><label title="Custom colour"
+                  ><input type="radio" name="background" value="custom" /><span
+                    class="bg-chip custom-chip"
+                  ></span
+                  ><span class="sr-only">Custom</span></label
                 >
               </fieldset>
-              <label class="sr-only" for="compare">Compare with</label
-              ><select id="compare" class="compact">
-                <option value="working">Before current edit</option>
-                <option value="original">Original</option>
-              </select>
+              <input
+                type="color"
+                id="backgroundColour"
+                value="#808080"
+                aria-label="Custom preview background"
+                hidden
+              />
             </div>
-            <div class="float canvas-tools">
-              <button
-                id="pan"
-                class="icon-button"
-                aria-label="Pan tool"
-                aria-pressed="false"
-                title="Pan (hold Space to pan for a moment)"
-              >
-                <svg class="icon" aria-hidden="true">
-                  <use href="#i-pan" />
-                </svg></button
-              ><button
-                id="zoomOut"
-                class="icon-button"
-                aria-label="Zoom out"
-                title="Zoom out (−)"
-              >
-                <svg class="icon" aria-hidden="true">
-                  <use href="#i-minus" />
-                </svg></button
-              ><button id="fit" class="text-button" title="Fit (F)">Fit</button
-              ><button id="actual" class="text-button">100%</button
-              ><button
-                id="zoomIn"
-                class="icon-button"
-                aria-label="Zoom in"
-                title="Zoom in (+)"
-              >
-                <svg class="icon" aria-hidden="true">
-                  <use href="#i-plus" />
-                </svg></button
-              ><span id="zoomReadout">100%</span>
+          </section>
+          <section class="mapbar" aria-labelledby="colourMapLabel">
+            <h2 class="mapbar-title" id="colourMapLabel">Colour map</h2>
+            <div
+              id="colourMap"
+              class="colour-map"
+              role="group"
+              aria-labelledby="colourMapLabel"
+            ></div>
+            <div class="map-actions">
+              <button id="addRow" class="text-button" type="button">
+                + Add colour</button
+              ><button id="mapAll" class="text-button" type="button">
+                Map all colours
+              </button>
             </div>
-          </div>
-          <div class="first-use" id="firstUse">
-            <p>
-              <strong>Pick a colour. Make it yours.</strong> Click the image,
-              set a target colour, then export.
-            </p>
+            <span id="editState" class="badge">No pending edit</span>
             <button
-              id="dismissTip"
-              class="icon-button"
-              aria-label="Dismiss getting started tip"
+              id="apply"
+              class="button"
+              title="Bake the map into the image so the next change builds on it (Ctrl/Cmd Enter)"
+              disabled
             >
-              <svg class="icon" aria-hidden="true"><use href="#i-close" /></svg>
+              Apply, then build on it
             </button>
-          </div>
-          <div id="viewport" class="viewport checker" data-view="side">
-            <div class="pane before">
-              <div class="canvas-space">
-                <canvas
-                  id="beforeCanvas"
-                  aria-label="Source image; use the image palette for keyboard colour selection"
-                ></canvas>
-              </div>
-              <div class="canvas-label" id="beforeLabel">
-                Before current edit
-              </div>
-            </div>
-            <div class="pane after">
-              <div class="canvas-space">
-                <canvas
-                  id="resultCanvas"
-                  aria-label="Recoloured image preview"
-                ></canvas
-                ><canvas id="wipeCanvas" aria-hidden="true"></canvas>
-                <div id="brushCursor" hidden></div>
-              </div>
-              <div class="canvas-label">
-                Result <span id="resultNote"></span>
-              </div>
-            </div>
-            <canvas
-              id="loupe"
-              width="132"
-              height="164"
-              hidden
-              aria-hidden="true"
-            ></canvas>
-          </div>
-          <label id="wipeControl" class="float wipe-control" hidden
-            >Original
-            <input id="wipe" type="range" min="0" max="100" value="50" />
-            Result</label
-          >
-          <div class="float backgrounds">
-            <fieldset id="background" class="segmented swatch-choice">
-              <legend class="sr-only">Preview background</legend>
-              <label title="Checkerboard"
-                ><input
-                  type="radio"
-                  name="background"
-                  value="checker"
-                  checked
-                /><span class="bg-chip checker-chip"></span
-                ><span class="sr-only">Checkerboard</span></label
-              ><label title="White"
-                ><input type="radio" name="background" value="white" /><span
-                  class="bg-chip white-chip"
-                ></span
-                ><span class="sr-only">White</span></label
-              ><label title="Dark"
-                ><input type="radio" name="background" value="dark" /><span
-                  class="bg-chip dark-chip"
-                ></span
-                ><span class="sr-only">Dark</span></label
-              ><label title="Custom colour"
-                ><input type="radio" name="background" value="custom" /><span
-                  class="bg-chip custom-chip"
-                ></span
-                ><span class="sr-only">Custom</span></label
+          </section>
+        </div>
+        <div
+          id="splitRight"
+          class="splitter v"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize the right column"
+          aria-valuemin="200"
+          aria-valuemax="480"
+          aria-valuenow="340"
+          tabindex="0"
+        ></div>
+        <div class="region right" data-region="right">
+          <div class="stacks">
+            <div class="stack">
+              <section
+                class="panel"
+                data-panel="colour"
+                data-tabgroup="colour"
+                aria-labelledby="colourTitle"
               >
-            </fieldset>
-            <input
-              type="color"
-              id="backgroundColour"
-              value="#808080"
-              aria-label="Custom preview background"
-              hidden
-            />
+                <div class="panel-head">
+                  <h2>
+                    <button
+                      type="button"
+                      class="panel-toggle"
+                      id="colourTitle"
+                      aria-expanded="true"
+                      aria-controls="colourBody"
+                    >
+                      <svg class="chev" aria-hidden="true">
+                        <use href="#i-chevron" /></svg
+                      >Colour
+                    </button>
+                  </h2>
+                </div>
+                <div class="panel-body" id="colourBody">
+                  <fieldset id="mode" class="segmented">
+                    <legend class="sr-only">Treatment</legend>
+                    <label title="Shift colour: keeps the shading"
+                      ><input
+                        type="radio"
+                        name="mode"
+                        value="shift"
+                        checked
+                      />Shift</label
+                    ><label title="Flat colour: one exact hex"
+                      ><input
+                        type="radio"
+                        name="mode"
+                        value="flat"
+                      />Flat</label
+                    ><label title="Make the selected pixels transparent"
+                      ><input
+                        type="radio"
+                        name="mode"
+                        value="transparent"
+                      />Transparent</label
+                    >
+                  </fieldset>
+                  <div id="targetControls" class="target-row">
+                    <label for="targetHex">Target</label>
+                    <input
+                      type="color"
+                      id="targetColour"
+                      value="#00d9ff"
+                      aria-label="Target colour picker"
+                    /><input
+                      id="targetHex"
+                      class="hex"
+                      value="#00D9FF"
+                      maxlength="64"
+                      spellcheck="false"
+                      autocomplete="off"
+                      aria-describedby="targetResult"
+                    /><button
+                      id="eyeDropper"
+                      class="icon-button"
+                      type="button"
+                      aria-label="Pick a colour from the screen"
+                      title="Pick a colour from anywhere on the screen"
+                      hidden
+                    >
+                      <svg class="icon" aria-hidden="true">
+                        <use href="#i-pick" />
+                      </svg>
+                    </button>
+                  </div>
+                  <p id="targetResult" class="readout">
+                    <span id="targetText">Pick a source colour to begin.</span
+                    ><span
+                      id="capWarning"
+                      class="cap-mark"
+                      role="img"
+                      aria-label="Warning: these adjustments go past white, black or full colour, so some shading is lost. The achieved colour is shown."
+                      title="These adjustments go past white, black or full colour, so some shading is lost. The achieved colour is shown."
+                      hidden
+                      >⚠</span
+                    >
+                  </p>
+                  <label class="check" id="protectLabel"
+                    ><input type="checkbox" id="protect" checked /> Protect
+                    highlights and shadows</label
+                  >
+                  <label class="check" id="cleanEdgesLabel" hidden
+                    ><input type="checkbox" id="cleanEdges" checked /> Clean
+                    edges (remove the colour from blended edges)</label
+                  >
+                </div>
+              </section>
+              <section
+                class="panel"
+                data-panel="adjust"
+                data-tabgroup="colour"
+                id="adjustPanel"
+                aria-labelledby="adjustTitle"
+              >
+                <div class="panel-head">
+                  <h2>
+                    <button
+                      type="button"
+                      class="panel-toggle"
+                      id="adjustTitle"
+                      aria-expanded="true"
+                      aria-controls="adjustBody"
+                    >
+                      <svg class="chev" aria-hidden="true">
+                        <use href="#i-chevron" /></svg
+                      >Adjust
+                    </button>
+                  </h2>
+                </div>
+                <div class="panel-body" id="adjustBody">
+                  <fieldset id="model" class="segmented">
+                    <legend class="sr-only">Colour model</legend>
+                    <label title="Keeps brightness when the hue changes"
+                      ><input
+                        type="radio"
+                        name="model"
+                        value="oklch"
+                        checked
+                      />Perceptual</label
+                    ><label
+                      ><input type="radio" name="model" value="hsl" />Classic
+                      HSL</label
+                    >
+                  </fieldset>
+                  <div id="fineControls" class="slider-grid"></div>
+                </div>
+              </section>
+              <section
+                class="panel"
+                data-panel="swatches"
+                data-tabgroup="swatches"
+                id="swatchesPanel"
+                aria-labelledby="swatchesTitle"
+              >
+                <div class="panel-head">
+                  <h2>
+                    <button
+                      type="button"
+                      class="panel-toggle"
+                      id="swatchesTitle"
+                      aria-expanded="true"
+                      aria-controls="swatchesBody"
+                    >
+                      <svg class="chev" aria-hidden="true">
+                        <use href="#i-chevron" /></svg
+                      >Swatches
+                    </button>
+                  </h2>
+                </div>
+                <div class="panel-body" id="swatchesBody">
+                  <label class="sr-only" for="paletteSet">Palette</label
+                  ><select id="paletteSet"></select>
+                  <div id="presets" class="swatches named"></div>
+                  <div class="palette-actions">
+                    <button id="openPalette" class="text-button" type="button">
+                      Open palette…</button
+                    ><button id="savePalette" class="text-button" type="button">
+                      Save as .gpl
+                    </button>
+                  </div>
+                  <input
+                    id="paletteInput"
+                    type="file"
+                    accept=".gpl,.hex,.pal,.txt,text/plain"
+                    hidden
+                  />
+                  <div id="recentGroup" hidden>
+                    <p class="small-label">Recent targets</p>
+                    <div id="recent" class="swatches"></div>
+                  </div>
+                  <button
+                    id="makeVariants"
+                    class="button full"
+                    type="button"
+                    title="Click a colour to use it. Skin tones map your selection's light and shadow shades onto each tone."
+                    disabled
+                  >
+                    Make a variant for each colour
+                  </button>
+                  <p id="variantsNote" class="readout" hidden></p>
+                  <div id="variants" class="variants" hidden></div>
+                  <button
+                    id="exportVariants"
+                    class="button full"
+                    type="button"
+                    hidden
+                  >
+                    Export all variants (ZIP)
+                  </button>
+                </div>
+              </section>
+              <section
+                class="panel"
+                data-panel="outline"
+                data-tabgroup="export"
+                id="outlinePanel"
+                aria-labelledby="outlineTitle"
+              >
+                <div class="panel-head">
+                  <h2>
+                    <button
+                      type="button"
+                      class="panel-toggle"
+                      id="outlineTitle"
+                      aria-expanded="true"
+                      aria-controls="outlineBody"
+                    >
+                      <svg class="chev" aria-hidden="true">
+                        <use href="#i-chevron" /></svg
+                      >Outline
+                    </button>
+                  </h2>
+                  <label
+                    class="head-check"
+                    title="Keeps an emoji visible on a background of its own colour, such as a Discord button. The canvas grows only if the artwork touches its edges."
+                    ><input type="checkbox" id="outline" /> On</label
+                  >
+                </div>
+                <div class="panel-body" id="outlineBody">
+                  <div class="slider">
+                    <label for="outlineWidth">Width</label>
+                    <input
+                      id="outlineWidth"
+                      type="range"
+                      min="0.5"
+                      max="15"
+                      step="0.5"
+                      value="4"
+                    />
+                    <span id="outlineWidthValue">4%</span>
+                  </div>
+                  <div class="target-row">
+                    <label for="outlineHex">Colour</label>
+                    <input
+                      type="color"
+                      id="outlineColour"
+                      value="#ffffff"
+                      aria-label="Outline colour picker"
+                    /><input
+                      id="outlineHex"
+                      class="hex"
+                      value="#FFFFFF"
+                      maxlength="64"
+                      spellcheck="false"
+                    />
+                  </div>
+                  <div id="outlineSwatches" class="swatches"></div>
+                </div>
+              </section>
+              <section
+                class="panel"
+                data-panel="export"
+                data-tabgroup="export"
+                aria-labelledby="exportTitle"
+              >
+                <div class="panel-head">
+                  <h2>
+                    <button
+                      type="button"
+                      class="panel-toggle"
+                      id="exportTitle"
+                      aria-expanded="true"
+                      aria-controls="exportBody"
+                    >
+                      <svg class="chev" aria-hidden="true">
+                        <use href="#i-chevron" /></svg
+                      >Export
+                    </button>
+                  </h2>
+                  <button id="reset" class="text-button" type="button">
+                    Reset original
+                  </button>
+                </div>
+                <div class="panel-body" id="exportBody">
+                  <div class="field-grid">
+                    <label for="size">Size</label
+                    ><select id="size"></select>
+                    <div id="customSizeGroup" class="field-row" hidden>
+                      <label for="customSize">Longest side (px)</label
+                      ><input
+                        id="customSize"
+                        type="number"
+                        min="16"
+                        max="2048"
+                        step="1"
+                        value="512"
+                        inputmode="numeric"
+                      />
+                    </div>
+                    <div id="svgSizeGroup" class="field-row" hidden>
+                      <label for="svgSize">SVG drawn at</label
+                      ><select id="svgSize">
+                        <option value="256">256 px</option>
+                        <option value="512" selected>512 px</option>
+                        <option value="1024">1024 px</option>
+                        <option value="2048">2048 px</option>
+                      </select>
+                    </div>
+                    <label for="format">Format</label
+                    ><select id="format">
+                      <option value="png">PNG · lossless, transparent</option>
+                      <option value="webp">WebP · lossless, transparent</option>
+                      <option value="webp-small">
+                        WebP · small, transparent
+                      </option>
+                      <option value="zip" disabled>
+                        ZIP · set by the size
+                      </option>
+                    </select>
+                  </div>
+                  <div id="sizeReadout" class="readout"></div>
+                  <div class="output-preview">
+                    <label for="previewGround" class="small-label"
+                      >Real size on</label
+                    ><select id="previewGround" class="compact"></select>
+                    <div id="previewTiles" class="preview-tiles"></div>
+                  </div>
+                  <button id="copy" class="button full" disabled>
+                    Copy PNG to clipboard
+                  </button>
+                  <details id="recipePanel">
+                    <summary>Recipes and batch</summary>
+                    <p class="help">
+                      A recipe repeats your colour changes on other images. It
+                      keeps colours, not places, so brush strokes and
+                      connected-region limits are left out.
+                    </p>
+                    <div class="palette-actions">
+                      <button id="saveRecipe" class="text-button" type="button">
+                        Save recipe</button
+                      ><button
+                        id="openRecipe"
+                        class="text-button"
+                        type="button"
+                      >
+                        Apply a recipe…
+                      </button>
+                    </div>
+                    <input
+                      id="recipeInput"
+                      type="file"
+                      accept=".json,application/json"
+                      hidden
+                    />
+                    <button
+                      id="batch"
+                      class="button full"
+                      type="button"
+                      disabled
+                    >
+                      Apply to many images…
+                    </button>
+                    <input
+                      id="batchInput"
+                      type="file"
+                      accept="image/*,.svg"
+                      multiple
+                      hidden
+                    />
+                    <p id="batchNote" class="readout" aria-live="polite"></p>
+                    <button
+                      id="cancelBatch"
+                      class="button full"
+                      type="button"
+                      hidden
+                    >
+                      Cancel batch
+                    </button>
+                  </details>
+                </div>
+              </section>
+            </div>
           </div>
-        </section>
-        <section class="mapbar" aria-labelledby="colourMapLabel">
-          <h2 class="mapbar-title" id="colourMapLabel">Colour map</h2>
-          <div
-            id="colourMap"
-            class="colour-map"
-            role="group"
-            aria-labelledby="colourMapLabel"
-          ></div>
-          <div class="map-actions">
-            <button id="addRow" class="text-button" type="button">
-              + Add colour</button
-            ><button id="mapAll" class="text-button" type="button">
-              Map all colours
-            </button>
-          </div>
-          <span id="editState" class="badge">No pending edit</span>
-          <button
-            id="apply"
-            class="button"
-            title="Bake the map into the image so the next change builds on it"
-            disabled
-          >
-            Apply, then build on it
-          </button>
-        </section>
+        </div>
         <div
           id="dockHandle"
-          class="dock-handle"
+          class="splitter h"
           role="separator"
           aria-orientation="horizontal"
           aria-label="Resize the controls"
@@ -1762,365 +2864,31 @@ dialog p {
           aria-valuenow="260"
           tabindex="0"
         ></div>
-        <div class="inspector dock" id="dock" data-tab="colour">
+        <div
+          class="region bottom dock"
+          id="dock"
+          data-region="bottom"
+          data-tab="colour"
+        >
           <div class="dock-tabs" role="group" aria-label="Show controls">
             <button type="button" data-tab="selection" aria-pressed="false">
               Selection</button
             ><button type="button" data-tab="colour" aria-pressed="true">
               Colour</button
+            ><button type="button" data-tab="swatches" aria-pressed="false">
+              Swatches</button
             ><button type="button" data-tab="export" aria-pressed="false">
               Export
             </button>
           </div>
-          <section
-            class="panel"
-            data-panel="selection"
-            aria-labelledby="selectionTitle"
-          >
-            <div class="panel-head">
-              <h2 id="selectionTitle">Selection</h2>
-              <button class="text-button" id="clear">Clear</button>
-            </div>
-            <div class="panel-body">
-              <div class="segmented buttons">
-                <button id="replaceSample" aria-pressed="true">
-                  Replace sample</button
-                ><button id="addSample" aria-pressed="false">Add sample</button>
-              </div>
-              <div id="seeds" class="seed-list">
-                <span class="muted">Nothing picked yet</span>
-              </div>
-              <p class="small-label">Colours in your image</p>
-              <div id="palette" class="swatches"></div>
-              <div id="selectionSliders" class="slider-grid"></div>
-              <label class="check"
-                ><input type="checkbox" id="connected" /> Only connected
-                regions</label
-              >
-              <fieldset id="overlay" class="segmented labelled">
-                <legend>Show selection</legend>
-                <label
-                  ><input
-                    type="radio"
-                    name="overlay"
-                    value="overlay"
-                  />Tinted</label
-                ><label
-                  ><input type="radio" name="overlay" value="only" />Only</label
-                ><label
-                  ><input
-                    type="radio"
-                    name="overlay"
-                    value="normal"
-                    checked
-                  />Off</label
-                >
-              </fieldset>
-              <details id="brushPanel">
-                <summary>Refine with a brush</summary>
-                <div class="segmented buttons">
-                  <button id="brushAdd" aria-pressed="false">+ Add</button
-                  ><button id="brushSubtract" aria-pressed="false">
-                    − Subtract
-                  </button>
-                </div>
-                <label for="brushSize"
-                  >Brush diameter <span id="brushSizeValue">16 px</span></label
-                ><input
-                  id="brushSize"
-                  type="range"
-                  min="1"
-                  max="128"
-                  value="16"
-                />
-                <p class="help">
-                  Strokes stay when tolerances change. Choose Replace or Add
-                  sample to stop brushing.
-                </p>
-              </details>
-              <p id="coverage" class="readout">
-                Click a colour on the image, or choose a swatch.
-              </p>
-            </div>
-          </section>
-          <section
-            class="panel"
-            data-panel="colour"
-            aria-labelledby="colourTitle"
-          >
-            <div class="panel-head">
-              <h2 id="colourTitle">Colour</h2>
-            </div>
-            <div class="panel-body">
-              <fieldset id="mode" class="segmented">
-                <legend class="sr-only">Treatment</legend>
-                <label title="Shift colour: keeps the shading"
-                  ><input
-                    type="radio"
-                    name="mode"
-                    value="shift"
-                    checked
-                  />Shift</label
-                ><label title="Flat colour: one exact hex"
-                  ><input type="radio" name="mode" value="flat" />Flat</label
-                ><label title="Make the selected pixels transparent"
-                  ><input
-                    type="radio"
-                    name="mode"
-                    value="transparent"
-                  />Transparent</label
-                >
-              </fieldset>
-              <div id="targetControls">
-                <label for="targetHex">Target colour</label>
-                <div class="target-row">
-                  <input
-                    type="color"
-                    id="targetColour"
-                    value="#00d9ff"
-                    aria-label="Target colour picker"
-                  /><input
-                    id="targetHex"
-                    class="hex"
-                    value="#00D9FF"
-                    maxlength="64"
-                    spellcheck="false"
-                    autocomplete="off"
-                    aria-describedby="targetResult"
-                  /><button
-                    id="eyeDropper"
-                    class="icon-button"
-                    type="button"
-                    aria-label="Pick a colour from the screen"
-                    title="Pick a colour from anywhere on the screen"
-                    hidden
-                  >
-                    <svg class="icon" aria-hidden="true">
-                      <use href="#i-pick" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-              <p id="targetResult" class="readout">
-                Pick a source colour to begin.
-              </p>
-              <p id="capWarning" class="notice" hidden>
-                These adjustments go past white, black or full colour, so some
-                shading is lost. The achieved colour is shown above.
-              </p>
-              <label class="check" id="protectLabel"
-                ><input type="checkbox" id="protect" checked /> Protect
-                highlights and shadows</label
-              >
-              <label class="check" id="cleanEdgesLabel" hidden
-                ><input type="checkbox" id="cleanEdges" checked /> Clean edges
-                (remove the colour from blended edges)</label
-              >
-              <details open id="fine">
-                <summary>Fine adjustment</summary>
-                <fieldset id="model" class="segmented labelled">
-                  <legend>Colour model</legend>
-                  <label title="Keeps brightness when the hue changes"
-                    ><input
-                      type="radio"
-                      name="model"
-                      value="oklch"
-                      checked
-                    />Perceptual</label
-                  ><label
-                    ><input type="radio" name="model" value="hsl" />Classic
-                    HSL</label
-                  >
-                </fieldset>
-                <div id="fineControls" class="slider-grid"></div>
-              </details>
-              <details class="presets" id="palettePanel">
-                <summary>Palettes and variants</summary>
-                <label for="paletteSet">Palette</label
-                ><select id="paletteSet"></select>
-                <div id="presets" class="swatches named"></div>
-                <div class="palette-actions">
-                  <button id="openPalette" class="text-button" type="button">
-                    Open palette…</button
-                  ><button id="savePalette" class="text-button" type="button">
-                    Save as .gpl
-                  </button>
-                </div>
-                <input
-                  id="paletteInput"
-                  type="file"
-                  accept=".gpl,.hex,.pal,.txt,text/plain"
-                  hidden
-                />
-                <p class="help">
-                  Click a colour to use it. Skin tones map your selection's
-                  light and shadow shades onto each tone. Opens or takes pasted
-                  GIMP, Lospec, JASC and Paint.NET palettes, or a list of hex
-                  colours.
-                </p>
-                <button
-                  id="makeVariants"
-                  class="button full"
-                  type="button"
-                  disabled
-                >
-                  Make a variant for each colour
-                </button>
-                <p id="variantsNote" class="readout" hidden></p>
-                <div id="variants" class="variants" hidden></div>
-                <button
-                  id="exportVariants"
-                  class="button full"
-                  type="button"
-                  hidden
-                >
-                  Export all variants (ZIP)
-                </button>
-              </details>
-              <div id="recentGroup" hidden>
-                <p class="small-label">Recent targets</p>
-                <div id="recent" class="swatches"></div>
-              </div>
-            </div>
-          </section>
-          <section
-            class="panel"
-            data-panel="export"
-            aria-labelledby="exportTitle"
-          >
-            <div class="panel-head">
-              <h2 id="exportTitle">Export</h2>
-              <button id="reset" class="text-button">Reset original</button>
-            </div>
-            <div class="panel-body">
-              <div class="field-grid">
-                <label for="size">Size</label
-                ><select id="size"></select>
-                <div id="customSizeGroup" class="field-row" hidden>
-                  <label for="customSize">Longest side (px)</label
-                  ><input
-                    id="customSize"
-                    type="number"
-                    min="16"
-                    max="2048"
-                    step="1"
-                    value="512"
-                    inputmode="numeric"
-                  />
-                </div>
-                <div id="svgSizeGroup" class="field-row" hidden>
-                  <label for="svgSize">SVG drawn at</label
-                  ><select id="svgSize">
-                    <option value="256">256 px</option>
-                    <option value="512" selected>512 px</option>
-                    <option value="1024">1024 px</option>
-                    <option value="2048">2048 px</option>
-                  </select>
-                </div>
-                <label for="format">Format</label
-                ><select id="format">
-                  <option value="png">PNG · lossless, transparent</option>
-                  <option value="webp">WebP · lossless, transparent</option>
-                  <option value="webp-small">WebP · small, transparent</option>
-                  <option value="zip" disabled>ZIP · set by the size</option>
-                </select>
-              </div>
-              <div id="sizeReadout" class="readout"></div>
-              <div class="output-preview">
-                <label for="previewGround" class="small-label"
-                  >Real size on</label
-                ><select id="previewGround" class="compact"></select>
-                <div id="previewTiles" class="preview-tiles"></div>
-              </div>
-              <details id="outlinePanel">
-                <summary>Outline</summary>
-                <label class="check"
-                  ><input type="checkbox" id="outline" /> Add an outline</label
-                >
-                <label for="outlineWidth"
-                  >Width <span id="outlineWidthValue">4%</span></label
-                ><input
-                  id="outlineWidth"
-                  type="range"
-                  min="0.5"
-                  max="15"
-                  step="0.5"
-                  value="4"
-                />
-                <label for="outlineHex">Outline colour</label>
-                <div class="target-row">
-                  <input
-                    type="color"
-                    id="outlineColour"
-                    value="#ffffff"
-                    aria-label="Outline colour picker"
-                  /><input
-                    id="outlineHex"
-                    class="hex"
-                    value="#FFFFFF"
-                    maxlength="64"
-                    spellcheck="false"
-                  />
-                </div>
-                <div id="outlineSwatches" class="swatches"></div>
-                <p class="help">
-                  Keeps an emoji visible on a background of its own colour, such
-                  as a Discord button. The canvas grows only if the artwork
-                  touches its edges.
-                </p>
-              </details>
-              <button id="copy" class="button full" disabled>
-                Copy PNG to clipboard
-              </button>
-              <details id="recipePanel">
-                <summary>Recipes and batch</summary>
-                <p class="help">
-                  A recipe repeats your colour changes on other images. It keeps
-                  colours, not places, so brush strokes and connected-region
-                  limits are left out.
-                </p>
-                <div class="palette-actions">
-                  <button id="saveRecipe" class="text-button" type="button">
-                    Save recipe</button
-                  ><button id="openRecipe" class="text-button" type="button">
-                    Apply a recipe…
-                  </button>
-                </div>
-                <input
-                  id="recipeInput"
-                  type="file"
-                  accept=".json,application/json"
-                  hidden
-                />
-                <button id="batch" class="button full" type="button" disabled>
-                  Apply to many images…
-                </button>
-                <input
-                  id="batchInput"
-                  type="file"
-                  accept="image/*,.svg"
-                  multiple
-                  hidden
-                />
-                <p id="batchNote" class="readout" aria-live="polite"></p>
-                <button
-                  id="cancelBatch"
-                  class="button full"
-                  type="button"
-                  hidden
-                >
-                  Cancel batch
-                </button>
-              </details>
-            </div>
-          </section>
+          <div class="stacks"></div>
         </div>
       </main>
       <footer class="statusbar">
         <p id="status" role="status" aria-live="polite">Loading sample…</p>
-        <button id="cancel" class="text-button" hidden>Cancel</button>
+        <button id="cancel" class="text-button" type="button">Cancel</button>
         <span id="pixelReadout" class="mono"
-          >Hover to inspect a pixel · scroll to zoom</span
+          >Hover to inspect · scroll to zoom</span
         >
         <p id="update" class="notice" hidden>
           A new version is ready. Export your work, then close and reopen Hex
@@ -2130,16 +2898,77 @@ dialog p {
           ><svg class="icon" aria-hidden="true"><use href="#i-shield" /></svg>
           Images stay on your device</span
         >
-        <details class="workspace-help">
+        <details class="workspace-help" id="shortcuts">
           <summary>Shortcuts</summary>
           <div class="help-pop">
+            <dl class="keys">
+              <div>
+                <dt>Ctrl O</dt>
+                <dd>Open an image</dd>
+              </div>
+              <div>
+                <dt>Ctrl E</dt>
+                <dd>Export</dd>
+              </div>
+              <div>
+                <dt>Ctrl Shift C</dt>
+                <dd>Copy PNG to the clipboard</dd>
+              </div>
+              <div>
+                <dt>Ctrl Z</dt>
+                <dd>Undo</dd>
+              </div>
+              <div>
+                <dt>Ctrl Shift Z</dt>
+                <dd>Redo</dd>
+              </div>
+              <div>
+                <dt>Ctrl Enter</dt>
+                <dd>Apply, then build on it</dd>
+              </div>
+              <div>
+                <dt>Esc</dt>
+                <dd>Clear the selection</dd>
+              </div>
+              <div>
+                <dt>I</dt>
+                <dd>Pick: replace the sample</dd>
+              </div>
+              <div>
+                <dt>A</dt>
+                <dd>Add a sample (or Shift-click)</dd>
+              </div>
+              <div>
+                <dt>B</dt>
+                <dd>Brush: add to the selection</dd>
+              </div>
+              <div>
+                <dt>E</dt>
+                <dd>Erase brush: take out of the selection</dd>
+              </div>
+              <div>
+                <dt>H</dt>
+                <dd>Pan (or hold Space and drag)</dd>
+              </div>
+              <div>
+                <dt>+ −</dt>
+                <dd>Zoom in and out</dd>
+              </div>
+              <div>
+                <dt>F</dt>
+                <dd>Fit the image · 1 shows it at 100%</dd>
+              </div>
+              <div>
+                <dt>Alt, F10</dt>
+                <dd>Go to the menus</dd>
+              </div>
+              <div>
+                <dt>F1</dt>
+                <dd>This list</dd>
+              </div>
+            </dl>
             <p>
-              Ctrl/Cmd O opens an image. Ctrl/Cmd Z undoes; Ctrl/Cmd Shift Z
-              redoes. Shift-click adds a sample. Escape clears the selection.
-              Space-drag pans. + / − zoom; F fits. On touch screens, pinch to
-              zoom and drag with two fingers to pan.
-            </p>
-            <p>
+              On touch screens, pinch to zoom and drag with two fingers to pan.
               Opens PNG, JPEG, WebP, GIF and static SVG up to 4 megapixels;
               animated files open as stills. Static SVG supports shapes, paths,
               text, gradients, clips, masks, blend modes, filter effects, reused
@@ -2169,6 +2998,33 @@ dialog p {
           ><button id="replaceConfirm" class="button primary" value="replace">
             Open new image
           </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="aboutDialog" aria-labelledby="aboutTitle">
+      <form method="dialog">
+        <h2 id="aboutTitle">Hex Shift</h2>
+        <p id="aboutVersion"></p>
+        <p>
+          Recolour one part of an emoji, icon or sticker and keep its shading.
+          Images stay on your device. Hex Shift is free software under the MIT
+          licence.
+        </p>
+        <details>
+          <summary>Licence notices</summary>
+          <pre id="aboutNotices" class="notices"></pre>
+        </details>
+        <div class="dialog-actions">
+          <button class="button primary" value="close">Close</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="notesDialog" aria-labelledby="notesTitle">
+      <form method="dialog">
+        <h2 id="notesTitle">Release notes</h2>
+        <div id="notesBody" class="notes"></div>
+        <div class="dialog-actions">
+          <button class="button primary" value="close">Close</button>
         </div>
       </form>
     </dialog>
@@ -6284,9 +7140,9 @@ dialog p {
     return out;
   }
   var outlineRadius = (w2, h2, widthPct) => Math.max(w2, h2) * widthPct / 100;
-  async function outline(pixels2, w2, h2, { widthPct, rgb, silhouette }, yieldFn) {
+  async function outlineMask(pixels2, w2, h2, widthPct, silhouette, yieldFn) {
     const r = outlineRadius(w2, h2, widthPct);
-    if (!(r > 0)) return { pixels: pixels2, width: w2, height: h2 };
+    if (!(r > 0)) return null;
     let minX = w2, minY = h2, maxX = -1, maxY = -1;
     for (let y = 0; y < h2; y++)
       for (let x = 0; x < w2; x++)
@@ -6296,26 +7152,34 @@ dialog p {
           minY = Math.min(minY, y);
           maxY = Math.max(maxY, y);
         }
-    if (maxX < 0) return { pixels: pixels2, width: w2, height: h2 };
+    if (maxX < 0) return null;
     const reach = Math.ceil(r + 0.5), left = Math.max(0, reach - minX), top = Math.max(0, reach - minY), W = w2 + left + Math.max(0, reach - (w2 - 1 - maxX)), H = h2 + top + Math.max(0, reach - (h2 - 1 - maxY));
     if (W * H > MAX_PIXELS || W > 8192 || H > 8192)
       throw Error(
         "The outline would make the image larger than 4,194,304 pixels or 8,192 pixels on a side. Use a thinner outline or a smaller image."
       );
-    const art = new Uint8ClampedArray(W * H * 4), inside = new Uint8Array(W * H);
+    const inside = new Uint8Array(W * H);
+    for (let y = 0; y < h2; y++) {
+      const row = (y + top) * W + left;
+      if (silhouette) inside.set(silhouette.subarray(y * w2, (y + 1) * w2), row);
+      else
+        for (let x = 0; x < w2; x++)
+          inside[row + x] = pixels2[(y * w2 + x) * 4 + 3] >= 128 ? 1 : 0;
+    }
+    const dist = await distanceField(inside, W, H, yieldFn), coverage = new Float64Array(W * H);
+    for (let i = 0; i < W * H; i++)
+      coverage[i] = clamp(r + 0.5 - Math.sqrt(dist[i]), 0, 1);
+    return { coverage, width: W, height: H, left, top };
+  }
+  function compositeOutline(pixels2, w2, h2, mask, rgb) {
+    const { coverage, width: W, height: H, left, top } = mask, art = new Uint8ClampedArray(W * H * 4), out = new Uint8ClampedArray(W * H * 4);
     for (let y = 0; y < h2; y++)
       art.set(
         pixels2.subarray(y * w2 * 4, (y + 1) * w2 * 4),
         ((y + top) * W + left) * 4
       );
-    if (silhouette)
-      for (let y = 0; y < h2; y++)
-        inside.set(silhouette.subarray(y * w2, (y + 1) * w2), (y + top) * W + left);
-    else
-      for (let i = 0; i < W * H; i++) inside[i] = art[i * 4 + 3] >= 128 ? 1 : 0;
-    const dist = await distanceField(inside, W, H, yieldFn), out = new Uint8ClampedArray(W * H * 4);
     for (let i = 0; i < W * H; i++) {
-      const o = i * 4, lineA = clamp(r + 0.5 - Math.sqrt(dist[i]), 0, 1), artA = art[o + 3] / 255, a = artA + lineA * (1 - artA);
+      const o = i * 4, lineA = coverage[i], artA = art[o + 3] / 255, a = artA + lineA * (1 - artA);
       if (!a) continue;
       for (let c = 0; c < 3; c++)
         out[o + c] = Math.round(
@@ -6324,6 +7188,30 @@ dialog p {
       out[o + 3] = Math.round(a * 255);
     }
     return { pixels: out, width: W, height: H };
+  }
+  async function outline(pixels2, w2, h2, { widthPct, rgb, silhouette }, yieldFn) {
+    const mask = await outlineMask(pixels2, w2, h2, widthPct, silhouette, yieldFn);
+    return mask ? compositeOutline(pixels2, w2, h2, mask, rgb) : { pixels: pixels2, width: w2, height: h2 };
+  }
+  function outlineLayer(mask, rgb) {
+    const { coverage, width, height } = mask, out = new Uint8ClampedArray(width * height * 4);
+    for (let i = 0; i < coverage.length; i++) {
+      const o = i * 4;
+      out[o] = rgb[0];
+      out[o + 1] = rgb[1];
+      out[o + 2] = rgb[2];
+      out[o + 3] = Math.round(coverage[i] * 255);
+    }
+    return out;
+  }
+  function strokeKey(pixels2) {
+    let a = 2166136261, b = 5381;
+    for (let i = 3; i < pixels2.length; i += 4) {
+      const v = pixels2[i] >= 128 ? 2 : pixels2[i] ? 1 : 0;
+      a = Math.imul(a ^ v, 16777619);
+      b = Math.imul(b, 33) + v | 0;
+    }
+    return a + ":" + b + ":" + pixels2.length;
   }
   function taps(from, to) {
     const scale = from / to, list = [];
@@ -6676,18 +7564,25 @@ dialog p {
     if (labels?.some((v) => v !== 0)) step.approximate = true;
     return step;
   }
-  function writeRecipe(steps) {
-    return JSON.stringify(
-      {
-        format: "hexshift-recipe",
-        version: 1,
-        steps: steps.map((s) => ({ rows: s.rows }))
-      },
-      null,
-      2
-    ) + "\n";
+  var OUTLINE_MIN = 0.5;
+  var OUTLINE_MAX = 15;
+  function cleanOutline(source) {
+    if (source === null || source === void 0) return null;
+    const widthPct = typeof source === "object" && !Array.isArray(source) ? Number(source.widthPct) : NaN, colour = String(source?.colour).toUpperCase();
+    if (!(widthPct >= OUTLINE_MIN && widthPct <= OUTLINE_MAX) || !/^#[\dA-F]{6}$/.test(colour))
+      throw Error("A recipe's outline is 0.5 to 15 percent wide, in #RRGGBB.");
+    return { widthPct, colour };
   }
-  function parseRecipe(text2) {
+  function writeRecipe(steps, outline2 = null) {
+    const clean = cleanOutline(outline2), data = {
+      format: "hexshift-recipe",
+      version: clean ? 2 : 1,
+      steps: steps.map((s) => ({ rows: s.rows }))
+    };
+    if (clean) data.outline = clean;
+    return JSON.stringify(data, null, 2) + "\n";
+  }
+  function parseRecipeFile(text2) {
     if (typeof text2 !== "string") throw Error("A recipe must be text.");
     if (new TextEncoder().encode(text2).length > MAX_RECIPE_BYTES)
       throw Error("Recipes must be 64 KB or smaller.");
@@ -6699,11 +7594,11 @@ dialog p {
     }
     if (data?.format !== "hexshift-recipe")
       throw Error("This is not a Hex Shift recipe.");
-    if (data.version !== 1)
+    if (data.version !== 1 && data.version !== 2)
       throw Error("This recipe needs a newer version of Hex Shift.");
     if (!Array.isArray(data.steps) || !data.steps.length || data.steps.length > MAX_STEPS)
       throw Error("A recipe has 1 to 32 steps.");
-    return data.steps.map((step) => {
+    const steps = data.steps.map((step) => {
       if (!Array.isArray(step?.rows) || !step.rows.length || step.rows.length > MAX_ROWS)
         throw Error("Each recipe step has 1 to 16 colours.");
       let samples = 0;
@@ -6722,6 +7617,10 @@ dialog p {
         throw Error("A recipe step can have at most 64 samples.");
       return { rows, approximate: false };
     });
+    return {
+      steps,
+      outline: data.version === 2 ? cleanOutline(data.outline) : null
+    };
   }
   async function replay(width, height, data, steps, yieldFn = async () => {
   }, cancelled = () => false) {
@@ -6765,6 +7664,38 @@ dialog p {
     probe2.remove();
     return rgb ? "#" + rgb.slice(0, 3).map((v) => Number(v).toString(16).padStart(2, "0")).join("") : null;
   }
+  var PHASES = [
+    "idle",
+    "checking",
+    "current",
+    "available",
+    "downloading",
+    "ready",
+    "failed"
+  ];
+  function updateChannel(onState) {
+    const webview = window.chrome?.webview;
+    if (!webview) return null;
+    webview.addEventListener("message", (e) => {
+      const d = e.data;
+      if (d?.type !== "update-state" || !PHASES.includes(d.phase)) return;
+      onState({
+        phase: d.phase,
+        version: typeof d.version === "string" && /^\d{1,5}\.\d{1,5}\.\d{1,5}$/.test(d.version) ? d.version : null,
+        checkedAt: typeof d.checkedAt === "string" ? d.checkedAt : null,
+        auto: typeof d.auto === "boolean" ? d.auto : true,
+        enabled: typeof d.enabled === "boolean" ? d.enabled : true,
+        manual: d.manual === true,
+        detail: typeof d.detail === "string" ? d.detail.slice(0, 300) : null,
+        percent: Number.isFinite(d.percent) ? d.percent : 0
+      });
+    });
+    return {
+      check: () => webview.postMessage("check-updates"),
+      setAuto: (on) => webview.postMessage(on ? "auto-updates-on" : "auto-updates-off"),
+      request: () => webview.postMessage("update-state")
+    };
+  }
   function screenPicker(onPicked, onError) {
     const webview = window.chrome?.webview;
     if (webview) {
@@ -6783,6 +7714,630 @@ dialog p {
         }
       };
     return null;
+  }
+
+  // src/menu.js
+  var make = (tag, className, text2) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text2 !== void 0) node.textContent = text2;
+    return node;
+  };
+  var ariaKeys = (shortcut) => shortcut.replace(/Ctrl/g, "Control").replace(/\bEsc\b/g, "Escape").replace(/\s+/g, "").replace(/−/g, "-");
+  function createMenubar({ root, menus, label = "Application menu" }) {
+    root.setAttribute("role", "menubar");
+    root.setAttribute("aria-label", label);
+    let open = [], opener = null, returnTo = null, altAlone = false;
+    const tops = menus.map((menu) => {
+      const button = make("button", "menu-top");
+      button.type = "button";
+      button.setAttribute("role", "menuitem");
+      button.setAttribute("aria-haspopup", "menu");
+      button.setAttribute("aria-expanded", "false");
+      button.tabIndex = -1;
+      const at = menu.label.toLowerCase().indexOf(menu.mnemonic);
+      if (at < 0) button.textContent = menu.label;
+      else
+        button.append(
+          menu.label.slice(0, at),
+          make("u", "mnemonic", menu.label[at]),
+          menu.label.slice(at + 1)
+        );
+      button.setAttribute("aria-label", menu.label);
+      button.setAttribute(
+        "aria-keyshortcuts",
+        "Alt+" + menu.mnemonic.toUpperCase()
+      );
+      root.append(button);
+      return { menu, button };
+    }), fold = make("button", "menu-fold", "Menu");
+    fold.type = "button";
+    fold.setAttribute("role", "menuitem");
+    fold.setAttribute("aria-haspopup", "menu");
+    fold.setAttribute("aria-expanded", "false");
+    fold.tabIndex = -1;
+    root.append(fold);
+    const visibleTops = () => getComputedStyle(fold).display !== "none" ? [fold] : tops.map((t) => t.button);
+    function setStop(button) {
+      for (const b of [...tops.map((t) => t.button), fold])
+        b.tabIndex = b === button ? 0 : -1;
+    }
+    setStop(tops[0].button);
+    const narrow = () => innerWidth < 600;
+    const live = (items) => items.filter((i) => !i.hidden?.());
+    function itemsOf(popup) {
+      return [...popup.querySelectorAll('[role^="menuitem"]')];
+    }
+    function focusItem(popup, which) {
+      const items = itemsOf(popup);
+      if (!items.length) return;
+      const at = which === "first" ? 0 : which === "last" ? items.length - 1 : clampIndex(items.indexOf(document.activeElement) + which, items);
+      items[at].focus();
+    }
+    const clampIndex = (i, items) => (i + items.length) % items.length;
+    function build(items, name2, back) {
+      const popup = make("div", "menu-pop");
+      popup.setAttribute("role", "menu");
+      popup.setAttribute("aria-label", name2);
+      popup.tabIndex = -1;
+      if (back) {
+        const row = make("button", "menu-item menu-back");
+        row.type = "button";
+        row.tabIndex = -1;
+        row.setAttribute("role", "menuitem");
+        const mark = make("span", "menu-mark", "\u2039");
+        mark.setAttribute("aria-hidden", "true");
+        row.append(
+          mark,
+          make(
+            "span",
+            "menu-label",
+            "Back to " + root.getAttribute("aria-label")
+          )
+        );
+        row.addEventListener("click", (e) => {
+          e.stopPropagation();
+          back();
+        });
+        popup.append(row);
+      }
+      for (const item of live(items)) {
+        if (item.type === "separator") {
+          const hr = make("div", "menu-sep");
+          hr.setAttribute("role", "separator");
+          popup.append(hr);
+          continue;
+        }
+        if (item.type === "heading") {
+          const head = make("div", "menu-heading", item.label);
+          head.setAttribute("role", "presentation");
+          popup.append(head);
+          continue;
+        }
+        const row = make("button", "menu-item");
+        row.type = "button";
+        row.tabIndex = -1;
+        const kind = item.type, mark = make("span", "menu-mark"), text2 = make("span", "menu-label", item.label);
+        mark.setAttribute("aria-hidden", "true");
+        row.append(mark, text2);
+        row.setAttribute(
+          "role",
+          kind === "check" ? "menuitemcheckbox" : kind === "radio" ? "menuitemradio" : "menuitem"
+        );
+        if (kind === "check" || kind === "radio")
+          row.setAttribute("aria-checked", String(!!item.checked?.()));
+        if (item.shortcut) {
+          row.append(make("span", "menu-shortcut", item.shortcut));
+          row.setAttribute("aria-keyshortcuts", ariaKeys(item.shortcut));
+        }
+        if (kind === "sub") {
+          const arrow = make("span", "menu-arrow", "\u25B8");
+          arrow.setAttribute("aria-hidden", "true");
+          row.append(arrow);
+          row.setAttribute("aria-haspopup", "menu");
+          row.setAttribute("aria-expanded", "false");
+        }
+        const disabled = item.enabled ? !item.enabled() : false;
+        if (disabled) row.setAttribute("aria-disabled", "true");
+        const unavailable = () => row.getAttribute("aria-disabled") === "true";
+        row.addEventListener("pointerenter", () => {
+          row.focus({ preventScroll: true });
+          const depth2 = open.indexOf(popup);
+          if (depth2 < 0) return;
+          if (open[depth2 + 1] && open[depth2 + 1]._from !== row)
+            closeFrom(depth2 + 1);
+          if (kind === "sub" && !unavailable() && !narrow())
+            openSub(popup, row, item, false);
+        });
+        row.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (unavailable()) return;
+          if (kind === "sub") openSub(popup, row, item, false);
+          else activate2(item);
+        });
+        popup.append(row);
+      }
+      popup.addEventListener("keydown", (e) => keyInPopup(e, popup));
+      return popup;
+    }
+    function place(popup, anchor, asSub, parent) {
+      document.body.append(popup);
+      const a = anchor.getBoundingClientRect(), w2 = popup.offsetWidth, h2 = popup.offsetHeight, room = innerHeight - 8;
+      let left = asSub ? a.right - 2 : a.left, top = asSub ? a.top - 5 : a.bottom + 2;
+      if (left + w2 > innerWidth - 4)
+        left = asSub ? a.left - w2 + 2 : innerWidth - w2 - 4;
+      if (asSub && narrow() && parent) {
+        const p = parent.getBoundingClientRect();
+        left = p.left;
+        top = p.top;
+        popup.style.minWidth = p.width + "px";
+      }
+      popup.style.maxHeight = room - 8 + "px";
+      if (top + Math.min(h2, room) > innerHeight - 4)
+        top = Math.max(4, innerHeight - 4 - Math.min(h2, room));
+      popup.style.left = Math.max(4, left) + "px";
+      popup.style.top = top + "px";
+    }
+    function closeFrom(depth2) {
+      while (open.length > depth2) {
+        const popup = open.pop();
+        popup.remove();
+        const parent = open[open.length - 1];
+        const from = popup._from;
+        if (from) from.setAttribute("aria-expanded", "false");
+        if (!parent && opener) opener.setAttribute("aria-expanded", "false");
+      }
+    }
+    function closeAll(restore2) {
+      closeFrom(0);
+      if (opener) opener.setAttribute("aria-expanded", "false");
+      opener = null;
+      root.classList.remove("show-keys");
+      if (restore2 && returnTo?.isConnected)
+        returnTo.focus({ preventScroll: true });
+      returnTo = null;
+    }
+    function openMenu(button, items, name2, via) {
+      if (opener === button && open.length) return;
+      const wasOpen = open.length > 0;
+      closeFrom(0);
+      if (opener) opener.setAttribute("aria-expanded", "false");
+      if (!wasOpen && !root.contains(document.activeElement))
+        returnTo = document.activeElement;
+      opener = button;
+      setStop(button);
+      button.setAttribute("aria-expanded", "true");
+      const popup = build(items, name2);
+      popup._from = null;
+      open.push(popup);
+      place(popup, button, false);
+      if (via === "keyboard") {
+        root.classList.add("show-keys");
+        focusItem(popup, "first");
+      } else popup.focus({ preventScroll: true });
+      return popup;
+    }
+    function openSub(parent, row, item, keyboard) {
+      const depth2 = open.indexOf(parent);
+      if (depth2 >= 0 && open[depth2 + 1]?._from === row) {
+        if (keyboard) focusItem(open[depth2 + 1], "first");
+        return;
+      }
+      closeFrom(depth2 + 1);
+      row.setAttribute("aria-expanded", "true");
+      const popup = build(
+        item.items,
+        item.label,
+        narrow() ? () => {
+          closeFrom(depth2 + 1);
+          row.focus();
+        } : null
+      );
+      popup._from = row;
+      open.push(popup);
+      place(popup, row, true, parent);
+      const rows = itemsOf(popup);
+      if (keyboard || narrow()) (rows[narrow() ? 1 : 0] || rows[0])?.focus();
+    }
+    function activate2(item) {
+      if (item.enabled && !item.enabled()) return;
+      closeAll(true);
+      item.run?.();
+    }
+    function barKey(e, button) {
+      const list = visibleTops(), at = list.indexOf(button), move = (step) => {
+        const next = list[(at + step + list.length) % list.length];
+        setStop(next);
+        next.focus();
+        if (open.length) openFor(next, "keyboard");
+      };
+      switch (e.key) {
+        case "ArrowRight":
+          e.preventDefault();
+          return move(1);
+        case "ArrowLeft":
+          e.preventDefault();
+          return move(-1);
+        case "ArrowDown":
+        case "Enter":
+        case " ":
+          e.preventDefault();
+          return openFor(button, "keyboard");
+        case "ArrowUp":
+          e.preventDefault();
+          openFor(button, "keyboard");
+          return focusItem(open[0], "last");
+        case "Home":
+          e.preventDefault();
+          list[0].focus();
+          return setStop(list[0]);
+        case "End":
+          e.preventDefault();
+          list[list.length - 1].focus();
+          return setStop(list[list.length - 1]);
+        case "Escape":
+          e.preventDefault();
+          if (open.length) closeAll(false);
+          else {
+            root.classList.remove("show-keys");
+            if (returnTo?.isConnected) returnTo.focus({ preventScroll: true });
+            returnTo = null;
+          }
+      }
+    }
+    function openFor(button, via) {
+      if (button === fold)
+        return openMenu(
+          fold,
+          menus.map((m) => ({ type: "sub", label: m.label, items: m.items })),
+          label,
+          via
+        );
+      const top = tops.find((t) => t.button === button);
+      return openMenu(button, top.menu.items, top.menu.label, via);
+    }
+    function keyInPopup(e, popup) {
+      const depth2 = open.indexOf(popup), focused = document.activeElement, item = itemsOf(popup).includes(focused) ? focused : null;
+      e.stopPropagation();
+      switch (e.key) {
+        case "ArrowDown":
+          e.preventDefault();
+          return focusItem(popup, item ? 1 : "first");
+        case "ArrowUp":
+          e.preventDefault();
+          return focusItem(popup, item ? -1 : "last");
+        case "Home":
+          e.preventDefault();
+          return focusItem(popup, "first");
+        case "End":
+          e.preventDefault();
+          return focusItem(popup, "last");
+        case "ArrowRight":
+          e.preventDefault();
+          if (item?.getAttribute("aria-haspopup") === "menu") {
+            item.click();
+            if (open[depth2 + 1]) focusItem(open[depth2 + 1], "first");
+          } else if (depth2 === 0 && opener !== fold) {
+            const list = visibleTops(), next = list[(list.indexOf(opener) + 1) % list.length];
+            setStop(next);
+            openFor(next, "keyboard");
+          }
+          return;
+        case "ArrowLeft":
+          e.preventDefault();
+          if (depth2 > 0) {
+            const from = popup._from;
+            closeFrom(depth2);
+            from?.focus();
+          } else if (opener !== fold) {
+            const list = visibleTops(), next = list[(list.indexOf(opener) - 1 + list.length) % list.length];
+            setStop(next);
+            openFor(next, "keyboard");
+          }
+          return;
+        case "Enter":
+        case " ":
+          e.preventDefault();
+          if (item) item.click();
+          return;
+        case "Escape": {
+          e.preventDefault();
+          e.stopPropagation();
+          if (depth2 > 0) {
+            const from = popup._from;
+            closeFrom(depth2);
+            from?.focus();
+          } else {
+            const back = opener;
+            closeFrom(0);
+            back?.setAttribute("aria-expanded", "false");
+            back?.focus();
+          }
+          return;
+        }
+        case "Tab":
+          closeAll(false);
+          return;
+      }
+      if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        const items = itemsOf(popup), letter = e.key.toLowerCase(), start = items.indexOf(item) + 1;
+        for (let i = 0; i < items.length; i++) {
+          const next = items[(start + i) % items.length];
+          if (next.textContent.trim().toLowerCase().startsWith(letter)) {
+            next.focus();
+            break;
+          }
+        }
+      }
+    }
+    for (const { button } of tops) {
+      button.addEventListener("click", () => {
+        if (opener === button && open.length) closeAll(true);
+        else openFor(button, "pointer");
+      });
+      button.addEventListener("pointerenter", () => {
+        if (open.length && opener !== button) openFor(button, "pointer");
+      });
+      button.addEventListener("keydown", (e) => barKey(e, button));
+    }
+    fold.addEventListener("click", () => {
+      if (opener === fold && open.length) closeAll(true);
+      else openFor(fold, "pointer");
+    });
+    fold.addEventListener("keydown", (e) => barKey(e, fold));
+    document.addEventListener(
+      "pointerdown",
+      (e) => {
+        const inside = root.contains(e.target) || open.some((p) => p.contains(e.target));
+        if (!open.length) {
+          root.classList.remove("show-keys");
+          if (inside && !root.contains(document.activeElement))
+            returnTo = document.activeElement;
+          return;
+        }
+        if (!inside) closeAll(false);
+      },
+      true
+    );
+    window.addEventListener("blur", () => open.length && closeAll(false));
+    window.addEventListener("resize", () => open.length && closeAll(false));
+    function focusBar() {
+      if (document.querySelector("dialog[open]")) return;
+      const first = visibleTops()[0];
+      if (!root.contains(document.activeElement))
+        returnTo = document.activeElement;
+      root.classList.add("show-keys");
+      setStop(first);
+      first.focus();
+    }
+    document.addEventListener(
+      "keydown",
+      (e) => {
+        if (e.key === "Alt") {
+          altAlone = !e.ctrlKey && !e.shiftKey && !e.metaKey;
+          return;
+        }
+        altAlone = false;
+        if (document.querySelector("dialog[open]")) return;
+        if (e.key === "F10" && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+          e.preventDefault();
+          focusBar();
+          return;
+        }
+        if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+          const letter = e.key.toLowerCase(), hit = tops.find((t) => t.menu.mnemonic === letter);
+          if (hit) {
+            e.preventDefault();
+            const button = getComputedStyle(fold).display !== "none" ? fold : hit.button;
+            if (!root.contains(document.activeElement))
+              returnTo = document.activeElement;
+            const popup = openFor(button, "keyboard");
+            if (button === fold && popup) {
+              const row = itemsOf(popup).find(
+                (i) => i.textContent.trim().toLowerCase().startsWith(hit.menu.label.toLowerCase())
+              );
+              row?.click();
+            }
+          }
+        }
+      },
+      true
+    );
+    document.addEventListener("keyup", (e) => {
+      if (e.key === "Alt" && altAlone) {
+        altAlone = false;
+        if (open.length) closeAll(true);
+        else if (root.contains(document.activeElement)) {
+          root.classList.remove("show-keys");
+          if (returnTo?.isConnected) returnTo.focus({ preventScroll: true });
+          returnTo = null;
+        } else focusBar();
+      }
+    });
+    return {
+      close: () => closeAll(false),
+      isOpen: () => open.length > 0,
+      focusBar
+    };
+  }
+
+  // src/workspace.js
+  var PANELS = [
+    "selection",
+    "colour",
+    "adjust",
+    "swatches",
+    "outline",
+    "export"
+  ];
+  var PRESETS2 = {
+    side: { left: [["selection"]], right: [PANELS.slice(1)], bottom: [] },
+    column: { left: [], right: [PANELS.slice()], bottom: [] },
+    dock: {
+      left: [],
+      right: [],
+      bottom: [
+        ["selection"],
+        ["colour", "adjust"],
+        ["swatches", "outline", "export"]
+      ]
+    },
+    phone: { left: [], right: [], bottom: [PANELS.slice()] }
+  };
+  var SIDE_MIN = 1100;
+  var PHONE_MAX = 759;
+  function presetFor(width, height) {
+    if (width <= PHONE_MAX) return "phone";
+    if (width < height) return "dock";
+    return width >= SIDE_MIN ? "side" : "column";
+  }
+  var AUTO_COLLAPSE = ["swatches", "outline"];
+  var clamp2 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  function resizer(handle, { axis, invert, min, max, read, write, step = 16 }) {
+    const set = (value) => {
+      const v = Math.round(clamp2(value, min(), Math.max(min(), max())));
+      write(v);
+      handle.setAttribute("aria-valuenow", String(v));
+      handle.setAttribute("aria-valuemax", String(Math.round(max())));
+    };
+    handle.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      const start = axis === "x" ? e.clientX : e.clientY, from = read();
+      handle.setPointerCapture(e.pointerId);
+      handle.classList.add("dragging");
+      const move = (m) => {
+        const d = (axis === "x" ? m.clientX : m.clientY) - start;
+        set(from + (invert ? -d : d));
+      };
+      const stop = () => {
+        handle.classList.remove("dragging");
+        handle.removeEventListener("pointermove", move);
+        handle.removeEventListener("pointerup", stop);
+        handle.removeEventListener("pointercancel", stop);
+      };
+      handle.addEventListener("pointermove", move);
+      handle.addEventListener("pointerup", stop);
+      handle.addEventListener("pointercancel", stop);
+    });
+    handle.addEventListener("keydown", (e) => {
+      const by = e.shiftKey ? step * 4 : step, forward = axis === "x" ? "ArrowRight" : "ArrowDown", back = axis === "x" ? "ArrowLeft" : "ArrowUp";
+      if (e.key !== forward && e.key !== back) return;
+      e.preventDefault();
+      set(read() + (e.key === forward ? by : -by) * (invert ? -1 : 1));
+    });
+    return set;
+  }
+  function createWorkspace(main, { onPreset } = {}) {
+    const app = main.closest(".app"), panels = Object.fromEntries(
+      PANELS.map((id) => [id, main.querySelector(`[data-panel="${id}"]`)])
+    ), regions = Object.fromEntries(
+      ["left", "right", "bottom"].map((name2) => [
+        name2,
+        main.querySelector(`[data-region="${name2}"]`)
+      ])
+    ), collapsed = /* @__PURE__ */ new Set(), touched = /* @__PURE__ */ new Set();
+    let preset = null;
+    function renderCollapse() {
+      for (const id of PANELS) {
+        const panel = panels[id], shut = collapsed.has(id) && preset !== "phone", toggle = panel.querySelector(".panel-toggle");
+        panel.dataset.collapsed = String(shut);
+        panel.querySelector(".panel-body").hidden = shut;
+        toggle?.setAttribute("aria-expanded", String(!shut));
+      }
+    }
+    function place(next) {
+      const plan = PRESETS2[next];
+      for (const [name2, region] of Object.entries(regions)) {
+        const stacks = region.querySelector(".stacks"), wanted = plan[name2];
+        stacks.replaceChildren(
+          ...wanted.map((ids) => {
+            const stack = document.createElement("div");
+            stack.className = "stack";
+            stack.append(...ids.map((id) => panels[id]));
+            return stack;
+          })
+        );
+        region.hidden = !wanted.length;
+      }
+      preset = next;
+      main.dataset.preset = next;
+      renderCollapse();
+    }
+    function current() {
+      return presetFor(app.clientWidth, innerHeight);
+    }
+    const overflowing = () => [...main.querySelectorAll(".stack")].some(
+      (s) => s.scrollHeight > s.clientHeight + 1
+    );
+    const api = {
+      get preset() {
+        return preset;
+      },
+      panels,
+      isCollapsed: (id) => collapsed.has(id),
+      setCollapsed(id, on, byPerson = true) {
+        if (on) collapsed.add(id);
+        else collapsed.delete(id);
+        if (byPerson) touched.add(id);
+        renderCollapse();
+      },
+      toggle(id) {
+        api.setCollapsed(id, !collapsed.has(id));
+      },
+      // Moves the panels if the window has crossed into another layout.
+      refresh() {
+        const next = current();
+        if (next === preset) return false;
+        place(next);
+        if (next === "side" || next === "column") api.fit();
+        onPreset?.(next);
+        return true;
+      },
+      // Collapses Swatches, then Outline, when the columns cannot hold every panel
+      // at this height, so nothing needs scrolling. Panels the person has opened or
+      // closed themselves are left alone.
+      fit() {
+        if (preset === "phone" || preset === "dock") return;
+        for (const id of AUTO_COLLAPSE) {
+          if (!overflowing()) return;
+          if (!collapsed.has(id) && !touched.has(id)) {
+            collapsed.add(id);
+            renderCollapse();
+          }
+        }
+      }
+    };
+    for (const panel of Object.values(panels))
+      panel.querySelector(".panel-toggle")?.addEventListener("click", () => {
+        const id = panel.dataset.panel;
+        if (preset !== "phone") api.toggle(id);
+      });
+    const px = (name2, value) => app.style.setProperty(name2, value + "px"), width = () => app.clientWidth;
+    const side = (el, name2, other, invert) => resizer(el, {
+      axis: "x",
+      invert,
+      min: () => 200,
+      max: () => Math.min(
+        520,
+        width() - 360 - (regions[other].hidden ? 0 : regions[other].offsetWidth)
+      ),
+      read: () => regions[name2].offsetWidth,
+      write: (v) => px("--col-" + name2, v)
+    });
+    side(main.querySelector("#splitLeft"), "left", "right", false);
+    side(main.querySelector("#splitRight"), "right", "left", true);
+    api.dockHeight = resizer(main.querySelector("#dockHandle"), {
+      axis: "y",
+      invert: true,
+      min: () => 120,
+      max: () => Math.min(600, Math.max(160, innerHeight - 320)),
+      read: () => regions.bottom.offsetHeight,
+      write: (v) => px("--dock-h", v)
+    });
+    place(current());
+    api.fit();
+    return api;
   }
 
   // src/themes.js
@@ -7023,6 +8578,7 @@ dialog p {
   // src/app.js
   var $ = (id) => document.getElementById(id);
   var pause = makePause();
+  var VERSION = "3.2.0";
   var w = 0;
   var h = 0;
   var name = "";
@@ -7064,14 +8620,32 @@ dialog p {
   var before = $("beforeCanvas");
   var after = $("resultCanvas");
   var wipeCanvas = $("wipeCanvas");
-  function status(message) {
-    $("status").textContent = message;
+  var statusTimer = 0;
+  function status(message, { fade = 0 } = {}) {
+    const line2 = $("status");
+    clearTimeout(statusTimer);
+    line2.classList.remove("fading");
+    line2.textContent = message;
+    if (fade)
+      statusTimer = setTimeout(() => {
+        if (line2.textContent !== message) return;
+        line2.classList.add("fading");
+        statusTimer = setTimeout(() => {
+          if (line2.textContent === message) line2.textContent = "";
+          line2.classList.remove("fading");
+        }, 400);
+      }, fade);
   }
   function newRow(id, base = defaults()) {
     return { id, params: base, seeds: [] };
   }
-  function freshEdit(base) {
-    return { rows: [newRow(1, base)], active: 0, steps: [] };
+  function freshEdit(base, outline2 = { on: false, widthPct: 4, colour: "#FFFFFF" }) {
+    return {
+      rows: [newRow(1, base)],
+      active: 0,
+      steps: [],
+      outline: { ...outline2 }
+    };
   }
   function activate() {
     edit.active = clamp(edit.active, 0, edit.rows.length - 1);
@@ -7115,27 +8689,37 @@ dialog p {
     const input = $(id).querySelector(`input[value="${value}"]`);
     if (input) input.checked = true;
   }
+  var cancelTimer = 0;
   function buttons() {
     const available = !!pixels;
     $("undo").disabled = !history.undoEntries.length;
     $("redo").disabled = !history.redoEntries.length;
-    $("apply").disabled = !available || processing || !result?.changed;
+    $("apply").disabled = !available || !result?.changed;
     $("copy").disabled = !available;
     $("export").disabled = !available;
-    $("cancel").hidden = !processing;
+    document.querySelector(".app").dataset.busy = String(processing);
+    if (processing) {
+      cancelTimer ||= setTimeout(() => {
+        cancelTimer = 0;
+        if (processing) $("cancel").classList.add("shown");
+      }, 400);
+    } else {
+      clearTimeout(cancelTimer);
+      cancelTimer = 0;
+      $("cancel").classList.remove("shown");
+    }
     $("batch").disabled = !available || !$("cancelBatch").hidden;
     $("editState").textContent = result?.changed ? "Pending edit" : "No pending edit";
     $("editState").classList.toggle("pending", !!result?.changed);
   }
-  function makeSlider(parent, key, label, min, max, unit) {
+  function makeSlider(parent, key, label, min, max, unit, short = label) {
     const box = document.createElement("div");
     box.className = "slider";
-    const head = document.createElement("div");
-    head.className = "slider-head";
     const lab = document.createElement("label");
     lab.htmlFor = key;
     lab.id = key + "Label";
-    lab.textContent = label;
+    lab.textContent = short;
+    lab.title = label;
     const number = document.createElement("input");
     number.type = "number";
     number.min = min;
@@ -7150,8 +8734,7 @@ dialog p {
     range.max = max;
     range.step = number.step;
     range.setAttribute("aria-label", label);
-    head.append(lab, number);
-    box.append(head, range);
+    box.append(lab, range, number);
     $(parent).append(box);
     const update = (value) => {
       begin();
@@ -7181,8 +8764,8 @@ dialog p {
   for (const args of [
     ["hueTol", "Hue tolerance", 0, 180, "degrees"],
     ["shadeTol", "Shade range", 0, 100, "percent"],
-    ["soft", "Colour-match softness", 0, 100, "percent"],
-    ["feather", "Spatial feather", 0, 8, "pixels"]
+    ["soft", "Colour-match softness", 0, 100, "percent", "Softness"],
+    ["feather", "Spatial feather", 0, 8, "pixels", "Feather"]
   ])
     makeSlider("selectionSliders", ...args);
   function swatch(hex2, label, fn) {
@@ -7239,51 +8822,57 @@ dialog p {
     const brushed = overrides?.some((v) => v === row.id), from = row.seeds.length ? seedHex(row.seeds.at(-1)) : brushed ? "brushed" : null, p = row.params, to = p.mode === "transparent" ? "transparent" : p.mode === "shift" && !p.ramp && !p.dh && !p.ds && !p.dl ? "unchanged" : p.mode === "shift" && p.manual ? "adjusted" : p.ramp ? p.ramp[0] : p.target;
     return { from, to };
   }
+  function buildMapRow(k) {
+    const item = document.createElement("div"), select = document.createElement("button"), part = (tag, className) => {
+      const node = document.createElement(tag);
+      node.className = className;
+      return node;
+    };
+    item.className = "map-row";
+    select.type = "button";
+    select.className = "map-select";
+    select.append(
+      part("span", "chip"),
+      part("span", "map-text"),
+      part("span", "chip"),
+      part("span", "map-count")
+    );
+    select.onclick = () => selectRow(k);
+    item.append(select);
+    if (edit.rows.length > 1) {
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "map-remove";
+      remove.textContent = "\xD7";
+      remove.setAttribute("aria-label", "Remove colour " + (k + 1));
+      remove.onclick = () => removeRow(k);
+      item.append(remove);
+    }
+    return item;
+  }
+  function paintMapRow(item, row, k) {
+    const { from, to } = rowText(row), select = item.firstChild, [fromChip, text2, toChip, count] = select.children, pixelsOwned = result?.counts?.[k], toColour = to.startsWith("#") ? to : to === "unchanged" ? from : null;
+    item.classList.toggle("active", k === edit.active);
+    select.setAttribute("aria-pressed", String(k === edit.active));
+    text2.textContent = from ? from + " \u2192 " + to : "Pick a colour";
+    count.textContent = from && Number.isInteger(pixelsOwned) ? pixelsOwned.toLocaleString() + " px" : "";
+    fromChip.className = "chip" + (from ? "" : " empty");
+    fromChip.style.backgroundColor = from?.startsWith("#") ? from : "";
+    toChip.className = "chip" + (to === "transparent" ? " clear" : "");
+    toChip.style.backgroundColor = toColour || "";
+    select.setAttribute(
+      "aria-label",
+      "Colour " + (k + 1) + ": " + (from ? from + " to " + to : "nothing picked yet") + (count.textContent ? ", " + count.textContent.replace("px", "pixels") : "")
+    );
+  }
   function renderMap() {
     if (!pixels) return;
-    const box = $("colourMap");
-    box.replaceChildren();
-    edit.rows.forEach((row, k) => {
-      const item = document.createElement("div"), select = document.createElement("button"), { from, to } = rowText(row), chip = (hex2, kind) => {
-        const c = document.createElement("span");
-        c.className = "chip" + (kind ? " " + kind : "");
-        if (hex2) c.style.backgroundColor = hex2;
-        return c;
-      }, text2 = document.createElement("span"), count = document.createElement("span"), pixelsOwned = result?.counts?.[k];
-      item.className = "map-row" + (k === edit.active ? " active" : "");
-      select.type = "button";
-      select.className = "map-select";
-      select.setAttribute("aria-pressed", String(k === edit.active));
-      text2.className = "map-text";
-      text2.textContent = from ? from + " \u2192 " + to : "Pick a colour";
-      count.className = "map-count";
-      count.textContent = from && Number.isInteger(pixelsOwned) ? pixelsOwned.toLocaleString() + " px" : "";
-      select.setAttribute(
-        "aria-label",
-        "Colour " + (k + 1) + ": " + (from ? from + " to " + to : "nothing picked yet") + (count.textContent ? ", " + count.textContent.replace("px", "pixels") : "")
-      );
-      select.append(
-        chip(from?.startsWith("#") ? from : null, from ? "" : "empty"),
-        text2,
-        chip(
-          to.startsWith("#") ? to : to === "unchanged" ? from : null,
-          to === "transparent" ? "clear" : ""
-        ),
-        count
-      );
-      select.onclick = () => selectRow(k);
-      item.append(select);
-      if (edit.rows.length > 1) {
-        const remove = document.createElement("button");
-        remove.type = "button";
-        remove.className = "map-remove";
-        remove.textContent = "\xD7";
-        remove.setAttribute("aria-label", "Remove colour " + (k + 1));
-        remove.onclick = () => removeRow(k);
-        item.append(remove);
-      }
-      box.append(item);
-    });
+    const box = $("colourMap"), shape = edit.rows.map((r) => r.id).join(",") + (edit.rows.length > 1);
+    if (box.dataset.shape !== shape) {
+      box.dataset.shape = shape;
+      box.replaceChildren(...edit.rows.map((_, k) => buildMapRow(k)));
+    }
+    edit.rows.forEach((row, k) => paintMapRow(box.children[k], row, k));
     $("addRow").disabled = edit.rows.length >= MAX_ROWS;
   }
   function selectRow(k) {
@@ -7427,7 +9016,7 @@ dialog p {
   function syncTarget() {
     const transparent = params.mode === "transparent";
     $("targetControls").hidden = transparent;
-    $("fine").hidden = params.mode !== "shift";
+    $("adjustPanel").hidden = params.mode !== "shift";
     $("protectLabel").hidden = params.mode !== "shift";
     $("cleanEdgesLabel").hidden = !transparent;
     const dsName = params.model === "hsl" ? "Saturation" : "Chroma";
@@ -7458,6 +9047,7 @@ dialog p {
     $("protect").checked = params.protect;
     $("cleanEdges").checked = params.cleanEdges;
     syncTarget();
+    syncOutline();
     renderSeeds();
     renderMap();
     buttons();
@@ -7652,11 +9242,13 @@ dialog p {
     lastResultEdit = m.editId;
     lastResultImage = m.imageId;
     $("coverage").textContent = m.count ? m.count.toLocaleString() + " pixels selected \xB7 " + Math.round(m.count / Math.max(1, m.opaque) * 100) + "% of the asset" : seeds.length ? "No matching pixels. Increase tolerance, or add a sample." : "Click a colour or choose an image swatch.";
+    $("coverage").title = $("coverage").textContent;
     $("resultNote").textContent = m.changed ? m.changed.toLocaleString() + " px changed" : "";
     if (seeds.length) {
       const sd = seeds.at(-1), o = (sd.y * w + sd.x) * 4;
-      $("targetResult").textContent = params.mode === "transparent" ? "Selected pixels become transparent." : (params.manual && params.mode === "shift" ? "Manual shift" : params.ramp && params.mode === "shift" ? "Tone " + params.ramp.join(" \xB7 ") : "Requested " + params.target) + " \xB7 achieved " + toHex(...m.pixels.subarray(o, o + 3));
-    } else $("targetResult").textContent = "Pick a source colour to begin.";
+      $("targetText").textContent = params.mode === "transparent" ? "Selected pixels become transparent." : (params.manual && params.mode === "shift" ? "Manual shift" : params.ramp && params.mode === "shift" ? "Tone " + params.ramp.join(" \xB7 ") : "Requested " + params.target) + " \xB7 achieved " + toHex(...m.pixels.subarray(o, o + 3));
+    } else $("targetText").textContent = "Pick a source colour to begin.";
+    $("targetText").title = $("targetText").textContent;
     $("capWarning").hidden = !(m.capped && params.mode === "shift");
     renderMap();
     draw();
@@ -7693,6 +9285,11 @@ dialog p {
       "Redraw the SVG at a new size?",
       "Redrawing starts again from the SVG file, so your edits are cleared. Export first if you want to keep them.",
       "Redraw"
+    ],
+    quit: [
+      "Quit Hex Shift?",
+      "Your current image has edits. Export it first if you want to keep them.",
+      "Quit"
     ]
   };
   async function openBlob(blob, fileName, isSample = false, redraw = false) {
@@ -7742,11 +9339,12 @@ dialog p {
       original = decoded.pixels;
       pixels = original.slice();
       overrides = new Int8Array(w * h);
-      edit = freshEdit();
+      edit = freshEdit(void 0, edit.outline);
       activate();
       dirty = false;
       history.clear();
       gesture = null;
+      resetOutlineLayer();
       for (const canvas of [before, after, wipeCanvas]) {
         canvas.width = w;
         canvas.height = h;
@@ -7794,7 +9392,8 @@ dialog p {
       edit = {
         rows: [newRow(1, { ...params, dh: 0, ds: 0, dl: 0, manual: false })],
         active: 0,
-        steps: [...edit.steps, step]
+        steps: [...edit.steps, step],
+        outline: edit.outline
       };
       activate();
       dirty = true;
@@ -7810,7 +9409,7 @@ dialog p {
     action("Reset original", () => {
       pixels = original.slice();
       overrides = new Int8Array(w * h);
-      edit = freshEdit();
+      edit = freshEdit(void 0, edit.outline);
       activate();
       dirty = false;
       prepareCurrent();
@@ -7921,6 +9520,8 @@ dialog p {
     renderPreview();
     scheduleReadout();
     markVariants();
+    scheduleOutline();
+    placeOutline();
   }
   function finishSettings() {
     const settings = {
@@ -7928,10 +9529,10 @@ dialog p {
       format: $("format").value,
       custom: Number($("customSize").value)
     };
-    if ($("outline").checked)
+    if (edit.outline.on)
       settings.outline = {
-        widthPct: Number($("outlineWidth").value),
-        colour: toHex(...readColour($("outlineHex").value) || [255, 255, 255])
+        widthPct: edit.outline.widthPct,
+        colour: edit.outline.colour
       };
     return settings;
   }
@@ -7963,68 +9564,212 @@ dialog p {
     for (const canvas of previewCanvases)
       canvas.parentElement.style.backgroundColor = ground;
     if (!pixels) return;
-    const source = result?.pixels || pixels, scale = Math.min(1, 256 / Math.max(w, h)), bw = Math.max(1, Math.round(w * scale)), bh = Math.max(1, Math.round(h * scale));
     let base;
     try {
-      base = await finish(
-        resize(source, w, h, bw, bh),
-        bw,
-        bh,
-        finishSettings(),
-        void 0,
-        scale < 1 ? shrinkSilhouette(source, w, h, bw, bh) : void 0
-      );
+      base = await outlinedBase(result?.pixels || pixels);
     } catch {
       return;
     }
     if (ticket !== previewTicket) return;
     const dpr = window.devicePixelRatio || 1;
-    PREVIEW_SIZES.forEach((size, k) => {
-      const canvas = previewCanvases[k], box = Math.round(size * dpr), fit2 = box / Math.max(base.width, base.height), tw = Math.max(1, Math.round(base.width * fit2)), th = Math.max(1, Math.round(base.height * fit2));
-      canvas.width = canvas.height = box;
-      canvas.getContext("2d").putImageData(
-        new ImageData(
-          resize(base.pixels, base.width, base.height, tw, th),
-          tw,
-          th
-        ),
-        box - tw >> 1,
-        box - th >> 1
-      );
-    });
+    PREVIEW_SIZES.forEach(
+      (size, k) => drawFitted(previewCanvases[k], base, Math.round(size * dpr))
+    );
+  }
+  async function outlinedBase(source, settings = finishSettings()) {
+    const scale = Math.min(1, 256 / Math.max(w, h)), bw = Math.max(1, Math.round(w * scale)), bh = Math.max(1, Math.round(h * scale));
+    return finish(
+      resize(source, w, h, bw, bh),
+      bw,
+      bh,
+      settings,
+      void 0,
+      scale < 1 ? shrinkSilhouette(source, w, h, bw, bh) : void 0
+    );
+  }
+  function drawFitted(canvas, base, box) {
+    const fit2 = box / Math.max(base.width, base.height), tw = Math.max(1, Math.round(base.width * fit2)), th = Math.max(1, Math.round(base.height * fit2));
+    canvas.width = canvas.height = box;
+    canvas.getContext("2d").putImageData(
+      new ImageData(
+        resize(base.pixels, base.width, base.height, tw, th),
+        tw,
+        th
+      ),
+      box - tw >> 1,
+      box - th >> 1
+    );
+  }
+  var outlineCanvas = $("outlineCanvas");
+  var outlineCache = null;
+  var outlineTicket = 0;
+  var outlineTimer = 0;
+  var outlineShown = null;
+  function syncOutline() {
+    const o = edit.outline;
+    $("outline").checked = o.on;
+    if (document.activeElement !== $("outlineWidth"))
+      $("outlineWidth").value = o.widthPct;
+    if (document.activeElement !== $("outlineHex")) {
+      $("outlineHex").value = o.colour;
+      $("outlineHex").removeAttribute("aria-invalid");
+    }
+    $("outlineColour").value = o.colour.toLowerCase();
+    outlineControls();
+    layout();
   }
   function outlineControls() {
-    const pct = Number($("outlineWidth").value), px = w ? outlineRadius(w, h, pct) : 0;
-    $("outlineWidthValue").textContent = pct + "%" + (w ? " \xB7 " + Math.round(px * 10) / 10 + " px here" : "");
+    const pct = edit.outline.widthPct, px = w ? outlineRadius(w, h, pct) : 0;
+    $("outlineWidthValue").textContent = pct + "%";
+    $("outlineWidthValue").title = w ? Math.round(px * 10) / 10 + " px at this image's size" : "";
     renderPreview();
     scheduleReadout();
+    scheduleOutline();
+    markVariants();
   }
-  $("outline").onchange = outlineControls;
-  $("outlineWidth").oninput = outlineControls;
-  $("outlineColour").oninput = (e) => {
-    $("outlineHex").value = e.target.value.toUpperCase();
+  function outlineAction(label, fn) {
+    commit("Adjust colour");
+    const old = snapshot();
+    fn();
+    history.record(old, snapshot(), label);
+    buttons();
+    syncOutline();
+    refreshOutline();
+  }
+  $("outline").onchange = (e) => outlineAction("Outline", () => {
+    edit.outline.on = e.target.checked;
+  });
+  $("outlineWidth").addEventListener("input", (e) => {
+    begin();
+    edit.outline.widthPct = Number(e.target.value);
     outlineControls();
-  };
+  });
+  $("outlineWidth").addEventListener("change", () => {
+    commit("Outline width");
+    buttons();
+  });
+  $("outlineColour").addEventListener("input", (e) => {
+    begin();
+    edit.outline.colour = e.target.value.toUpperCase();
+    $("outlineHex").value = edit.outline.colour;
+    $("outlineHex").removeAttribute("aria-invalid");
+    outlineControls();
+    refreshOutline();
+  });
+  $("outlineColour").addEventListener("change", () => {
+    commit("Outline colour");
+    buttons();
+  });
   $("outlineHex").addEventListener("input", (e) => {
     const rgb = readColour(e.target.value);
     e.target.setAttribute("aria-invalid", String(!rgb));
     if (rgb) {
-      $("outlineColour").value = toHex(...rgb).toLowerCase();
+      begin();
+      edit.outline.colour = toHex(...rgb);
+      $("outlineColour").value = edit.outline.colour.toLowerCase();
       outlineControls();
+      refreshOutline();
     }
+  });
+  $("outlineHex").addEventListener("change", () => {
+    commit("Outline colour");
+    buttons();
+    if (readColour($("outlineHex").value))
+      $("outlineHex").value = edit.outline.colour;
   });
   for (const [label, hex2] of [
     ["White", "#FFFFFF"],
     ["Black", "#000000"]
   ])
     $("outlineSwatches").append(
-      swatch(hex2, label + " outline", () => {
-        $("outlineHex").value = hex2;
-        $("outlineColour").value = hex2.toLowerCase();
-        $("outline").checked = true;
-        outlineControls();
-      })
+      swatch(
+        hex2,
+        label + " outline",
+        () => outlineAction("Outline colour", () => {
+          edit.outline.colour = hex2;
+          edit.outline.on = true;
+        })
+      )
     );
+  function resetOutlineLayer() {
+    outlineTicket++;
+    clearTimeout(outlineTimer);
+    outlineTimer = 0;
+    outlineCache = null;
+    outlineShown = null;
+    outlineCanvas.hidden = true;
+  }
+  function scheduleOutline() {
+    if (outlineTimer) return;
+    outlineTimer = setTimeout(() => {
+      outlineTimer = 0;
+      refreshOutline();
+    }, 120);
+  }
+  async function refreshOutline() {
+    const ticket = ++outlineTicket, o = edit.outline;
+    if (!pixels || !o.on) {
+      outlineCanvas.hidden = true;
+      outlineShown = null;
+      outlineCache = null;
+      return;
+    }
+    const source = result?.pixels || pixels, key = o.widthPct + "|" + w + "x" + h + "|" + strokeKey(source);
+    try {
+      if (outlineCache?.key !== key) {
+        const mask2 = await outlineMask(
+          source,
+          w,
+          h,
+          o.widthPct,
+          void 0,
+          async () => {
+            await pause();
+            if (ticket !== outlineTicket)
+              throw new DOMException("", "AbortError");
+          }
+        );
+        if (ticket !== outlineTicket) return;
+        outlineCache = mask2 ? { key, mask: mask2 } : null;
+      }
+      if (!outlineCache) {
+        outlineCanvas.hidden = true;
+        outlineShown = null;
+        return;
+      }
+      const { mask } = outlineCache, rgb = parseHex(o.colour) || [255, 255, 255];
+      if (outlineCanvas.width !== mask.width) outlineCanvas.width = mask.width;
+      if (outlineCanvas.height !== mask.height)
+        outlineCanvas.height = mask.height;
+      outlineCanvas.getContext("2d").putImageData(
+        new ImageData(outlineLayer(mask, rgb), mask.width, mask.height),
+        0,
+        0
+      );
+      outlineShown = {
+        left: mask.left,
+        top: mask.top,
+        width: mask.width,
+        height: mask.height
+      };
+      outlineCanvas.hidden = false;
+      placeOutline();
+    } catch (e) {
+      if (e.name === "AbortError" || ticket !== outlineTicket) return;
+      outlineCanvas.hidden = true;
+      outlineShown = null;
+      status("Could not draw the outline: " + e.message);
+    }
+  }
+  function placeOutline() {
+    if (!outlineShown || outlineCanvas.hidden) return;
+    const { left, top, width: W, height: H } = outlineShown, dx = (W / 2 - left - w / 2) * zoom, dy = (H / 2 - top - h / 2) * zoom, wipe = choice("view") === "wipe";
+    outlineCanvas.style.width = W * zoom + "px";
+    outlineCanvas.style.height = H * zoom + "px";
+    outlineCanvas.style.transform = `translate(calc(-50% + ${panX + dx}px),calc(-50% + ${panY + dy}px))`;
+    outlineCanvas.style.clipPath = wipe ? `inset(0 0 0 ${(left + w * Number($("wipe").value) / 100) / W * 100}%)` : "";
+    outlineCanvas.style.visibility = choice("overlay") === "only" ? "hidden" : "";
+  }
   $("previewGround").onchange = renderPreview;
   var FORMAT_NAMES = {
     png: "PNG",
@@ -8137,7 +9882,7 @@ dialog p {
       paletteSets.push(set);
       addSetOption(set);
       $("paletteSet").value = set.id;
-      $("palettePanel").open = true;
+      workspace.setCollapsed("swatches", false);
       renderSet();
       status(
         "Opened " + set.label + " with " + entries2.length + (entries2.length === 1 ? " colour." : " colours.")
@@ -8204,7 +9949,7 @@ dialog p {
     for (let i = 0; i < overrides.length; i++)
       if (overrides[i]) sum = (sum * 31 + (i + 1) * overrides[i]) % 2147483647;
     const { target, ramp, dh, ds, dl, manual, ...rest } = params, others = edit.rows.filter((_, k) => k !== edit.active);
-    return JSON.stringify([imageId, seeds, rest, others, sum]);
+    return JSON.stringify([imageId, seeds, rest, others, sum, edit.outline]);
   }
   async function variantImage() {
     if (prepared && !worker) return prepared;
@@ -8224,13 +9969,13 @@ dialog p {
     const stale = selectionKey() !== variantsKey;
     $("variants").classList.toggle("stale", stale);
     $("variantsNote").hidden = !stale;
-    $("variantsNote").textContent = "The selection or treatment changed. Make variants again to update the previews; export always uses the current selection.";
+    $("variantsNote").textContent = "The selection, treatment or outline changed. Make variants again to update the previews; export always uses the current settings.";
   }
   async function makeVariants() {
     const run = ++variantRun, entries2 = currentSet().entries.slice(0, MAX_VARIANTS);
     commit("Adjust colour");
     try {
-      const image = await variantImage(), key = selectionKey(), dpr = window.devicePixelRatio || 1, box = Math.round(56 * dpr), fit2 = box / Math.max(w, h), tw = Math.max(1, Math.round(w * fit2)), th = Math.max(1, Math.round(h * fit2));
+      const image = await variantImage(), key = selectionKey(), settings = finishSettings(), dpr = window.devicePixelRatio || 1, box = Math.round(56 * dpr), fit2 = box / Math.max(w, h), tw = Math.max(1, Math.round(w * fit2)), th = Math.max(1, Math.round(h * fit2));
       if (run !== variantRun) return;
       const tiles = entries2.map((entry) => {
         const tile = document.createElement("button"), canvas = document.createElement("canvas"), label = document.createElement("span");
@@ -8260,11 +10005,15 @@ dialog p {
           () => run !== variantRun
         );
         if (run !== variantRun) return;
-        canvas.getContext("2d").putImageData(
-          new ImageData(resize(r.pixels, w, h, tw, th), tw, th),
-          box - tw >> 1,
-          box - th >> 1
-        );
+        if (settings.outline)
+          drawFitted(canvas, await outlinedBase(r.pixels, settings), box);
+        else
+          canvas.getContext("2d").putImageData(
+            new ImageData(resize(r.pixels, w, h, tw, th), tw, th),
+            box - tw >> 1,
+            box - th >> 1
+          );
+        if (run !== variantRun) return;
       }
       $("exportVariants").hidden = false;
       status(
@@ -8329,8 +10078,11 @@ dialog p {
       return;
     }
     const filename = safeStem(name) + "-recipe.json";
+    const { on, widthPct, colour } = edit.outline;
     download(
-      new Blob([writeRecipe(steps)], { type: "application/json" }),
+      new Blob([writeRecipe(steps, on ? { widthPct, colour } : null)], {
+        type: "application/json"
+      }),
       filename
     );
     status(
@@ -8342,7 +10094,9 @@ dialog p {
     try {
       if (file.size > MAX_RECIPE_BYTES)
         throw Error("Recipes must be 64 KB or smaller.");
-      const recipe = parseRecipe(await file.text()), { steps, preview } = await currentSteps(), iid = imageId, base = preview ? preview.pixels : pixels;
+      const { steps: recipe, outline: recipeOutline } = parseRecipeFile(
+        await file.text()
+      ), { steps, preview } = await currentSteps(), iid = imageId, base = preview ? preview.pixels : pixels;
       status("Applying " + file.name + "\u2026");
       const out = await replay(w, h, base, recipe, pause, () => iid !== imageId);
       if (iid !== imageId) return;
@@ -8352,7 +10106,9 @@ dialog p {
       edit = {
         rows: [newRow(1, { ...params, dh: 0, ds: 0, dl: 0, manual: false })],
         active: 0,
-        steps: [...steps, ...recipe]
+        steps: [...steps, ...recipe],
+        // A recipe that carries an outline turns it on; one that does not leaves it be.
+        outline: recipeOutline ? { on: true, ...recipeOutline } : { ...edit.outline }
       };
       activate();
       dirty = true;
@@ -8458,10 +10214,11 @@ dialog p {
   };
   function layout() {
     if (!w) return;
-    const pane = after.parentElement, marginY = getComputedStyle($("stageTools")).position === "absolute" ? 116 : 40;
+    const pane = after.parentElement, tools = $("stageTools"), floating = getComputedStyle(tools).position === "absolute", spare = edit.outline.on ? 40 : 0, marginY = (floating ? 2 * Math.max(tools.offsetHeight + 18, 46) : 40) + spare;
+    pane.closest(".stage").style.setProperty("--tools-h", tools.offsetHeight + "px");
     if (fitMode) {
       zoom = Math.min(
-        (pane.clientWidth - 40) / w,
+        (pane.clientWidth - 40 - spare) / w,
         (pane.clientHeight - marginY) / h
       );
       zoom = Math.max(0.01, zoom);
@@ -8474,6 +10231,7 @@ dialog p {
     }
     $("viewport").classList.toggle("pixelated", !fitMode && zoom >= 2);
     $("zoomReadout").textContent = Math.round(zoom * 100) + "%";
+    placeOutline();
   }
   function setZoom(value, anchor) {
     if (!w) return;
@@ -8582,6 +10340,8 @@ dialog p {
       ["addSample", value === "pick" && addSample]
     ])
       $(id).setAttribute("aria-pressed", String(active));
+    $("brushSizeGroup").hidden = value !== "add" && value !== "subtract";
+    $("brushCursor").hidden = $("brushSizeGroup").hidden || $("brushCursor").hidden;
     after.parentElement.style.cursor = before.parentElement.style.cursor = value === "pan" ? "grab" : "crosshair";
   }
   for (const c of [before, after]) {
@@ -8813,30 +10573,6 @@ dialog p {
       for (const other of document.querySelectorAll(".dock-tabs button"))
         other.setAttribute("aria-pressed", String(other === tab));
     };
-  function dockHeight(px) {
-    const max = Math.max(160, innerHeight - 320), value = Math.round(clamp(px, 120, Math.min(600, max)));
-    document.querySelector(".app").style.setProperty("--dock-h", value + "px");
-    $("dockHandle").setAttribute("aria-valuenow", String(value));
-    layout();
-  }
-  $("dockHandle").addEventListener("pointerdown", (e) => {
-    const handle = $("dockHandle"), start = e.clientY, height = $("dock").getBoundingClientRect().height;
-    handle.setPointerCapture(e.pointerId);
-    const move = (m) => dockHeight(height + start - m.clientY);
-    handle.addEventListener("pointermove", move);
-    handle.addEventListener(
-      "pointerup",
-      () => handle.removeEventListener("pointermove", move),
-      { once: true }
-    );
-  });
-  $("dockHandle").addEventListener("keydown", (e) => {
-    const step = e.shiftKey ? 60 : 20, now = $("dock").getBoundingClientRect().height;
-    if (e.key === "ArrowUp") dockHeight(now + step);
-    else if (e.key === "ArrowDown") dockHeight(now - step);
-    else return;
-    e.preventDefault();
-  });
   $("background").onchange = background;
   $("backgroundColour").oninput = background;
   $("dismissTip").onclick = () => $("firstUse").hidden = true;
@@ -8874,6 +10610,10 @@ dialog p {
   }
   function theme() {
     const root = document.documentElement, { dark, contrast: contrast2, tokens } = resolveTheme(uiTheme, modifier, system);
+    root.classList.add("theming");
+    requestAnimationFrame(
+      () => requestAnimationFrame(() => root.classList.remove("theming"))
+    );
     root.dataset.theme = dark ? "dark" : "light";
     root.dataset.modifier = modifier;
     if (contrast2) root.dataset.contrast = "high";
@@ -8920,25 +10660,44 @@ dialog p {
   });
   theme();
   document.addEventListener("keydown", (e) => {
-    const editing = e.target.closest(
-      "input,select,textarea,[contenteditable=true]"
+    if (e.key === "F1" && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+      e.preventDefault();
+      showShortcuts();
+      return;
+    }
+    const field = e.target.closest(
+      "input,select,textarea,[contenteditable=true],[role=menu],[role=menubar]"
+    ), typing = field && !field.matches(
+      "input[type=range],input[type=checkbox],input[type=radio],input[type=color]"
     );
-    if (editing || $("replaceDialog").open) return;
+    if (typing || document.querySelector("dialog[open]")) return;
     const key = e.key.toLowerCase();
-    if ((e.ctrlKey || e.metaKey) && key === "o") {
+    if (e.ctrlKey || e.metaKey) {
+      if (e.altKey) return;
+      if (key === "o") $("fileInput").click();
+      else if (key === "e") save();
+      else if (key === "c" && e.shiftKey) save(true);
+      else if (key === "z") restore(e.shiftKey);
+      else if (key === "y") restore(true);
+      else if (key === "enter") apply3();
+      else return;
       e.preventDefault();
-      $("fileInput").click();
-    } else if ((e.ctrlKey || e.metaKey) && key === "z") {
-      e.preventDefault();
-      restore(e.shiftKey);
-    } else if (key === "escape") {
-      $("clear").click();
-    } else if (e.code === "Space" && !e.target.closest("button,summary,a,[role=separator]")) {
+      return;
+    }
+    if (e.altKey) return;
+    if (key === "escape") $("clear").click();
+    else if (e.code === "Space" && !field && !e.target.closest("button,summary,a,[role=separator]")) {
       e.preventDefault();
       space = true;
     } else if (key === "f") $("fit").click();
     else if (key === "+" || key === "=") $("zoomIn").click();
     else if (key === "-") $("zoomOut").click();
+    else if (key === "1") $("actual").click();
+    else if (key === "i") $("replaceSample").click();
+    else if (key === "a") $("addSample").click();
+    else if (key === "b") $("brushAdd").click();
+    else if (key === "e") $("brushSubtract").click();
+    else if (key === "h") $("pan").click();
   });
   document.addEventListener("keyup", (e) => {
     if (e.code === "Space") space = false;
@@ -8983,18 +10742,44 @@ dialog p {
     const text2 = e.clipboardData?.getData("text/plain");
     if (!text2 || e.target.closest?.("input, textarea, select, [contenteditable]"))
       return;
+    if (pasteText(text2)) e.preventDefault();
+  });
+  function pasteText(text2) {
     let entries2;
     try {
       entries2 = parsePalette(text2);
     } catch {
-      return;
+      return false;
     }
-    e.preventDefault();
     if (entries2.length === 1) setTarget(entries2[0].hex);
     else openPalette(text2, "Pasted palette");
+    return true;
+  }
+  async function pasteFromClipboard() {
+    try {
+      for (const item of await navigator.clipboard.read()) {
+        const type = item.types.find((t) => t.startsWith("image/"));
+        if (type) {
+          openBlob(await item.getType(type), "pasted.png");
+          return;
+        }
+      }
+      if (!pasteText(await navigator.clipboard.readText()))
+        status("The clipboard has no image or colours to paste.");
+    } catch {
+      status(
+        "This window won't let a menu read the clipboard. Press Ctrl+V instead."
+      );
+    }
+  }
+  var workspace = createWorkspace($("main"), { onPreset: () => layout() });
+  window.addEventListener("resize", () => {
+    workspace.refresh();
+    layout();
   });
-  window.addEventListener("resize", layout);
-  new ResizeObserver(layout).observe($("viewport"));
+  var stageWatch = new ResizeObserver(layout);
+  stageWatch.observe($("viewport"));
+  stageWatch.observe($("stageTools"));
   window.addEventListener("beforeunload", (e) => {
     if (dirty || result?.changed) {
       e.preventDefault();
@@ -9013,6 +10798,362 @@ dialog p {
       });
     }).catch(() => {
     });
+  function showShortcuts() {
+    const list = $("shortcuts");
+    list.open = true;
+    list.querySelector("summary").focus();
+  }
+  document.addEventListener("click", (e) => {
+    const fromMenu = e.composedPath().some((node) => node.classList?.contains("menu-pop"));
+    if (!fromMenu && !$("shortcuts").contains(e.target))
+      $("shortcuts").open = false;
+  });
+  $("shortcuts").addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && $("shortcuts").open) {
+      $("shortcuts").open = false;
+      $("shortcuts").querySelector("summary").focus();
+      e.stopPropagation();
+    }
+  });
+  function showAbout() {
+    $("aboutVersion").textContent = "Version " + VERSION;
+    $("aboutNotices").textContent = $("licence-notices")?.content.textContent.trim() ?? "";
+    $("aboutDialog").showModal();
+  }
+  function notesParagraph(text2) {
+    const p = document.createElement("p");
+    for (const part of text2.replace(/^#+\s*/, "").split(/(\*\*[^*]+\*\*|`[^`]+`)/)) {
+      if (!part) continue;
+      if (part.startsWith("**") && part.endsWith("**")) {
+        const bold = document.createElement("strong");
+        bold.textContent = part.slice(2, -2);
+        p.append(bold);
+      } else if (part.startsWith("`") && part.endsWith("`")) {
+        const code = document.createElement("code");
+        code.textContent = part.slice(1, -1);
+        p.append(code);
+      } else p.append(part);
+    }
+    return p;
+  }
+  function showNotes() {
+    const raw = $("release-notes")?.content.textContent ?? "";
+    $("notesBody").replaceChildren(
+      ...raw.split(/\n\s*\n/).map((text2) => text2.replace(/\s*\n\s*/g, " ").trim()).filter(Boolean).map(notesParagraph)
+    );
+    $("notesDialog").showModal();
+  }
+  async function quit() {
+    if (pixels && (dirty || result?.changed)) {
+      const dialog = $("replaceDialog");
+      [
+        $("replaceTitle").textContent,
+        $("replaceText").textContent,
+        $("replaceConfirm").textContent
+      ] = dialogText.quit;
+      dialog.showModal();
+      const answer = await new Promise(
+        (resolve) => dialog.addEventListener("close", () => resolve(dialog.returnValue), {
+          once: true
+        })
+      );
+      if (answer !== "replace") return;
+    }
+    window.close();
+  }
+  var inApp = !!window.chrome?.webview;
+  var updateState = { phase: "idle", auto: true, enabled: true };
+  var updates = updateChannel((state) => {
+    updateState = state;
+    const named = "Hex Shift" + (state.version ? " " + state.version : "");
+    if (state.phase === "checking") status("Checking for updates\u2026");
+    else if (state.phase === "current")
+      status(named + " is up to date", { fade: 6e3 });
+    else if (state.phase === "available")
+      status(named + " is available. See the bar above.", { fade: 1e4 });
+    else if (state.phase === "failed" && !state.version)
+      status(
+        "Couldn't check for updates" + (state.manual && state.detail ? ": " + state.detail : ""),
+        { fade: 8e3 }
+      );
+  });
+  updates?.request();
+  var have = () => !!pixels;
+  var press = (id, value) => $(id).querySelector(`input[value="${value}"]`).click();
+  var radio = (group, label, value) => ({
+    type: "radio",
+    label,
+    checked: () => choice(group) === value,
+    run: () => press(group, value)
+  });
+  createMenubar({
+    root: $("menubar"),
+    menus: [
+      {
+        id: "file",
+        label: "File",
+        mnemonic: "f",
+        items: [
+          {
+            type: "item",
+            label: "Open\u2026",
+            shortcut: "Ctrl+O",
+            run: () => $("fileInput").click()
+          },
+          {
+            type: "item",
+            label: "Export\u2026",
+            shortcut: "Ctrl+E",
+            enabled: have,
+            run: () => save()
+          },
+          {
+            type: "item",
+            label: "Copy PNG",
+            shortcut: "Ctrl+Shift+C",
+            enabled: have,
+            run: () => save(true)
+          },
+          { type: "separator" },
+          {
+            type: "item",
+            label: "Open palette\u2026",
+            run: () => $("paletteInput").click()
+          },
+          {
+            type: "item",
+            label: "Save palette (.gpl)\u2026",
+            run: () => $("savePalette").click()
+          },
+          { type: "item", label: "Save recipe\u2026", enabled: have, run: saveRecipe },
+          {
+            type: "item",
+            label: "Apply recipe\u2026",
+            enabled: have,
+            run: () => $("recipeInput").click()
+          },
+          {
+            type: "item",
+            label: "Batch from files\u2026",
+            enabled: () => have() && $("cancelBatch").hidden,
+            run: () => $("batchInput").click()
+          },
+          { type: "separator", hidden: () => !inApp },
+          { type: "item", label: "Exit", hidden: () => !inApp, run: quit }
+        ]
+      },
+      {
+        id: "edit",
+        label: "Edit",
+        mnemonic: "e",
+        items: [
+          {
+            type: "item",
+            label: "Undo",
+            shortcut: "Ctrl+Z",
+            enabled: () => !$("undo").disabled,
+            run: () => restore(false)
+          },
+          {
+            type: "item",
+            label: "Redo",
+            shortcut: "Ctrl+Shift+Z",
+            enabled: () => !$("redo").disabled,
+            run: () => restore(true)
+          },
+          { type: "separator" },
+          {
+            type: "item",
+            label: "Apply, then build on it",
+            shortcut: "Ctrl+Enter",
+            enabled: () => !$("apply").disabled,
+            run: apply3
+          },
+          { type: "item", label: "Reset original", enabled: have, run: reset },
+          {
+            type: "item",
+            label: "Clear selection",
+            shortcut: "Esc",
+            enabled: have,
+            run: () => $("clear").click()
+          },
+          { type: "separator" },
+          {
+            type: "item",
+            label: "Add colour row",
+            enabled: () => have() && !$("addRow").disabled,
+            run: addRow
+          },
+          { type: "item", label: "Map all colours", enabled: have, run: mapAll },
+          { type: "separator" },
+          {
+            type: "item",
+            label: "Paste",
+            shortcut: "Ctrl+V",
+            run: pasteFromClipboard
+          }
+        ]
+      },
+      {
+        id: "view",
+        label: "View",
+        mnemonic: "v",
+        items: [
+          radio("view", "Result", "result"),
+          radio("view", "Side by side", "side"),
+          radio("view", "Wipe", "wipe"),
+          {
+            type: "sub",
+            label: "Compare with",
+            enabled: () => choice("view") !== "result",
+            items: [
+              ["working", "Before current edit"],
+              ["original", "Original"]
+            ].map(([value, label]) => ({
+              type: "radio",
+              label,
+              checked: () => $("compare").value === value,
+              run: () => {
+                $("compare").value = value;
+                draw();
+              }
+            }))
+          },
+          { type: "separator" },
+          {
+            type: "item",
+            label: "Zoom in",
+            shortcut: "+",
+            enabled: have,
+            run: () => $("zoomIn").click()
+          },
+          {
+            type: "item",
+            label: "Zoom out",
+            shortcut: "\u2212",
+            enabled: have,
+            run: () => $("zoomOut").click()
+          },
+          {
+            type: "item",
+            label: "Fit",
+            shortcut: "F",
+            enabled: have,
+            run: () => $("fit").click()
+          },
+          {
+            type: "item",
+            label: "100%",
+            shortcut: "1",
+            enabled: have,
+            run: () => $("actual").click()
+          },
+          { type: "separator" },
+          {
+            type: "sub",
+            label: "Background",
+            items: [
+              radio("background", "Checkerboard", "checker"),
+              radio("background", "White", "white"),
+              radio("background", "Dark", "dark"),
+              radio("background", "Custom colour", "custom")
+            ]
+          },
+          {
+            type: "sub",
+            label: "Show selection",
+            items: [
+              radio("overlay", "Tinted", "overlay"),
+              radio("overlay", "Only", "only"),
+              radio("overlay", "Off", "normal")
+            ]
+          },
+          {
+            type: "sub",
+            label: "Theme",
+            items: [
+              ...THEMES.map((t) => ({
+                type: "radio",
+                label: t.name,
+                checked: () => uiTheme === t.id,
+                run: () => {
+                  uiTheme = t.id;
+                  theme();
+                }
+              })),
+              { type: "separator" },
+              { type: "heading", label: "Modifier" },
+              ...MODIFIERS.map((m) => ({
+                type: "radio",
+                label: m.name,
+                checked: () => modifier === m.id,
+                run: () => {
+                  modifier = m.id;
+                  theme();
+                }
+              }))
+            ]
+          }
+        ]
+      },
+      {
+        id: "image",
+        label: "Image",
+        mnemonic: "i",
+        items: [
+          {
+            type: "check",
+            label: "Outline",
+            checked: () => edit.outline.on,
+            enabled: have,
+            run: () => $("outline").click()
+          },
+          { type: "separator" },
+          {
+            type: "item",
+            label: "Make a variant for each colour",
+            enabled: () => !$("makeVariants").disabled,
+            run: makeVariants
+          },
+          {
+            type: "item",
+            label: "Export all variants (ZIP)",
+            enabled: () => !$("exportVariants").hidden,
+            run: exportVariants
+          }
+        ]
+      },
+      {
+        id: "help",
+        label: "Help",
+        mnemonic: "h",
+        items: [
+          {
+            type: "item",
+            label: "Shortcuts",
+            shortcut: "F1",
+            run: showShortcuts
+          },
+          {
+            type: "item",
+            label: "Check for updates\u2026",
+            hidden: () => !updates,
+            run: () => updates.check()
+          },
+          {
+            type: "check",
+            label: "Check for updates automatically",
+            hidden: () => !updates,
+            checked: () => updateState.auto,
+            run: () => updates.setAuto(!updateState.auto)
+          },
+          { type: "separator" },
+          { type: "item", label: "Release notes", run: showNotes },
+          { type: "item", label: "About Hex Shift", run: showAbout }
+        ]
+      }
+    ]
+  });
   startWorker();
   syncTarget();
   setTool("pick");
@@ -9294,5 +11435,39 @@ Copyright (c) 2000-2024 The Legion of the Bouncy Castle Inc. (https://www.bouncy
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 Original C# port and code by Christian Winnerlein (CodesInChaos), public domain, https://github.com/CodesInChaos/Chaos.NaCl . Poly1305 by Andrew M. (floodyberry), MIT or public domain. Curve25519, Ed25519, Salsa20 and HSalsa20 from SUPERCOP ref10 by Dan Bernstein, public domain (http://bench.cr.yp.to/supercop.html). SHA512 by Christian Winnerlein, public domain.</pre></template>
+    <template id="release-notes"><pre># Hex Shift 3
+
+A recolouring tool for emoji, icons, stickers and transparent assets: the image in the middle with a menu bar, a colour map, and Selection, Colour, Adjust, Swatches, Outline and Export panels around it, colour themes, magnified picking, image palette, selection brushes, comparison views, exact-colour and transparency modes, palettes, variants, recipes, batch, and ship-ready PNG/WebP/ZIP exports.
+
+Images stay local. The update adds bounded input validation, guarded static SVG import, a restrictive content security policy, cancellable worker processing, scoped offline caches, and tighter Windows-host boundaries. Review docs/security-review.md in the source repository for verification evidence and remaining limitations.
+
+**New in 3.2.0:** Steadier, tighter, and easier to find your way around. The picture no longer jumps while you drag a slider: the status bar used to grow a few pixels each time Hex Shift started working, which shook everything above it, and now nothing moves. On a wide window the controls sit in two columns beside the image instead of a short dock under it, **Selection** on the left and **Colour**, **Adjust**, **Swatches**, **Outline** and **Export** on the right. Each panel has a header you can click to fold it away, and a handle between the columns resizes them. Controls are smaller with a mouse (touch screens keep finger-sized ones), so the hue, chroma and lightness sliders are in view without scrolling; on short windows Swatches and Outline start folded, a click away. The pick, add-sample, brush and pan tools are now a toolbar on the image, with keys I, A, B, E and H. A new **menu bar** (File, Edit, View, Image and Help; Alt or F10 reaches it) puts everything in one place with its shortcuts, including Ctrl+E to export, Ctrl+Shift+C to copy and Ctrl+Enter to apply; **Help** has the shortcuts (F1), these release notes and About, with the version and licences. The **outline** now shows on the image as you set it, can be undone, and is saved in recipes (a recipe saved with one turns it on when applied; recipes without one still open). Exports are unchanged: with the outline off they match 3.1.1 pixel for pixel. In the Windows app Hex Shift now checks for updates every time it starts, about two seconds after the window opens, and again every six hours, and says how it went in the status bar ("Checking for updates…", then "Hex Shift 3.2.0 is up to date"). **Check for updates...** and the switch for automatic checks moved from the title bar's menu to **Help**, and **File &gt; Exit** closes the window, asking first if you have unsaved work. Copies of 3.1.1 still check at most once a day, so for this one update choose **Check for updates...** from the menu you get by right-clicking the title bar. Nothing new is stored.
+
+**New in 3.1.1:** The System theme with the Contrast modifier now boosts your Windows accent colour against black, saturating and brightening it the same way the other themes boost theirs, instead of only brightening it. A grey accent (such as Windows graphite) still shows as white, because grey has no colour to boost.
+
+**New in 3.1.0:** Themes, reworked. The Theme button in the top bar now holds both the theme and a modifier. Five themes: **Default** (neutral graphite), **Lude** (graphite and orange), **Nord**, **Everforest**, and **System**, which follows your Windows accent colour and light or dark app mode and changes as soon as you change them. Each has four modifiers: **Default**, **Day** (light), **Night** (deeper and darker) and **Contrast** (pitch black with the theme colour boosted, or your Windows accent for System), which replaces the separate High contrast theme. Selected buttons now always stand out from the panels behind them, even with a dark accent colour. Your earlier theme choice carries over. The Windows app passes only your accent colour and app mode to the page; nothing new is stored.
+
+**New in 3.0.0:** A new look. The left column of controls is gone: the image now fills the window, with view and zoom controls floating on it, the colour map as a row of chips under it, and **Selection**, **Colour** and **Export** side by side in a dock you can make taller or shorter. Small choices (treatment, colour model, selection view, comparison view, background) are now one-click buttons instead of drop-down lists, text is larger, and icons are drawn rather than font characters. The interface is a neutral graphite by default so only your image is in colour, and the half-circle button beside the light/dark setting offers nine more **colour themes**: High contrast, Lewd, Nord, Solarized, Dracula, Catppuccin, Gruvbox, Rosé Pine and Everforest, each light and dark and each meeting WCAG AA contrast. On phones and narrow windows one panel shows at a time from a tab bar at the bottom; on touch screens controls are finger-sized, two fingers pinch to zoom and pan, and the magnifier sits above your finger. Zooming in past 200% shows each pixel sharp. The app has a new icon: a # split corner to corner in orange and cyan. SVGs exported by Illustrator, Inkscape, Sketch, Figma and icon sets now open (document types with plain entities, reused shapes and symbols, simple stylesheets and editor metadata are handled; scripts, external content and entities that multiply are still refused). Space no longer stops a focused button from being pressed. Your theme choice is still the only thing stored.
+
+**New in 2.5.1 (Windows):** The ◎ button now picks colours from the screen in the Windows app. Since 2.4.0 it did nothing there, because WebView2, the browser engine inside the app, quietly refuses to open the browser's screen picker. The app now has its own: your screens freeze, a magnifier with the colour's hex code follows the mouse, and a click picks the colour. Esc or a right-click cancels, and the arrow keys move one pixel at a time (ten with Shift). Only the picked colour reaches the page; the pictures of your screens are thrown away when the picker closes. In browsers too, cancelling the picker now says "No colour was picked." instead of nothing.
+
+**New in 2.5.0:** Colour map, recipes and batch. The Colour panel now holds a colour map: **+ Add colour** adds a row for each colour you want to change, each with its own selection, treatment and target, all applied together, so swapping red and blue no longer turns both the same colour. **Map all colours** fills the map with the image's colour families in one click, each kept as it is until you set a new colour. Where two changed colours meet, the blended edge pixels are remade from the two new colours, so a recoloured fill and outline meet cleanly, and gradients from one colour into another stay smooth. **Recipes and batch** (in Finish) saves your changes as a recipe file that repeats them on other images, applies a recipe to the open image, or applies your changes to up to 100 images at once into one ZIP at the size and format you chose. Recipes keep colours rather than places, so brush strokes and connected-region limits are left out, and they are read as data with strict size and range limits. Nothing new is stored.
+
+**New in 2.4.1:** Cleaner recolours. Shift colour now gives every shade the target colour's hue, so a red-to-pink heart becomes one even blurple instead of drifting from violet to azure, and the blended pixels along a dark outline shift with the fill, so no rim of the old colour is left around it. Soft fades into other colours inside the artwork stay soft.
+
+**New in 2.4.0:** Palettes, variants and skin tones. The target colour box now takes `rgb()`, `hsl()` and colour names as well as hex, and a new ◎ button picks a colour from anywhere on your screen (Chrome, Edge and the Windows app), such as the real colour of a Discord button. **Palettes and variants** (in Colour) replaces the Discord button list: choose Discord buttons, a 12-colour rainbow at equal brightness, the skin tones of Fluent, Twemoji, Noto or OpenMoji, or a palette of your own: open or paste GIMP, Lospec, JASC or Paint.NET palettes, or any list of hex colours, and save any palette as a `.gpl` file. Skin tones map the light and shadow shades of your selection onto each tone's colours, so a yellow emoji becomes a properly shaded skin tone in one click. **Make a variant for each colour** previews the current edit in every colour of the palette, and **Export all variants** saves them in one ZIP at the size you chose. Palettes are kept only while Hex Shift is open; nothing new is stored.
+
+**New in 2.3.0:** Ship-ready exports. A new Size option in Finish makes files at the exact size each platform wants: Discord emoji and stickers, Slack emoji, a Twitch emote pack (112, 56 and 28 px in one ZIP), Telegram stickers and emoji, a WhatsApp sticker with its tray icon (one ZIP), YouTube emoji, or a custom size. The artwork is centred on a transparent square where the platform needs one, and a readout shows each file's size against the platform's limit before you export. A new small WebP format shrinks a file until it fits (WhatsApp stickers must be under 100 KB); it needs Chrome, Edge, Firefox or the Windows app. PNGs are about 40% smaller (measured on the built-in heart) with every pixel unchanged. SVGs open sharp at 512 px instead of their stated size (Fluent Color emoji were 32 px), with 256, 1024 and 2048 px under **SVG drawn at**, and SVGs with fractional sizes such as `width="32.5"` now open. The Windows app saves ZIP packs through the same Save As checks as images.
+
+**New in 2.2.0:** Truer colour. With shading protection on, the colour you sample now lands exactly on your target (requested and achieved match) while the other shades scale around it. A new Perceptual colour model, on by default, keeps brightness when the hue changes; Classic HSL is one click away. Recolouring white or grey parts now gives one even tint instead of mixed tints. Make transparent gains Clean edges, which removes the colour from blended edge pixels so backgrounds leave no halo. A new Outline option (in Finish) keeps an emoji visible on a background of its own colour, such as a Discord button, and a real-size preview shows the result at 16–96 px on chat and Discord button colours. Large images process far faster: a 2048 × 2048 edit drops from many seconds to well under one.
+
+**New in 2.1.0 (Windows):** Hex Shift can check for updates. At most once a day it asks the project's update address, and if a newer version exists it shows a notice with release notes, **Download update** and **Later**. Nothing is downloaded without a click, and nothing is installed without a second confirmation that reminds you to export your image first. Every update is verified with a cryptographic signature before it can run. Turn the automatic check off, or check by hand, from the window's system menu (right-click the title bar). There is now also a per-user installer, `HexShift-2.1.0-Setup.exe`; the portable program offers it instead of replacing itself. Copies of 2.0 have no updater, so install 2.1.0 once by hand. See docs/updates.md for how it works and how releases are signed.
+
+**Also in 2.1.0:** SVGs with filter effects and blend modes now open, including Microsoft's Fluent Color emoji with their inner shadows. SVG filters that would draw in other images are still refused.
+
+**Windows:** HexShift.exe is portable and currently unsigned. Verify its SHA-256 against SHA256SUMS.txt and its GitHub build provenance before use. A checksum hosted alongside a binary does not independently protect against a compromised publisher account. Do not routinely bypass operating-system warnings. No code-signing identity has been provisioned.
+
+HexShift.html opens locally in a current browser. HexShift.zip includes the executable, HTML, documentation and licence notices.
+</pre></template>
   </body>
 </html>
