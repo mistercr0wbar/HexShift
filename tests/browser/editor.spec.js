@@ -11,6 +11,10 @@ const svg = (body, attrs = "") => ({
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 5" ${attrs}>${body}</svg>`,
   ),
 });
+// Treatment, colour model, selection preview, background and view are
+// segmented radio groups; the group keeps the old control id.
+const choose = (page, id, value) =>
+  page.locator(`#${id} input[value="${value}"]`).check();
 // Reads a stored ZIP back through its central directory.
 function unzip(buffer) {
   const v = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength),
@@ -53,7 +57,7 @@ test("sample, modes, exact target, undo/redo and export", async ({ page }) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await pick(page);
-  await page.locator("#mode").selectOption("flat");
+  await choose(page, "mode", "flat");
   await page.locator("#targetHex").fill("#12AB34");
   await page.locator("#targetHex").press("Tab");
   await expect(page.locator("#cancel")).toBeHidden();
@@ -131,7 +135,7 @@ test("lossless WebP export decodes to the exact PNG pixel values", async ({
   page,
 }) => {
   await pick(page);
-  await page.locator("#overlay").selectOption("normal");
+  await choose(page, "overlay", "normal");
   let download = page.waitForEvent("download");
   await page.locator("#export").click();
   const png = await readFile(await (await download).path());
@@ -148,7 +152,7 @@ test("lossless WebP export decodes to the exact PNG pixel values", async ({
 test("shift lands on the target in both colour models", async ({ page }) => {
   await pick(page);
   for (const model of ["oklch", "hsl"]) {
-    await page.locator("#model").selectOption(model);
+    await choose(page, "model", model);
     await page.locator("#targetHex").fill("#5865F2");
     await page.locator("#targetHex").press("Tab");
     await expect(page.locator("#cancel")).toBeHidden();
@@ -224,7 +228,7 @@ test("platform sizes export at their dimensions and within their limits", async 
   }
   await page.locator("#size").selectOption("twitch-emotes");
   await expect(page.locator("#format")).toBeDisabled();
-  await expect(page.locator("#export")).toHaveText("Export ZIP ↗");
+  await expect(page.locator("#export")).toHaveText("Export ZIP");
   const pack = await exportFile(page);
   expect(pack.name).toMatch(/-twitch-emotes\.zip$/);
   const entries = unzip(pack.bytes);
@@ -289,7 +293,7 @@ test("WhatsApp packs a small WebP sticker and tray icon, or says why not", async
   expect([b.format, b.width, b.height]).toEqual(["png", 96, 96]);
   await page.locator("#size").selectOption("original");
   await page.locator("#format").selectOption("webp-small");
-  await expect(page.locator("#export")).toHaveText("Export WebP ↗");
+  await expect(page.locator("#export")).toHaveText("Export WebP");
   const small = await exportFile(page);
   expect((await sharp(small.bytes).metadata()).format).toBe("webp");
 });
@@ -313,7 +317,7 @@ test("SVGs draw at the chosen size and redraw only after confirmation", async ({
   );
   await ready(page);
   await pick(page);
-  await page.locator("#mode").selectOption("flat");
+  await choose(page, "mode", "flat");
   await expect(page.locator("#editState")).toHaveText("Pending edit");
   await page.locator("#svgSize").selectOption("1024");
   await expect(page.locator("#replaceTitle")).toHaveText(
@@ -664,14 +668,14 @@ test("brush overrides, history and preview background do not alter export alpha"
   const box = await page.locator("#resultCanvas").boundingBox();
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   await expect(page.locator("#coverage")).toContainText("pixels selected");
-  await page.locator("#mode").selectOption("transparent");
+  await choose(page, "mode", "transparent");
   await expect(page.locator("#cancel")).toBeHidden();
   await expect(page.locator("#editState")).toHaveText("Pending edit");
   await page.locator("#undo").click();
-  await expect(page.locator("#mode")).toHaveValue("shift");
+  await expect(page.locator('#mode input[value="shift"]')).toBeChecked();
   await page.locator("#redo").click();
-  await expect(page.locator("#mode")).toHaveValue("transparent");
-  await page.locator("#background").selectOption("white");
+  await expect(page.locator('#mode input[value="transparent"]')).toBeChecked();
+  await choose(page, "background", "white");
   await expect(page.locator("#cancel")).toBeHidden();
   const alpha = await page
     .locator("#resultCanvas")
@@ -759,7 +763,7 @@ test("rapid edits and export during processing save the latest preview", async (
   page,
 }) => {
   await pick(page);
-  await page.locator("#mode").selectOption("flat");
+  await choose(page, "mode", "flat");
   await page.locator("#targetHex").fill("#FF0000");
   await page.locator("#targetHex").fill("#00FF00");
   await page.locator("#targetHex").fill("#123456");
@@ -800,7 +804,7 @@ test("large images remain cancellable and a new edit resumes processing", async 
     document.getElementById("cancel").click();
   });
   await expect(page.locator("#status")).toContainText("cancelled");
-  await page.locator("#mode").selectOption("flat");
+  await choose(page, "mode", "flat");
   await expect(page.locator("#cancel")).toBeHidden({ timeout: 60000 });
   await expect(page.locator("#editState")).toHaveText("Pending edit");
 });
@@ -942,11 +946,103 @@ test("Fluent Color SVG filters, mask types and blend modes", async ({
   await ready(page);
   await expect(page.locator("#status")).not.toContainText("Could not open");
 });
+test("wide screens show the canvas over three side-by-side panels; phones switch panels with tabs", async ({
+  page,
+}) => {
+  const box = (selector) => page.locator(selector).boundingBox();
+  const [selection, colour, exported] = await Promise.all(
+    ["selection", "colour", "export"].map((p) =>
+      box(`.panel[data-panel="${p}"]`),
+    ),
+  );
+  expect(selection.y).toBe(colour.y);
+  expect(colour.y).toBe(exported.y);
+  expect(selection.x).toBeLessThan(colour.x);
+  expect(colour.x).toBeLessThan(exported.x);
+  expect((await box("#viewport")).height).toBeGreaterThanOrEqual(300);
+  await expect(page.locator(".dock-tabs")).toBeHidden();
+  // Treatment choices answer the arrow keys like any radio group.
+  await pick(page);
+  await page.locator('#mode input[value="shift"]').focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator('#mode input[value="flat"]')).toBeChecked();
+  await expect(page.locator("#cancel")).toBeHidden();
+  await expect(page.locator("#targetResult")).toContainText("achieved");
+  await page.setViewportSize({ width: 360, height: 800 });
+  await expect(page.locator(".dock-tabs")).toBeVisible();
+  await expect(page.locator("#targetHex")).toBeVisible();
+  await expect(page.locator("#size")).toBeHidden();
+  await page.locator('.dock-tabs [data-tab="export"]').click();
+  await expect(page.locator("#size")).toBeVisible();
+  await expect(page.locator("#targetHex")).toBeHidden();
+  await page.locator('.dock-tabs [data-tab="selection"]').click();
+  await expect(page.locator("#palette button").first()).toBeVisible();
+});
+test("on touch screens controls are finger-sized and two fingers pinch to zoom", async ({
+  browser,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== "chromium",
+    "Mobile emulation and multi-touch input use Chromium.",
+  );
+  const context = await browser.newContext({
+    viewport: { width: 360, height: 800 },
+    hasTouch: true,
+    isMobile: true,
+  });
+  const page = await context.newPage();
+  await page.goto("/");
+  await expect(page.locator("#palette button").first()).toBeAttached();
+  await expect(page.locator("#cancel")).toBeHidden();
+  for (const selector of [
+    "#open",
+    "#undo",
+    "#export",
+    "#zoomIn",
+    "#mode label",
+    ".dock-tabs button",
+    "#targetHex",
+  ]) {
+    const heights = await page
+      .locator(selector)
+      .evaluateAll((els) =>
+        els
+          .filter((el) => el.offsetParent)
+          .map((el) => el.getBoundingClientRect().height),
+      );
+    expect(heights.length, selector).toBeGreaterThan(0);
+    for (const h of heights) expect(h, selector).toBeGreaterThanOrEqual(40);
+  }
+  const before = await page.locator("#zoomReadout").textContent();
+  const space = await page.locator(".after .canvas-space").boundingBox();
+  const cx = space.x + space.width / 2,
+    cy = space.y + space.height / 2;
+  const cdp = await context.newCDPSession(page);
+  const touch = (type, spread) =>
+    cdp.send("Input.dispatchTouchEvent", {
+      type,
+      touchPoints:
+        type === "touchEnd"
+          ? []
+          : [
+              { x: cx - spread, y: cy, id: 1 },
+              { x: cx + spread, y: cy, id: 2 },
+            ],
+    });
+  await touch("touchStart", 30);
+  for (const spread of [45, 60, 75, 90]) await touch("touchMove", spread);
+  await touch("touchEnd", 0);
+  await expect(page.locator("#zoomReadout")).not.toHaveText(before);
+  // A pinch never picks a colour.
+  await expect(page.locator("#seeds .seed")).toHaveCount(0);
+  await context.close();
+});
 test("touch-sized tools, wipe comparison, keyboard text shortcuts and zoom", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 360, height: 800 });
-  await page.locator("#view").selectOption("wipe");
+  await choose(page, "view", "wipe");
   await expect(page.locator("#wipeControl")).toBeVisible();
   await page.locator("#wipe").fill("25");
   await expect(page.locator("#wipeCanvas")).toHaveCSS(

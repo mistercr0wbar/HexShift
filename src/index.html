@@ -83,11 +83,7 @@
           <span id="fileName">Loading sample…</span><span id="fileDims"></span>
         </div>
         <div class="top-actions">
-          <button
-            id="open"
-            class="button"
-            title="Open an image (Ctrl/Cmd O)"
-          >
+          <button id="open" class="button" title="Open an image (Ctrl/Cmd O)">
             <svg class="icon" aria-hidden="true"><use href="#i-open" /></svg
             ><span class="label">Open</span>
           </button>
@@ -99,7 +95,9 @@
               title="Undo (Ctrl/Cmd Z)"
               disabled
             >
-              <svg class="icon" aria-hidden="true"><use href="#i-undo" /></svg></button
+              <svg class="icon" aria-hidden="true">
+                <use href="#i-undo" />
+              </svg></button
             ><button
               id="redo"
               class="icon-button"
@@ -116,7 +114,9 @@
             <option value="light">Light</option>
             <option value="dark">Dark</option>
           </select>
-          <button id="export" class="button primary" disabled>Export PNG</button>
+          <button id="export" class="button primary" disabled>
+            Export PNG
+          </button>
         </div>
         <input
           id="fileInput"
@@ -132,15 +132,17 @@
               <fieldset id="view" class="segmented">
                 <legend class="sr-only">Comparison view</legend>
                 <label
-                  ><input type="radio" name="view" value="result" />Result</label
-                ><label
                   ><input
                     type="radio"
                     name="view"
-                    value="side"
-                    checked
-                  />Side by side</label
-                ><label><input type="radio" name="view" value="wipe" />Wipe</label>
+                    value="result"
+                  />Result</label
+                ><label
+                  ><input type="radio" name="view" value="side" checked />Side
+                  by side</label
+                ><label
+                  ><input type="radio" name="view" value="wipe" />Wipe</label
+                >
               </fieldset>
               <label class="sr-only" for="compare">Compare with</label
               ><select id="compare" class="compact">
@@ -156,14 +158,18 @@
                 aria-pressed="false"
                 title="Pan (hold Space to pan for a moment)"
               >
-                <svg class="icon" aria-hidden="true"><use href="#i-pan" /></svg></button
+                <svg class="icon" aria-hidden="true">
+                  <use href="#i-pan" />
+                </svg></button
               ><button
                 id="zoomOut"
                 class="icon-button"
                 aria-label="Zoom out"
                 title="Zoom out (−)"
               >
-                <svg class="icon" aria-hidden="true"><use href="#i-minus" /></svg></button
+                <svg class="icon" aria-hidden="true">
+                  <use href="#i-minus" />
+                </svg></button
               ><button id="fit" class="text-button" title="Fit (F)">Fit</button
               ><button id="actual" class="text-button">100%</button
               ><button
@@ -172,7 +178,9 @@
                 aria-label="Zoom in"
                 title="Zoom in (+)"
               >
-                <svg class="icon" aria-hidden="true"><use href="#i-plus" /></svg></button
+                <svg class="icon" aria-hidden="true">
+                  <use href="#i-plus" />
+                </svg></button
               ><span id="zoomReadout">100%</span>
             </div>
           </div>
@@ -197,7 +205,9 @@
                   aria-label="Source image; use the image palette for keyboard colour selection"
                 ></canvas>
               </div>
-              <div class="canvas-label" id="beforeLabel">Before current edit</div>
+              <div class="canvas-label" id="beforeLabel">
+                Before current edit
+              </div>
             </div>
             <div class="pane after">
               <div class="canvas-space">
@@ -336,7 +346,11 @@
               <fieldset id="overlay" class="segmented labelled">
                 <legend>Show selection</legend>
                 <label
-                  ><input type="radio" name="overlay" value="overlay" />Tinted</label
+                  ><input
+                    type="radio"
+                    name="overlay"
+                    value="overlay"
+                  />Tinted</label
                 ><label
                   ><input type="radio" name="overlay" value="only" />Only</label
                 ><label
@@ -427,7 +441,9 @@
                     title="Pick a colour from anywhere on the screen"
                     hidden
                   >
-                    <svg class="icon" aria-hidden="true"><use href="#i-pick" /></svg>
+                    <svg class="icon" aria-hidden="true">
+                      <use href="#i-pick" />
+                    </svg>
                   </button>
                 </div>
               </div>
@@ -524,7 +540,8 @@
             </div>
             <div class="panel-body">
               <div class="field-grid">
-                <label for="size">Size</label><select id="size"></select>
+                <label for="size">Size</label
+                ><select id="size"></select>
                 <div id="customSizeGroup" class="field-row" hidden>
                   <label for="customSize">Longest side (px)</label
                   ><input
@@ -593,9 +610,9 @@
                 </div>
                 <div id="outlineSwatches" class="swatches"></div>
                 <p class="help">
-                  Keeps an emoji visible on a background of its own colour,
-                  such as a Discord button. The canvas grows only if the
-                  artwork touches its edges.
+                  Keeps an emoji visible on a background of its own colour, such
+                  as a Discord button. The canvas grows only if the artwork
+                  touches its edges.
                 </p>
               </details>
               <button id="copy" class="button full" disabled>
@@ -604,9 +621,9 @@
               <details id="recipePanel">
                 <summary>Recipes and batch</summary>
                 <p class="help">
-                  A recipe repeats your colour changes on other images. It
-                  keeps colours, not places, so brush strokes and
-                  connected-region limits are left out.
+                  A recipe repeats your colour changes on other images. It keeps
+                  colours, not places, so brush strokes and connected-region
+                  limits are left out.
                 </p>
                 <div class="palette-actions">
                   <button id="saveRecipe" class="text-button" type="button">
@@ -670,17 +687,16 @@
             </p>
             <p>
               Opens PNG, JPEG, WebP, GIF and static SVG up to 4 megapixels;
-              animated files open as stills. Static SVG supports shapes,
-              paths, text, gradients, clips, masks, blend modes, filter
-              effects, reused shapes and the files Illustrator, Inkscape,
-              Sketch and Figma export; active content, external resources and
-              embedded images are rejected. SVGs are drawn at 512 px on their
-              longest side; change it under SVG drawn at. Sizes for Discord,
-              Slack, Twitch, Telegram, WhatsApp and YouTube fit and centre the
-              artwork and show the file size against each limit. Preview
-              backgrounds never change exported transparency. For a
-              background, Clean edges
-              works best with Only connected regions.
+              animated files open as stills. Static SVG supports shapes, paths,
+              text, gradients, clips, masks, blend modes, filter effects, reused
+              shapes and the files Illustrator, Inkscape, Sketch and Figma
+              export; active content, external resources and embedded images are
+              rejected. SVGs are drawn at 512 px on their longest side; change
+              it under SVG drawn at. Sizes for Discord, Slack, Twitch, Telegram,
+              WhatsApp and YouTube fit and centre the artwork and show the file
+              size against each limit. Preview backgrounds never change exported
+              transparency. For a background, Clean edges works best with Only
+              connected regions.
             </p>
           </div>
         </details>

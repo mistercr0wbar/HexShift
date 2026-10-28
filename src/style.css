@@ -402,8 +402,9 @@ summary::marker {
 }
 .topbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 14px;
+  gap: 8px 14px;
   min-height: 52px;
   padding: calc(8px + var(--safe-top)) calc(14px + var(--safe-right)) 8px
     calc(14px + var(--safe-left));
@@ -455,6 +456,8 @@ summary::marker {
 }
 .top-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: 8px;
   margin-left: auto;
@@ -700,6 +703,7 @@ canvas#wipeCanvas {
 /* Colour map strip */
 .mapbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   min-height: 50px;
@@ -1055,6 +1059,7 @@ canvas#wipeCanvas {
 /* Status bar */
 .statusbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   min-height: 30px;

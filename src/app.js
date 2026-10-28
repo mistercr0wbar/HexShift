@@ -41,6 +41,7 @@ import {
   replay,
   writeRecipe,
 } from "./recipe.js";
+import { screenPicker } from "./host.js";
 import sample from "./sample.js";
 import { makePause } from "./yield.js";
 const $ = (id) => document.getElementById(id),
@@ -134,6 +135,13 @@ function wake(error) {
     else waiter.resolve();
   }
   waiters.clear();
+}
+// Segmented choices are radio groups in a fieldset that keeps the old control's
+// id; change events bubble up to it, so listeners on the id still fire.
+const choice = (id) => $(id).querySelector("input:checked")?.value;
+function setChoice(id, value) {
+  const input = $(id).querySelector(`input[value="${value}"]`);
+  if (input) input.checked = true;
 }
 function buttons() {
   const available = !!pixels;
@@ -539,8 +547,8 @@ function sync() {
     if (document.activeElement !== $(key + "Number"))
       $(key + "Number").value = Math.round(params[key] * 100) / 100;
   }
-  $("mode").value = params.mode;
-  $("model").value = params.model;
+  setChoice("mode", params.mode);
+  setChoice("model", params.model);
   $("connected").checked = params.connected;
   $("protect").checked = params.protect;
   $("cleanEdges").checked = params.cleanEdges;
@@ -1033,19 +1041,43 @@ function download(blob, filename) {
 }
 function displayPixels(data, selection) {
   const out = new Uint8ClampedArray(data),
-    overlay = $("overlay").value;
-  if (selection && result && overlay !== "normal")
+    overlay = choice("overlay");
+  if (selection && result && overlay !== "normal") {
+    const [tr, tg, tb] = overlayTint();
     for (let i = 0; i < w * h; i++) {
       const o = i * 4,
         t = result.mask[i];
       if (overlay === "only") out[o + 3] = out[o + 3] * t;
       else if (t > 0) {
-        out[o] = out[o] * (1 - 0.24 * t) + 117 * 0.24 * t;
-        out[o + 1] = out[o + 1] * (1 - 0.24 * t) + 83 * 0.24 * t;
-        out[o + 2] = out[o + 2] * (1 - 0.24 * t) + 245 * 0.24 * t;
+        out[o] = out[o] * (1 - 0.35 * t) + tr * 0.35 * t;
+        out[o + 1] = out[o + 1] * (1 - 0.35 * t) + tg * 0.35 * t;
+        out[o + 2] = out[o + 2] * (1 - 0.35 * t) + tb * 0.35 * t;
       }
     }
+  }
   return out;
+}
+// The selection tint is the brand cyan or orange, whichever is further in hue
+// from the colour being selected, so it never disappears into it.
+function overlayTint() {
+  const cyan = [110, 240, 255],
+    orange = [232, 128, 46],
+    row = edit?.rows?.[edit.active],
+    from = row ? rowText(row).from : null,
+    rgb = from?.startsWith("#") ? parseHex(from) : null;
+  if (!rgb) return cyan;
+  const [r, g, b] = rgb.map((v) => v / 255),
+    max = Math.max(r, g, b),
+    d = max - Math.min(r, g, b);
+  if (d < 0.08) return cyan;
+  const hue =
+    (max === r
+      ? ((g - b) / d + 6) % 6
+      : max === g
+        ? (b - r) / d + 2
+        : (r - g) / d + 4) * 60;
+  const gap = (a) => Math.min(Math.abs(hue - a), 360 - Math.abs(hue - a));
+  return gap(187) >= gap(26) ? cyan : orange;
 }
 function draw() {
   if (!pixels) return;
@@ -1058,7 +1090,7 @@ function draw() {
       .getContext("2d")
       .putImageData(
         new ImageData(
-          displayPixels(result.pixels, $("view").value !== "side"),
+          displayPixels(result.pixels, choice("view") !== "side"),
           w,
           h,
         ),
@@ -1237,7 +1269,7 @@ function sizeControls() {
       : allowed[0];
   select.disabled = allowed.length < 2;
   $("customSizeGroup").hidden = preset.id !== "custom";
-  $("export").textContent = "Export " + FORMAT_NAMES[select.value] + " ↗";
+  $("export").textContent = "Export " + FORMAT_NAMES[select.value];
   scheduleReadout();
 }
 $("size").onchange = sizeControls;
@@ -1389,23 +1421,12 @@ function screenPicked(hex) {
   if (rgb) setTarget(toHex(...rgb));
   else status("No colour was picked.");
 }
-const host = window.chrome?.webview;
-if (host) {
+const pickFromScreen = screenPicker(screenPicked, (e) =>
+  status("Could not pick from the screen: " + e.message),
+);
+if (pickFromScreen) {
   $("eyeDropper").hidden = false;
-  $("eyeDropper").onclick = () => host.postMessage("pick-colour");
-  host.addEventListener("message", (e) => {
-    if (e.data?.type === "picked-colour") screenPicked(e.data.hex);
-  });
-} else if ("EyeDropper" in window) {
-  $("eyeDropper").hidden = false;
-  $("eyeDropper").onclick = async () => {
-    try {
-      screenPicked((await new window.EyeDropper().open()).sRGBHex);
-    } catch (e) {
-      if (e.name === "AbortError") screenPicked(null);
-      else status("Could not pick from the screen: " + e.message);
-    }
-  };
+  $("eyeDropper").onclick = pickFromScreen;
 }
 // Variants: the current selection and treatment once per palette colour (a
 // tone's ramp for skin tones). Each uses the same steps as clicking that
@@ -1764,9 +1785,16 @@ $("cancelBatch").onclick = () => {
 };
 function layout() {
   if (!w) return;
-  const pane = after.parentElement;
+  const pane = after.parentElement,
+    // Floating tools sit over the top and bottom of the canvas on wide
+    // layouts; fitting leaves room for them so they never cover the artwork.
+    marginY =
+      getComputedStyle($("stageTools")).position === "absolute" ? 116 : 40;
   if (fitMode) {
-    zoom = Math.min((pane.clientWidth - 40) / w, (pane.clientHeight - 40) / h);
+    zoom = Math.min(
+      (pane.clientWidth - 40) / w,
+      (pane.clientHeight - marginY) / h,
+    );
     zoom = Math.max(0.01, zoom);
     panX = panY = 0;
   }
@@ -1775,6 +1803,9 @@ function layout() {
     c.style.height = h * zoom + "px";
     c.style.transform = `translate(calc(-50% + ${panX}px),calc(-50% + ${panY}px))`;
   }
+  // Zoomed in by hand past 200%, each image pixel shows as a sharp square, so
+  // edges and rims can be judged exactly; the fitted overview stays smooth.
+  $("viewport").classList.toggle("pixelated", !fitMode && zoom >= 2);
   $("zoomReadout").textContent = Math.round(zoom * 100) + "%";
 }
 function setZoom(value, anchor) {
@@ -1839,18 +1870,27 @@ function loupe(e, c) {
   const canvas = $("loupe"),
     ctx = canvas.getContext("2d"),
     box = $("viewport").getBoundingClientRect();
-  ctx.fillStyle = "#211c30";
+  ctx.fillStyle = "#1c1c1c";
   ctx.fillRect(0, 0, 132, 164);
   const image = result?.pixels || pixels;
   for (let yy = -4; yy <= 4; yy++)
     for (let xx = -4; xx <= 4; xx++) {
       const x = clamp(p.x + xx, 0, w - 1),
         y = clamp(p.y + yy, 0, h - 1),
-        i = (y * w + x) * 4;
-      ctx.fillStyle = image[i + 3]
-        ? toHex(...image.subarray(i, i + 3))
-        : "#6f687e";
-      ctx.fillRect(3 + (xx + 4) * 14, 3 + (yy + 4) * 14, 14, 14);
+        i = (y * w + x) * 4,
+        cx = 3 + (xx + 4) * 14,
+        cy = 3 + (yy + 4) * 14;
+      if (image[i + 3]) {
+        ctx.fillStyle = toHex(...image.subarray(i, i + 3));
+        ctx.fillRect(cx, cy, 14, 14);
+      } else {
+        // Transparent pixels show as a small neutral checker.
+        ctx.fillStyle = "#3a3a3a";
+        ctx.fillRect(cx, cy, 14, 14);
+        ctx.fillStyle = "#555555";
+        ctx.fillRect(cx, cy, 7, 7);
+        ctx.fillRect(cx + 7, cy + 7, 7, 7);
+      }
     }
   ctx.strokeStyle = "#fff";
   ctx.lineWidth = 2;
@@ -1860,10 +1900,45 @@ function loupe(e, c) {
   ctx.fillText(`${p.x},${p.y} ${toHex(...to)}`, 5, 143);
   ctx.fillText(`Alpha ${Math.round((to[3] / 255) * 100)}%`, 5, 157);
   canvas.hidden = false;
+  // On touch the loupe sits above the finger, which would hide it otherwise.
+  const touch = e.pointerType === "touch";
   canvas.style.left =
-    clamp(e.clientX - box.left + 18, 0, box.width - 134) + "px";
+    clamp(e.clientX - box.left + (touch ? -66 : 18), 0, box.width - 134) + "px";
   canvas.style.top =
-    clamp(e.clientY - box.top + 18, 0, box.height - 166) + "px";
+    clamp(e.clientY - box.top + (touch ? -214 : 18), 0, box.height - 166) +
+    "px";
+}
+// Two fingers on the canvas pinch to zoom and drag to pan, around the point
+// between them.
+const touches = new Map();
+let pinch = null;
+const touchMid = () => {
+  const [a, b] = [...touches.values()];
+  return {
+    x: (a.x + b.x) / 2,
+    y: (a.y + b.y) / 2,
+    d: Math.hypot(a.x - b.x, a.y - b.y) || 1,
+  };
+};
+function startPinch(space, e) {
+  space.setPointerCapture(e.pointerId);
+  if (drag && !drag.pan && (tool === "add" || tool === "subtract"))
+    commit("Brush selection");
+  drag = null;
+  $("loupe").hidden = true;
+  pinch = { space, zoom, panX, panY, ...touchMid() };
+}
+function movePinch() {
+  const now = touchMid(),
+    rect = pinch.space.getBoundingClientRect(),
+    ax = pinch.x - rect.left - rect.width / 2,
+    ay = pinch.y - rect.top - rect.height / 2,
+    z = clamp((pinch.zoom * now.d) / pinch.d, 0.01, 16);
+  fitMode = false;
+  zoom = z;
+  panX = ax - ((ax - pinch.panX) * z) / pinch.zoom + now.x - pinch.x;
+  panY = ay - ((ay - pinch.panY) * z) / pinch.zoom + now.y - pinch.y;
+  layout();
 }
 function setTool(value) {
   tool = value;
@@ -1894,6 +1969,11 @@ for (const c of [before, after]) {
   );
   c.parentElement.addEventListener("pointerdown", (e) => {
     if (!pixels || e.button !== 0) return;
+    if (e.pointerType === "touch") {
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (touches.size === 2) return startPinch(c.parentElement, e);
+      if (touches.size > 2) return;
+    }
     const p = point(e, c);
     const pan = tool === "pan" || space;
     if (!p && !pan) return;
@@ -1916,8 +1996,18 @@ for (const c of [before, after]) {
   });
   c.parentElement.addEventListener("pointermove", (e) => {
     if (!pixels) return;
+    if (touches.has(e.pointerId)) {
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pinch && touches.size >= 2) return movePinch();
+    }
     const p = point(e, c);
-    if (p && e.pointerType !== "touch") loupe(e, c);
+    // Touch shows the loupe only while a finger is down to pick.
+    if (
+      p &&
+      (e.pointerType !== "touch" ||
+        (drag?.pointer === e.pointerId && !drag.pan && tool === "pick"))
+    )
+      loupe(e, c);
     if (p && (tool === "add" || tool === "subtract")) {
       const cursor = $("brushCursor"),
         r = after.parentElement.getBoundingClientRect();
@@ -1954,8 +2044,19 @@ for (const c of [before, after]) {
       addSample = old;
     }
   };
-  c.parentElement.addEventListener("pointerup", finish);
+  // A lifted finger ends any pinch; the remaining finger does nothing until
+  // it is lifted too, so a pinch never ends in an accidental pick.
+  const release = (e) => {
+    if (!touches.delete(e.pointerId)) return;
+    if (pinch && touches.size < 2) pinch = null;
+    $("loupe").hidden = true;
+  };
+  c.parentElement.addEventListener("pointerup", (e) => {
+    finish(e);
+    release(e);
+  });
   c.parentElement.addEventListener("pointercancel", (e) => {
+    release(e);
     if (drag?.pointer === e.pointerId) {
       drag = null;
       commit("Brush selection");
@@ -2075,13 +2176,14 @@ $("fit").onclick = () => {
 $("actual").onclick = () => setZoom(1);
 $("zoomIn").onclick = () => setZoom(zoom * 1.25);
 $("zoomOut").onclick = () => setZoom(zoom / 1.25);
-$("view").value = matchMedia("(min-width:960px)").matches ? "side" : "result";
-$("viewport").dataset.view = $("view").value;
-$("compare").hidden = $("view").value === "result";
+setChoice("view", matchMedia("(min-width:960px)").matches ? "side" : "result");
+$("viewport").dataset.view = choice("view");
+$("compare").hidden = choice("view") === "result";
 $("view").onchange = () => {
-  $("viewport").dataset.view = $("view").value;
-  $("wipeControl").hidden = $("view").value !== "wipe";
-  $("compare").hidden = $("view").value === "result";
+  const view = choice("view");
+  $("viewport").dataset.view = view;
+  $("wipeControl").hidden = view !== "wipe";
+  $("compare").hidden = view === "result";
   draw();
   layout();
 };
@@ -2089,7 +2191,7 @@ $("compare").onchange = draw;
 $("overlay").onchange = draw;
 $("wipe").oninput = draw;
 function background() {
-  const kind = $("background").value;
+  const kind = choice("background");
   $("viewport").classList.toggle("checker", kind === "checker");
   $("backgroundColour").hidden = kind !== "custom";
   for (const el of document.querySelectorAll(".canvas-space"))
@@ -2097,11 +2199,49 @@ function background() {
       kind === "white"
         ? "#fff"
         : kind === "dark"
-          ? "#17141f"
+          ? "#1c1c1c"
           : kind === "custom"
             ? $("backgroundColour").value
             : "";
 }
+// On narrow screens (and in the Android app) the dock shows one panel at a
+// time; the tab bar picks which. Wider layouts show all three and hide it.
+for (const tab of document.querySelectorAll(".dock-tabs button"))
+  tab.onclick = () => {
+    $("dock").dataset.tab = tab.dataset.tab;
+    for (const other of document.querySelectorAll(".dock-tabs button"))
+      other.setAttribute("aria-pressed", String(other === tab));
+  };
+// The dock's height can be dragged or set with the arrow keys. It lasts for
+// the session only: the theme is the one thing Hex Shift stores.
+function dockHeight(px) {
+  const max = Math.max(160, innerHeight - 320),
+    value = Math.round(clamp(px, 120, Math.min(600, max)));
+  document.querySelector(".app").style.setProperty("--dock-h", value + "px");
+  $("dockHandle").setAttribute("aria-valuenow", String(value));
+  layout();
+}
+$("dockHandle").addEventListener("pointerdown", (e) => {
+  const handle = $("dockHandle"),
+    start = e.clientY,
+    height = $("dock").getBoundingClientRect().height;
+  handle.setPointerCapture(e.pointerId);
+  const move = (m) => dockHeight(height + start - m.clientY);
+  handle.addEventListener("pointermove", move);
+  handle.addEventListener(
+    "pointerup",
+    () => handle.removeEventListener("pointermove", move),
+    { once: true },
+  );
+});
+$("dockHandle").addEventListener("keydown", (e) => {
+  const step = e.shiftKey ? 60 : 20,
+    now = $("dock").getBoundingClientRect().height;
+  if (e.key === "ArrowUp") dockHeight(now + step);
+  else if (e.key === "ArrowDown") dockHeight(now - step);
+  else return;
+  e.preventDefault();
+});
 $("background").onchange = background;
 $("backgroundColour").oninput = background;
 $("dismissTip").onclick = () => ($("firstUse").hidden = true);
@@ -2133,7 +2273,11 @@ document.addEventListener("keydown", (e) => {
     restore(e.shiftKey);
   } else if (key === "escape") {
     $("clear").click();
-  } else if (e.code === "Space") {
+  } else if (
+    e.code === "Space" &&
+    !e.target.closest("button,summary,a,[role=separator]")
+  ) {
+    // Space on a focused button or summary still presses it.
     e.preventDefault();
     space = true;
   } else if (key === "f") $("fit").click();
