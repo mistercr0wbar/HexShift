@@ -288,8 +288,8 @@
                     regions</label
                   >
                   <p id="polygonNote" class="help advanced-only" hidden>
-                    This colour is limited to its polygon. Brushes still add and
-                    remove pixels.
+                    A polygon limits the colour you picked. It does not choose
+                    that colour. Brushes still add and remove pixels.
                   </p>
                   <details id="refinement" class="advanced-only">
                     <summary>Refine the match</summary>
@@ -1077,8 +1077,10 @@
                   <details id="recipePanel" class="advanced-only">
                     <summary>Repeat edits</summary>
                     <p class="help">
-                      Brush strokes, connected regions and polygons are not
-                      included. An outline on its own can be repeated.
+                      A recipe repeats sampled colours. Brush strokes, connected
+                      regions and polygons are left out, and Hex Shift asks
+                      before repeating a step that had one. An outline on its
+                      own can be repeated.
                     </p>
                     <div class="palette-actions">
                       <button
@@ -1293,6 +1295,20 @@
       </footer>
     </div>
     <div id="dropOverlay" hidden>Drop an image to open it</div>
+    <dialog
+      id="recipeDialog"
+      aria-labelledby="recipeDialogTitle"
+      aria-describedby="recipeDialogText"
+    >
+      <form method="dialog">
+        <h2 id="recipeDialogTitle">Some spatial edits will not be repeated</h2>
+        <p id="recipeDialogText"></p>
+        <div class="dialog-actions">
+          <button class="button" value="cancel" autofocus>Cancel</button
+          ><button class="button primary" value="continue">Continue</button>
+        </div>
+      </form>
+    </dialog>
     <dialog id="replaceDialog">
       <form method="dialog">
         <h2 id="replaceTitle">Open another image?</h2>

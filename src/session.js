@@ -102,18 +102,41 @@ function cleanRows(rows, w, h) {
     return clean;
   });
 }
+const STEP_OMISSIONS = ["brush", "connected", "polygon"];
+function cleanStepOmissions(source) {
+  if (!Array.isArray(source) || source.length > STEP_OMISSIONS.length)
+    throw Error("A baked colour step is unreadable.");
+  const seen = new Set();
+  for (const item of source) {
+    if (
+      typeof item !== "string" ||
+      !STEP_OMISSIONS.includes(item) ||
+      seen.has(item)
+    )
+      throw Error("A baked colour step is unreadable.");
+    seen.add(item);
+  }
+  return STEP_OMISSIONS.filter((id) => seen.has(id));
+}
 function cleanSteps(steps, w, h) {
   if (!Array.isArray(steps) || steps.length > MAX_STEPS)
     throw Error("A session has too many baked colour steps.");
   return steps.map((step) => {
     if (!Array.isArray(step?.rows))
       throw Error("A baked colour step is unreadable.");
-    return {
+    const cleaned = {
       rows: step.rows.map((row) => ({
         params: cleanParams(row?.params),
         seeds: cleanSeeds(row?.seeds, w, h),
       })),
     };
+    // Named reasons survive. An empty list means this step left nothing
+    // spatial out. Absence, and a bare approximation flag, stay as they are.
+    // Positions and masks are not kept on a baked step.
+    if (Array.isArray(step.omissions))
+      cleaned.omissions = cleanStepOmissions(step.omissions);
+    else if (step.approximate === true) cleaned.approximate = true;
+    return cleaned;
   });
 }
 function cleanOutline(source) {

@@ -48,6 +48,7 @@ import {
 } from "./palettes.js";
 import {
   MAX_RECIPE_BYTES,
+  omissionSummary,
   parseRecipeFile,
   recipeStep,
   replay,
@@ -134,6 +135,14 @@ const waiters = new Set(),
   polygonAfter = $("polygonAfter");
 // Points of a polygon that is not closed yet. The closed one lives on the row.
 let polygonDraft = null;
+// The pointer following a draft, in image pixels, and whether it is close
+// enough to the first vertex to close. `polygonEpoch` rejects a pointer-up
+// that belongs to a draft already cleared.
+let polygonPointer = null;
+let polygonEpoch = 0;
+function closeSlop(pointerType) {
+  return pointerType === "touch" ? 12 : 8;
+}
 let statusTimer = 0;
 // `fade` clears the message after that many ms, if nothing has replaced it.
 function status(message, { fade = 0 } = {}) {
@@ -2608,48 +2617,104 @@ $("exportVariants").onclick = exportVariants;
 renderSavedSets();
 // Recipes: the maps applied so far, plus the current one if it changes
 // anything. Also returns that current preview (null when it changes nothing).
-async function currentSteps() {
-  const doc = activeDocument,
-    iid = imageId;
-  commit("Adjust colour");
+function recipeRevision() {
+  return { doc: activeDocument, imageId, editId };
+}
+function sameRevision(revision) {
+  return (
+    revision.doc === activeDocument &&
+    revision.imageId === imageId &&
+    revision.editId === editId
+  );
+}
+// The maps applied so far, plus the current one if it changes anything.
+// This does not commit history or change pixels.
+async function gatherSteps() {
+  const revision = recipeRevision();
   let preview = null;
   try {
     const r = await latest();
     if (r.changed) preview = r;
   } catch (e) {
-    if (doc !== activeDocument || iid !== imageId) throw e;
+    if (!sameRevision(revision)) throw e;
   }
-  if (doc !== activeDocument || iid !== imageId)
-    throw Error("The active image changed.");
+  if (!sameRevision(revision)) throw Error("The active image changed.");
   const steps = edit.steps.slice();
   if (preview) steps.push(recipeStep(edit.rows, pixels, w, overrides));
-  return { steps: steps.filter((s) => s.rows.length), preview };
+  return {
+    steps: steps.filter((step) => step.rows.length),
+    preview,
+    revision,
+    outline: edit.outline.on
+      ? { widthPct: edit.outline.widthPct, colour: edit.outline.colour }
+      : null,
+  };
 }
-const SPATIAL_NOTE =
-  "Brush strokes, connected regions and polygons are not included.";
-function noteSpatial() {
-  $("batchNote").textContent = SPATIAL_NOTE;
-  status(SPATIAL_NOTE);
+async function currentSteps() {
+  const doc = activeDocument,
+    iid = imageId;
+  commit("Adjust colour");
+  const gathered = await gatherSteps();
+  if (doc !== activeDocument || iid !== imageId)
+    throw Error("The active image changed.");
+  return gathered;
+}
+function confirmOmissions(summary) {
+  if (!summary || summary.kind === "none") return Promise.resolve(true);
+  const dialog = $("recipeDialog");
+  if (dialog.open) return Promise.resolve(false);
+  $("recipeDialogTitle").textContent =
+    summary.kind === "known"
+      ? "Some spatial edits will not be repeated"
+      : "This recipe does not promise a lossless replay";
+  $("recipeDialogText").textContent = summary.text;
+  dialog.showModal();
+  return new Promise((resolve) =>
+    dialog.addEventListener(
+      "close",
+      () => resolve(dialog.returnValue === "continue"),
+      { once: true },
+    ),
+  );
 }
 async function saveRecipe() {
   if (!pixels || batchAbort) return;
-  noteSpatial();
-  let steps;
+  let gathered;
   try {
-    ({ steps } = await currentSteps());
+    gathered = await gatherSteps();
   } catch (e) {
     status("Could not save the recipe: " + e.message);
     return;
   }
-  const { on, widthPct, colour } = edit.outline,
-    outline = on ? { widthPct, colour } : null;
-  if (!steps.length && !outline) {
+  const summary = omissionSummary(gathered.steps);
+  if (!gathered.steps.length && !gathered.outline) {
     status("Nothing to save yet. Change a colour or add an outline first.");
+    return;
+  }
+  if (!(await confirmOmissions(summary))) return;
+  if (!sameRevision(gathered.revision)) {
+    status("The image changed. Nothing was saved.");
+    return;
+  }
+  let again;
+  try {
+    again = await gatherSteps();
+  } catch (e) {
+    status("Could not save the recipe: " + e.message);
+    return;
+  }
+  const next = omissionSummary(again.steps);
+  if (
+    !sameRevision(gathered.revision) ||
+    next.kind !== summary.kind ||
+    next.text !== summary.text
+  ) {
+    status("The image changed. Nothing was saved.");
     return;
   }
   const filename = safeStem(name) + "-recipe.json";
   download(
-    new Blob([writeRecipe(steps, outline)], {
+    new Blob([writeRecipe(again.steps, again.outline)], {
       type: "application/json",
     }),
     filename,
@@ -2658,11 +2723,12 @@ async function saveRecipe() {
     "Prepared " +
       filename +
       " (" +
-      (steps.length
-        ? steps.length + (steps.length === 1 ? " step). " : " steps). ")
+      (again.steps.length
+        ? again.steps.length +
+          (again.steps.length === 1 ? " step). " : " steps). ")
         : "outline only). ") +
-      SPATIAL_NOTE +
-      " Choose where to save it.",
+      (summary.text ? summary.text + " " : "") +
+      "Choose where to save it.",
   );
 }
 // Applies a recipe on top of the current preview, as one undoable change.
@@ -2673,8 +2739,6 @@ async function applyRecipe(file) {
     status("Could not apply the recipe: " + reason);
     return openStop(reason);
   }
-  dropDraft();
-  noteSpatial();
   const doc = activeDocument,
     request = imageId;
   try {
@@ -2683,7 +2747,16 @@ async function applyRecipe(file) {
     const text = await file.text();
     if (doc !== activeDocument || request !== imageId || batchAbort)
       return openStop();
-    const { steps: recipe, outline: recipeOutline } = parseRecipeFile(text),
+    const parsed = parseRecipeFile(text),
+      summary = omissionSummary(parsed.steps),
+      revision = recipeRevision();
+    if (!(await confirmOmissions(summary))) return openStop();
+    if (!sameRevision(revision) || batchAbort) {
+      status("The image changed. The recipe was not applied.");
+      return openStop();
+    }
+    dropDraft();
+    const { steps: recipe, outline: recipeOutline } = parsed,
       { steps, preview } = await currentSteps(),
       iid = imageId,
       base = preview ? preview.pixels : pixels;
@@ -2749,7 +2822,7 @@ function beginBatch() {
   buttons();
 }
 function batchProgress(text) {
-  $("batchNote").textContent = SPATIAL_NOTE + " " + text;
+  $("batchNote").textContent = text;
   status(text);
 }
 function cancelBatch() {
@@ -2780,11 +2853,30 @@ function documentSteps(doc, preview) {
 }
 async function applyToDocuments(all = false) {
   if (!pixels || batchAbort) return;
-  noteSpatial();
   const source = activeDocument,
     targets = documents.filter((d) => all || selectedDocuments.has(d));
   if (!targets.length) {
     status("Select at least one tab with Ctrl-click or Shift-click.");
+    return;
+  }
+  let gathered;
+  try {
+    gathered = await gatherSteps();
+  } catch (e) {
+    status("Could not apply to tabs: " + e.message);
+    return;
+  }
+  const replaying = targets.some((doc) => doc !== source);
+  const summary = replaying
+    ? omissionSummary(gathered.steps)
+    : { kind: "none", reasons: [], text: "" };
+  if (!gathered.steps.length && !edit.outline.on) {
+    status("Nothing to apply yet. Change a colour or add an outline first.");
+    return;
+  }
+  if (!(await confirmOmissions(summary))) return;
+  if (!sameRevision(gathered.revision)) {
+    status("The image changed. Nothing was applied.");
     return;
   }
   const run = ++batchRun,
@@ -2793,6 +2885,13 @@ async function applyToDocuments(all = false) {
     beginBatch();
     const { steps } = await currentSteps();
     if (cancelled()) return;
+    if (
+      omissionSummary(replaying ? steps : []).text !== summary.text ||
+      (replaying && omissionSummary(steps).kind !== summary.kind)
+    ) {
+      status("The image changed. Nothing was applied.");
+      return;
+    }
     if (!steps.length && !edit.outline.on) {
       status("Nothing to apply yet. Change a colour or add an outline first.");
       return;
@@ -2923,7 +3022,25 @@ async function exportDocuments() {
 }
 async function runBatch(list) {
   if (batchAbort) return;
-  noteSpatial();
+  let gathered;
+  try {
+    gathered = await gatherSteps();
+  } catch (e) {
+    status("Batch failed: " + e.message);
+    return;
+  }
+  const summary = omissionSummary(gathered.steps);
+  if (!gathered.steps.length && !edit.outline.on) {
+    status(
+      "Nothing to apply yet. Change a colour or add an outline first, then run a batch.",
+    );
+    return;
+  }
+  if (!(await confirmOmissions(summary))) return;
+  if (!sameRevision(gathered.revision)) {
+    status("The image changed. Nothing was applied.");
+    return;
+  }
   const run = ++batchRun,
     cancelled = () => run !== batchRun;
   try {
@@ -2932,6 +3049,11 @@ async function runBatch(list) {
     beginBatch();
     const { steps } = await currentSteps();
     if (cancelled()) return;
+    const next = omissionSummary(steps);
+    if (next.kind !== summary.kind || next.text !== summary.text) {
+      status("The image changed. Nothing was applied.");
+      return;
+    }
     if (!steps.length && !edit.outline.on) {
       status(
         "Nothing to apply yet. Change a colour or add an outline first, then run a batch.",
@@ -2986,8 +3108,8 @@ async function runBatch(list) {
     if (cancelled()) return;
     download(blob, filename);
     $("batchNote").textContent =
-      SPATIAL_NOTE +
-      " Done: " +
+      (summary.text ? summary.text + " " : "") +
+      "Done: " +
       done +
       " of " +
       list.length +
@@ -3271,6 +3393,8 @@ function movePinch() {
   layout();
 }
 function dropDraft() {
+  polygonEpoch++;
+  polygonPointer = null;
   if (!polygonDraft) return;
   polygonDraft = null;
   paintPolygon();
@@ -3292,10 +3416,14 @@ function paintPolygon() {
     ctx.clearRect(0, 0, w, h);
     if (committed?.length >= 3)
       strokePoly(ctx, committed, true, "rgba(110, 240, 255, 0.95)");
-    if (draft?.length) strokePoly(ctx, draft, false, "rgba(232, 128, 46, 0.95)");
+    if (draft?.length)
+      strokePoly(ctx, draft, false, "rgba(232, 128, 46, 0.95)", {
+        close: polygonPointer?.close,
+        pointer: polygonPointer,
+      });
   }
 }
-function strokePoly(ctx, points, closed, colour) {
+function strokePoly(ctx, points, closed, colour, extra = {}) {
   const px = (n) => n / Math.max(zoom || 1, 0.05);
   ctx.save();
   ctx.strokeStyle = colour;
@@ -3317,16 +3445,29 @@ function strokePoly(ctx, points, closed, colour) {
     ctx.globalAlpha = 1;
   }
   ctx.stroke();
+  if (!closed && extra.pointer && points.length) {
+    const last = points.at(-1);
+    ctx.beginPath();
+    ctx.moveTo(last.x + 0.5, last.y + 0.5);
+    ctx.lineTo(extra.pointer.x, extra.pointer.y);
+    ctx.stroke();
+  }
   points.forEach((p, i) => {
+    const closing = i === 0 && !closed && extra.close;
     ctx.beginPath();
     ctx.arc(
       p.x + 0.5,
       p.y + 0.5,
-      px(i === 0 && !closed ? 4.5 : 2.75),
+      px(closing ? 7 : i === 0 && !closed ? 4.5 : 2.75),
       0,
       Math.PI * 2,
     );
     ctx.fill();
+    if (closing) {
+      ctx.lineWidth = px(1.5);
+      ctx.strokeStyle = "#fff";
+      ctx.stroke();
+    }
   });
   ctx.restore();
 }
@@ -3360,7 +3501,7 @@ function completePolygon() {
     return;
   }
   const points = polygonDraft.map((p) => ({ x: p.x, y: p.y }));
-  polygonDraft = null;
+  dropDraft();
   action("Polygon selection", () => {
     edit.rows[edit.active].polygon = points;
   });
@@ -3369,21 +3510,62 @@ function completePolygon() {
 function popPolygonPoint() {
   if (!polygonDraft?.length) return;
   polygonDraft.pop();
-  if (!polygonDraft.length) polygonDraft = null;
+  if (!polygonDraft.length) {
+    // The click that is still down belongs to the draft that just disappeared.
+    dropDraft();
+    status("Removed the last polygon point.");
+    return;
+  }
+  if (polygonPointer && polygonDraft.length < 3) polygonPointer.close = false;
   paintPolygon();
   status(
-    polygonDraft
-      ? "Removed the last polygon point. " + polygonDraft.length + " left."
-      : "Removed the last polygon point.",
+    "Removed the last polygon point. " + polygonDraft.length + " left.",
   );
 }
 function cancelPolygon() {
   if (!polygonDraft?.length) return;
-  polygonDraft = null;
-  paintPolygon();
+  dropDraft();
   status("Polygon cancelled.");
 }
+function vertexClient(canvas, p) {
+  const r = canvas.getBoundingClientRect();
+  return {
+    x: r.left + ((p.x + 0.5) / canvas.width) * r.width,
+    y: r.top + ((p.y + 0.5) / canvas.height) * r.height,
+  };
+}
+// The edge from the last vertex to the pointer, and a close target when the
+// pointer is within 8 CSS pixels (12 for touch) of the first vertex.
+function followPolygon(e, canvas) {
+  const wasClose = polygonPointer?.close;
+  if (tool !== "polygon" || !polygonDraft?.length || !w || !canvas.width) {
+    if (polygonPointer) {
+      polygonPointer = null;
+      paintPolygon();
+    }
+    return;
+  }
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const close =
+    polygonDraft.length >= 3 &&
+    Math.hypot(
+      e.clientX - vertexClient(canvas, polygonDraft[0]).x,
+      e.clientY - vertexClient(canvas, polygonDraft[0]).y,
+    ) <= closeSlop(e.pointerType || "mouse");
+  polygonPointer = {
+    x: ((e.clientX - rect.left) / rect.width) * w,
+    y: ((e.clientY - rect.top) / rect.height) * h,
+    close,
+  };
+  paintPolygon();
+  if (close && !wasClose)
+    status(
+      "The first point closes the polygon. It limits the colour you picked.",
+    );
+}
 function setTool(value) {
+  if (value !== tool) dropDraft();
   tool = value;
   for (const [id, active] of [
     ["pan", value === "pan"],
@@ -3424,7 +3606,9 @@ for (const c of [before, after]) {
     }
     const p = point(e, c);
     const pan = tool === "pan" || space;
-    if (!p && !pan) return;
+    // A polygon can close on a press that starts just outside the bitmap,
+    // within the displayed distance of the first vertex.
+    if (!p && !pan && tool !== "polygon") return;
     try {
       c.parentElement.setPointerCapture(e.pointerId);
     } catch {}
@@ -3440,6 +3624,8 @@ for (const c of [before, after]) {
       pointerType: e.pointerType || "mouse",
       moved: false,
       pickDisqualified: false,
+      polygonEpoch,
+      toolAtDown: tool,
     };
     if (!pan && (tool === "add" || tool === "subtract")) {
       begin();
@@ -3474,6 +3660,9 @@ for (const c of [before, after]) {
       cursor.style.width = cursor.style.height =
         Number($("brushSize").value) * zoom + "px";
     }
+    if (drag?.pointer === e.pointerId && drag.pan) {
+      /* panning keeps the draft still */
+    } else followPolygon(e, c);
     if (!drag || drag.pointer !== e.pointerId) return;
     const dist = Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY);
     // Crossing the pick threshold turns that gesture into a pan. It stays a
@@ -3507,7 +3696,21 @@ for (const c of [before, after]) {
     }
     // A pan, a disqualified pick, or a polygon drag does not sample a colour.
     if (d.pan || d.pickDisqualified || d.moved) return;
-    if (tool === "polygon") {
+    // A polygon gesture stays a polygon gesture. Closing uses the displayed
+    // first vertex, including a release just outside the image. A tool change,
+    // Escape, or a cleared draft bumps the epoch and this release does nothing.
+    if (tool === "polygon" || d.toolAtDown === "polygon") {
+      if (tool !== "polygon" || d.polygonEpoch !== polygonEpoch) return;
+      if (polygonDraft?.length >= 3) {
+        const at = vertexClient(c, polygonDraft[0]);
+        if (
+          Math.hypot(e.clientX - at.x, e.clientY - at.y) <=
+          closeSlop(d.pointerType)
+        ) {
+          completePolygon();
+          return;
+        }
+      }
       const p = point(e, c);
       if (p) addPolygonPoint(p);
       return;
@@ -3547,6 +3750,9 @@ for (const c of [before, after]) {
   c.parentElement.addEventListener("pointerleave", () => {
     $("loupe").hidden = true;
     $("brushCursor").hidden = true;
+    if (!polygonPointer) return;
+    polygonPointer = null;
+    paintPolygon();
   });
 }
 $("open").onclick = () => $("fileInput").click();
@@ -3861,7 +4067,7 @@ $("brushSubtract").onclick = () => setTool("subtract");
 $("polygon").onclick = () => {
   setTool("polygon");
   status(
-    "Polygon: click points on the image. Enter or the first point closes it. Escape cancels.",
+    "Polygon: click points on the image. It limits the colour you picked, and it does not choose that colour. Enter or the first point closes it. Escape cancels the draft.",
   );
 };
 $("brushSize").oninput = (e) =>

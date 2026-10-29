@@ -44,13 +44,83 @@ const keep = (p) => {
   if (p.ramp) out.ramp = p.ramp.slice();
   return out;
 };
+// Named reasons a recipe cannot repeat a spatial limit. Order is stable.
+// Coordinates and masks are never a reason.
+export const OMISSION_REASONS = ["brush", "connected", "polygon"];
+const OMISSION_TEXT = {
+  brush: "Brush strokes are left out.",
+  connected: "Connected regions are left out.",
+  polygon: "Polygons are left out.",
+};
+const GENERIC_OMISSION =
+  "This recipe is marked as an approximation, and it does not say which spatial edits were left out. Continuing does not promise a lossless replay.";
+const UNKNOWN_OMISSION =
+  "This recipe does not say whether brush strokes, connected regions, or polygons were left out. Continuing does not promise a lossless replay.";
+export function cleanOmissions(source) {
+  if (!Array.isArray(source) || source.length > OMISSION_REASONS.length)
+    throw Error("A recipe's omissions are unreadable.");
+  const seen = new Set();
+  for (const item of source) {
+    if (
+      typeof item !== "string" ||
+      !OMISSION_REASONS.includes(item) ||
+      seen.has(item)
+    )
+      throw Error("A recipe's omissions are unreadable.");
+    seen.add(item);
+  }
+  return OMISSION_REASONS.filter((id) => seen.has(id));
+}
+// Reasons for colours that are actually in the recipe. A polygon or a
+// connected flag on a row with no samples is not a warning, and a brush
+// on an image with nothing sampled is not one either.
+export function omissionReasons(rows, labels) {
+  const sampled = (rows || []).filter((row) => row?.seeds?.length);
+  const reasons = [];
+  if (sampled.length && labels?.some((value) => value !== 0))
+    reasons.push("brush");
+  if (sampled.some((row) => row.params?.connected)) reasons.push("connected");
+  if (sampled.some((row) => row.polygon?.length)) reasons.push("polygon");
+  return reasons;
+}
+// One description of the steps about to be saved or replayed.
+// `known` lists the reasons. An empty list on every step is `none`.
+// `generic` is an old approximation flag with no reasons. `unknown` is a
+// legacy step that says nothing either way.
+export function omissionSummary(steps) {
+  const list = Array.isArray(steps) ? steps : [];
+  if (!list.length) return { kind: "none", reasons: [], text: "" };
+  const reasons = new Set();
+  let named = false;
+  let generic = false;
+  let unknown = false;
+  for (const step of list) {
+    if (Array.isArray(step?.omissions)) {
+      named = true;
+      for (const id of step.omissions) reasons.add(id);
+    } else if (step?.approximate === true || step?.provenance === "generic")
+      generic = true;
+    else unknown = true;
+  }
+  const ordered = OMISSION_REASONS.filter((id) => reasons.has(id));
+  if (ordered.length) {
+    let text = ordered.map((id) => OMISSION_TEXT[id]).join(" ");
+    if (generic || unknown)
+      text += " Some other steps do not say what else was left out.";
+    return { kind: "known", reasons: ordered, text };
+  }
+  if (generic && !unknown)
+    return { kind: "generic", reasons: [], text: GENERIC_OMISSION };
+  if (!named || unknown)
+    return { kind: "unknown", reasons: [], text: UNKNOWN_OMISSION };
+  return { kind: "none", reasons: [], text: "" };
+}
 // The colour map as a recipe step: rows that have samples, each sample
-// replaced by its colour in `pixels`. `approximate` says brush strokes,
-// connected regions or a polygon were in play. The polygon is not copied.
+// replaced by its colour in `pixels`. `omissions` names spatial limits that
+// were left out. The polygon, the mask and the sample positions are not copied.
 export function recipeStep(rows, pixels, width, labels) {
-  const step = { rows: [], approximate: false };
+  const step = { rows: [], omissions: omissionReasons(rows, labels) };
   for (const row of rows) {
-    if (row.polygon?.length) step.approximate = true;
     if (!row.seeds.length) continue;
     step.rows.push({
       params: keep(row.params),
@@ -67,9 +137,7 @@ export function recipeStep(rows, pixels, width, labels) {
             },
       ),
     });
-    if (row.params.connected) step.approximate = true;
   }
-  if (labels?.some((v) => v !== 0)) step.approximate = true;
   return step;
 }
 // A recipe can carry the outline too: { widthPct, colour }. Version 1 is colour
@@ -93,7 +161,7 @@ function cleanOutline(source) {
 }
 export function writeRecipe(steps, outline = null) {
   const clean = cleanOutline(outline),
-    rows = steps.map((s) => ({ rows: s.rows }));
+    rows = steps.map((step) => step.rows);
   if (!rows.length && !clean)
     throw Error("A recipe needs a colour change or an outline.");
   // Steps with an outline stay version 2, which older copies can read.
@@ -101,7 +169,22 @@ export function writeRecipe(steps, outline = null) {
   const data = {
     format: "hexshift-recipe",
     version: !rows.length ? 3 : clean ? 2 : 1,
-    steps: rows,
+    steps: steps.map((step) => {
+      // Colours only. A polygon, a mask, or sample positions on a row are not
+      // written, even if a caller left them on the step.
+      const out = {
+        rows: step.rows.map((row) => ({
+          params: row.params,
+          seeds: row.seeds.map((seed) => ({ hex: seed.hex })),
+        })),
+      };
+      // An empty list is "these steps left nothing spatial out". Absence is
+      // legacy and must not be rewritten into that claim.
+      if (Array.isArray(step.omissions))
+        out.omissions = cleanOmissions(step.omissions);
+      else if (step.approximate === true) out.approximate = true;
+      return out;
+    }),
   };
   if (clean) data.outline = clean;
   return JSON.stringify(data, null, 2) + "\n";
@@ -166,7 +249,16 @@ export function parseRecipeFile(text) {
     });
     if (samples > MAX_SEEDS)
       throw Error("A recipe step can have at most 64 samples.");
-    return { rows, approximate: false };
+    // Rows keep colours only. A polygon or a mask on the file is ignored.
+    const parsed = { rows };
+    if (Array.isArray(step.omissions)) {
+      parsed.omissions = cleanOmissions(step.omissions);
+      parsed.provenance = "known";
+    } else if (step.approximate === true) {
+      parsed.approximate = true;
+      parsed.provenance = "generic";
+    } else parsed.provenance = "unknown";
+    return parsed;
   });
   return { steps, outline: data.version === 1 ? null : outline };
 }
