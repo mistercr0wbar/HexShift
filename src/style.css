@@ -2264,6 +2264,13 @@ dialog details {
   font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
   font-size: 12px;
 }
+#downscaleDialog label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
 .dialog-actions {
   display: flex;
   justify-content: flex-end;

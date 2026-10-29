@@ -18,7 +18,12 @@ import {
 import { History } from "./history.js";
 import { MAX_DOCUMENTS, trimHistories, selectDocuments } from "./documents.js";
 import { createTabs } from "./tabs.js";
-import { decodeBlob } from "./import.js";
+import {
+  decodeBlob,
+  inspectBlob,
+  RESIZE_UNAVAILABLE,
+  resizeDecodingAvailable,
+} from "./import.js";
 import { canEncodeWebP, formatBytes, outputName, safeStem } from "./export.js";
 import { deliver } from "./deliver.js";
 import {
@@ -1428,6 +1433,50 @@ function acceptImport(epoch, failures) {
   if (epoch !== importEpoch) return;
   renderImportNotice(failures);
 }
+function askDownscale(info, signal) {
+  const dialog = $("downscaleDialog"),
+    quality = $("downscaleQuality");
+  $("downscaleText").textContent =
+    info.orientedWidth +
+    " × " +
+    info.orientedHeight +
+    " is larger than Hex Shift can edit. It can open at " +
+    info.proposal.width +
+    " × " +
+    info.proposal.height +
+    ". Smooth keeps gradients. Nearest keeps hard pixel edges. Export scaling is unchanged.";
+  quality.value = "smooth";
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener("abort", onAbort);
+      resolve(value);
+    };
+    const onClose = () =>
+      finish(
+        dialog.returnValue === "continue" && quality.value === "nearest"
+          ? "nearest"
+          : dialog.returnValue === "continue"
+            ? "smooth"
+            : null,
+      );
+    const onAbort = () => {
+      if (dialog.open) dialog.close("cancel");
+      else finish(null);
+    };
+    if (dialog.open) dialog.close("cancel");
+    dialog.addEventListener("close", onClose, { once: true });
+    signal?.addEventListener("abort", onAbort);
+    if (signal?.aborted) {
+      dialog.removeEventListener("close", onClose);
+      finish(null);
+      return;
+    }
+    dialog.showModal();
+  });
+}
 // Resolves `{ ok, reason }` once the image is open or refused. `reason` is
 // empty when the refusal must not be listed (a newer import replaced this
 // one, the person cancelled, or the operation was aborted). `redraw` reopens
@@ -1455,8 +1504,26 @@ async function openBlob(blob, fileName, isSample = false, redraw = false) {
   importAbort = controller;
   status(redraw ? "Redrawing SVG…" : "Checking image…");
   try {
-    const edge = Number($("svgSize").value),
-      decoded = await decodeBlob(blob, controller.signal, { svgEdge: edge });
+    const edge = Number($("svgSize").value);
+    let resize = null;
+    if (!redraw) {
+      const info = await inspectBlob(blob, edge);
+      if (ticket !== importId) return openStop();
+      if (info.proposal) {
+        if (!(await resizeDecodingAvailable())) throw Error(RESIZE_UNAVAILABLE);
+        if (ticket !== importId) return openStop();
+        resize = await askDownscale(info, controller.signal);
+        if (ticket !== importId) return openStop();
+        if (!resize) {
+          status("Left " + String(fileName || "image") + " unopened.");
+          return openStop();
+        }
+      }
+    }
+    const decoded = await decodeBlob(blob, controller.signal, {
+      svgEdge: edge,
+      resize,
+    });
     if (ticket !== importId) return openStop();
     if (batchAbort || $("replaceDialog").open) return openStop();
     replaceSample =
@@ -1556,7 +1623,19 @@ async function openBlob(blob, fileName, isSample = false, redraw = false) {
         ? "Sample ready. Pick a colour to get started."
         : redraw
           ? "Redrew " + name + " at " + edge + " px."
-          : "Opened " + name + (decoded.still ? " as a still image." : "."),
+          : decoded.downscaled
+            ? "Opened " +
+              name +
+              " at " +
+              w +
+              " × " +
+              h +
+              ", down from " +
+              decoded.sourceWidth +
+              " × " +
+              decoded.sourceHeight +
+              "."
+            : "Opened " + name + (decoded.still ? " as a still image." : "."),
     );
     return openOk();
   } catch (e) {
