@@ -1114,6 +1114,26 @@ summary::marker {
 .field-grid > label {
   margin: 0;
 }
+.frame-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+.frame-line label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 400;
+}
+.frame-line input[type="number"] {
+  width: 4.6em;
+  min-height: var(--ctl-sm);
+}
+.frame-line select {
+  width: auto;
+  min-height: var(--ctl-sm);
+}
 .field-row {
   display: contents;
 }

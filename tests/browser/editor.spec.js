@@ -277,6 +277,81 @@ test("platform sizes export at their dimensions and within their limits", async 
   const custom = await exportFile(page);
   expect((await sharp(custom.bytes).metadata()).width).toBe(40);
 });
+test("trim, padding and nearest neighbour frame the export the readout describes", async ({
+  page,
+}) => {
+  const margin = await sharp({
+      create: {
+        width: 6,
+        height: 5,
+        channels: 4,
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      },
+    })
+      .composite([
+        {
+          input: await sharp({
+            create: {
+              width: 2,
+              height: 2,
+              channels: 4,
+              background: { r: 200, g: 10, b: 10, alpha: 1 },
+            },
+          })
+            .png()
+            .toBuffer(),
+          left: 2,
+          top: 1,
+        },
+      ])
+      .png()
+      .toBuffer(),
+    art = Buffer.from([
+      255, 0, 0, 255, 0, 0, 255, 255, 0, 180, 0, 255, 255, 220, 0, 255,
+    ]);
+  await page.locator("#fileInput").setInputFiles({
+    name: "margin.png",
+    mimeType: "image/png",
+    buffer: margin,
+  });
+  await settled(page);
+  await openPanel(page, "export");
+  await page.locator("#size").selectOption("original");
+  await expect(page.locator("#trimMargins")).not.toBeChecked();
+  await expect(page.locator("#framePadding")).toHaveValue("0");
+  await expect(page.locator("#frameScale")).toHaveValue("smooth");
+  await expect(page.locator("#sizeReadout")).toContainText("6 × 5");
+  await page.locator("#trimMargins").check();
+  await expect(page.locator("#sizeReadout")).toContainText("2 × 2");
+  await page.locator("#framePadding").fill("1");
+  await expect(page.locator("#sizeReadout")).toContainText("4 × 4");
+  await page.locator("#trimMargins").uncheck();
+  await page.locator("#framePadding").fill("0");
+  await page.locator("#fileInput").setInputFiles({
+    name: "pixels.png",
+    mimeType: "image/png",
+    buffer: await sharp(art, { raw: { width: 2, height: 2, channels: 4 } })
+      .png()
+      .toBuffer(),
+  });
+  await settled(page);
+  await page.locator("#size").selectOption("custom");
+  await page.locator("#customSize").fill("16");
+  await page.locator("#frameScale").selectOption("nearest");
+  await expect(page.locator("#sizeReadout")).toContainText("16 × 16");
+  const file = await exportFile(page),
+    { data, info } = await sharp(file.bytes).ensureAlpha().raw().toBuffer({
+      resolveWithObject: true,
+    });
+  expect([info.width, info.height]).toEqual([16, 16]);
+  const at = (x, y) =>
+    [...data.subarray((y * 16 + x) * 4, (y * 16 + x) * 4 + 4)];
+  expect(at(0, 0)).toEqual([255, 0, 0, 255]);
+  expect(at(7, 0)).toEqual([255, 0, 0, 255]);
+  expect(at(8, 0)).toEqual([0, 0, 255, 255]);
+  expect(at(0, 8)).toEqual([0, 180, 0, 255]);
+  expect(at(15, 15)).toEqual([255, 220, 0, 255]);
+});
 test("WhatsApp packs a small WebP sticker and tray icon, or says why not", async ({
   page,
   browserName,

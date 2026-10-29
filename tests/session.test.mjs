@@ -103,6 +103,43 @@ test("a session round-trips two tabs, brushes, an outline, variants and the open
   assert.equal(opened.documents[1].edit.steps.length, 0);
 });
 
+test("a session without framing fields means framing is off, and a later save can record it", () => {
+  const text = writeSession({
+      active: 0,
+      documents: [doc("one.png", [1, 2, 3, 255])],
+    }),
+    data = JSON.parse(text);
+  delete data.documents[0].export.trim;
+  delete data.documents[0].export.padding;
+  delete data.documents[0].export.scale;
+  const opened = parseSession(JSON.stringify(data));
+  assert.deepEqual(
+    {
+      trim: opened.documents[0].export.trim,
+      padding: opened.documents[0].export.padding,
+      scale: opened.documents[0].export.scale,
+    },
+    { trim: false, padding: 0, scale: "smooth" },
+  );
+  const framed = doc("one.png", [1, 2, 3, 255]);
+  framed.export.trim = true;
+  framed.export.padding = 12;
+  framed.export.scale = "nearest";
+  const again = parseSession(
+    writeSession({ active: 0, documents: [framed] }),
+  );
+  assert.equal(again.documents[0].export.trim, true);
+  assert.equal(again.documents[0].export.padding, 12);
+  assert.equal(again.documents[0].export.scale, "nearest");
+  data.documents[0].export.scale = "pixel";
+  assert.throws(() => parseSession(JSON.stringify(data)), /export choices/);
+  data.documents[0].export.scale = "smooth";
+  data.documents[0].export.padding = 900;
+  assert.throws(() => parseSession(JSON.stringify(data)), /export choices/);
+  data.documents[0].export.padding = 0;
+  data.documents[0].export.trim = "yes";
+  assert.throws(() => parseSession(JSON.stringify(data)), /export choices/);
+});
 test("a recipe is not a session, and a session is not a recipe", () => {
   const session = writeSession({
     active: 0,

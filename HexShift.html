@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-A3MWuHR0WtDj5449adX+9ZLophJxh/JzCpSqOrxJKBk='; style-src 'sha256-hM53KM69A+bkJMUdHGRJ/9pA8zC2+MNDD9ivSiHjxoI='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-bvgepKy/gbLzc4WvZNYqGMIeo3wc3ljkru5uxLVfebQ='; style-src 'sha256-T0iHrDPCLIQv7g35qAVZnPCX+6XU0an8f2YtzNPOXHc='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta
       name="theme-color"
@@ -1136,6 +1136,26 @@ summary::marker {
 }
 .field-grid > label {
   margin: 0;
+}
+.frame-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+.frame-line label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 400;
+}
+.frame-line input[type="number"] {
+  width: 4.6em;
+  min-height: var(--ctl-sm);
+}
+.frame-line select {
+  width: auto;
+  min-height: var(--ctl-sm);
 }
 .field-row {
   display: contents;
@@ -3501,6 +3521,33 @@ dialog details {
                         ZIP · set by the size
                       </option>
                     </select>
+                  </div>
+                  <div class="frame-line">
+                    <label class="check" for="trimMargins"
+                      ><input
+                        type="checkbox"
+                        id="trimMargins"
+                        title="Cut the empty edge off the finished picture, including the outline"
+                      />
+                      Trim transparent margins</label
+                    >
+                    <label for="framePadding"
+                      >Padding<input
+                        id="framePadding"
+                        type="number"
+                        min="0"
+                        max="512"
+                        step="1"
+                        value="0"
+                        inputmode="numeric"
+                        title="Transparent pixels around the finished picture, including the outline"
+                    /></label>
+                    <label for="frameScale"
+                      >Scaling<select id="frameScale">
+                        <option value="smooth">Smooth</option>
+                        <option value="nearest">Nearest neighbour</option>
+                      </select></label
+                    >
                   </div>
                   <div id="sizeReadout" class="readout"></div>
                   <div class="output-preview">
@@ -8154,8 +8201,20 @@ dialog details {
     }
     return list;
   }
-  function resize(pixels2, w2, h2, ow, oh) {
+  function resizeNearest(pixels2, w2, h2, ow, oh) {
+    const out = new Uint8ClampedArray(ow * oh * 4);
+    for (let y = 0; y < oh; y++) {
+      const sy = Math.min(h2 - 1, Math.floor(y * h2 / oh));
+      for (let x = 0; x < ow; x++) {
+        const sx = Math.min(w2 - 1, Math.floor(x * w2 / ow)), from = (sy * w2 + sx) * 4;
+        out.set(pixels2.subarray(from, from + 4), (y * ow + x) * 4);
+      }
+    }
+    return out;
+  }
+  function resize(pixels2, w2, h2, ow, oh, scale = "smooth") {
     if (ow === w2 && oh === h2) return pixels2;
+    if (scale === "nearest") return resizeNearest(pixels2, w2, h2, ow, oh);
     const pre = new Float32Array(w2 * h2 * 4);
     for (let i = 0; i < w2 * h2; i++) {
       const a = pixels2[i * 4 + 3] / 255;
@@ -8196,8 +8255,46 @@ dialog details {
     }
     return out;
   }
-  function fit(pixels2, w2, h2, box, pad) {
-    const { width, height } = fitted(w2, h2, box, false), scaled = resize(pixels2, w2, h2, width, height);
+  var FRAME_PAD_MAX = 512;
+  function trimTransparent(pixels2, w2, h2) {
+    let minX = w2, minY = h2, maxX = -1, maxY = -1;
+    for (let y = 0; y < h2; y++)
+      for (let x = 0; x < w2; x++) {
+        if (!pixels2[(y * w2 + x) * 4 + 3]) continue;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    if (maxX < 0 || minX === 0 && minY === 0 && maxX === w2 - 1 && maxY === h2 - 1)
+      return { pixels: pixels2, width: w2, height: h2 };
+    const width = maxX - minX + 1, height = maxY - minY + 1, out = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < height; y++)
+      out.set(
+        pixels2.subarray(
+          ((y + minY) * w2 + minX) * 4,
+          ((y + minY) * w2 + maxX + 1) * 4
+        ),
+        y * width * 4
+      );
+    return { pixels: out, width, height };
+  }
+  function padTransparent(pixels2, w2, h2, pad) {
+    const width = w2 + pad * 2, height = h2 + pad * 2;
+    if (width > 8192 || height > 8192 || width * height > MAX_PIXELS)
+      throw Error(
+        "The padding would make the image larger than 4,194,304 pixels or 8,192 pixels on a side. Use less padding or a smaller image."
+      );
+    const out = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < h2; y++)
+      out.set(
+        pixels2.subarray(y * w2 * 4, (y + 1) * w2 * 4),
+        ((y + pad) * width + pad) * 4
+      );
+    return { pixels: out, width, height };
+  }
+  function fit(pixels2, w2, h2, box, pad, scale = "smooth") {
+    const { width, height } = fitted(w2, h2, box, false), scaled = resize(pixels2, w2, h2, width, height, scale);
     if (!pad || width === box && height === box)
       return { pixels: scaled, width, height };
     const out = new Uint8ClampedArray(box * box * 4), left = box - width >> 1, top = box - height >> 1;
@@ -8219,14 +8316,18 @@ dialog details {
         { widthPct: settings.outline.widthPct, rgb, silhouette },
         yieldFn
       );
+    if (settings.trim) out = trimTransparent(out.pixels, out.width, out.height);
+    const padding = Number(settings.padding);
+    if (Number.isInteger(padding) && padding > 0)
+      out = padTransparent(out.pixels, out.width, out.height, padding);
     return out;
   }
 
   // src/deliver.js
   async function deliver(pixels2, w2, h2, settings, yieldFn, { first = false, format } = {}) {
-    const done = await finish(pixels2, w2, h2, settings, yieldFn), outputs = outputsFor(settings.size, done.width, done.height, settings), files = [];
+    const done = await finish(pixels2, w2, h2, settings, yieldFn), scale = settings.scale === "nearest" ? "nearest" : "smooth", outputs = outputsFor(settings.size, done.width, done.height, settings), files = [];
     for (const o of first ? outputs.slice(0, 1) : outputs) {
-      const image = o.box ? fit(done.pixels, done.width, done.height, o.box, o.pad) : done;
+      const image = o.box ? fit(done.pixels, done.width, done.height, o.box, o.pad, scale) : done;
       await yieldFn?.();
       files.push({
         ...o,
@@ -8696,7 +8797,29 @@ dialog details {
       throw Error("A session's export choices are unreadable.");
     if (!/^#[\dA-F]{6}$/.test(ground))
       throw Error("A session's export choices are unreadable.");
-    return { size: exp.size, format: exp.format, custom, ground };
+    if ("trim" in exp && exp.trim != null && typeof exp.trim !== "boolean")
+      throw Error("A session's export choices are unreadable.");
+    let padding = 0;
+    if ("padding" in exp && exp.padding != null) {
+      padding = Number(exp.padding);
+      if (!Number.isInteger(padding) || padding < 0 || padding > FRAME_PAD_MAX)
+        throw Error("A session's export choices are unreadable.");
+    }
+    let scale = "smooth";
+    if ("scale" in exp && exp.scale != null) {
+      if (exp.scale !== "smooth" && exp.scale !== "nearest")
+        throw Error("A session's export choices are unreadable.");
+      scale = exp.scale;
+    }
+    return {
+      size: exp.size,
+      format: exp.format,
+      custom,
+      ground,
+      trim: exp.trim === true,
+      padding,
+      scale
+    };
   }
   function cleanSvg(source) {
     if (source == null) return null;
@@ -12102,7 +12225,7 @@ dialog details {
   // src/app.js
   var $ = (id) => document.getElementById(id);
   var pause = makePause();
-  var VERSION = "3.8.0";
+  var VERSION = "3.9.0";
   var w = 0;
   var h = 0;
   var name = "";
@@ -13510,11 +13633,20 @@ dialog details {
     scheduleOutline();
     placeOutline();
   }
+  function frameChoices() {
+    const padding = Number($("framePadding").value);
+    return {
+      trim: $("trimMargins").checked,
+      padding: Number.isInteger(padding) && padding >= 0 && padding <= FRAME_PAD_MAX ? padding : 0,
+      scale: $("frameScale").value === "nearest" ? "nearest" : "smooth"
+    };
+  }
   function finishSettings() {
     const settings = {
       size: $("size").value,
       format: $("format").value,
-      custom: Number($("customSize").value)
+      custom: Number($("customSize").value),
+      ...frameChoices()
     };
     if (edit.outline.on)
       settings.outline = {
@@ -13558,28 +13690,31 @@ dialog details {
       return;
     }
     if (ticket !== previewTicket) return;
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = window.devicePixelRatio || 1, mode = finishSettings().scale;
     PREVIEW_SIZES.forEach(
-      (size, k) => drawFitted(previewCanvases[k], base, Math.round(size * dpr))
+      (size, k) => drawFitted(previewCanvases[k], base, Math.round(size * dpr), mode)
     );
   }
   async function outlinedBase(source, settings = finishSettings()) {
-    const scale = Math.min(1, 256 / Math.max(w, h)), bw = Math.max(1, Math.round(w * scale)), bh = Math.max(1, Math.round(h * scale));
+    const down = Math.min(1, 256 / Math.max(w, h)), bw = Math.max(1, Math.round(w * down)), bh = Math.max(1, Math.round(h * down)), preview = {
+      ...settings,
+      padding: Math.round((Number(settings.padding) || 0) * down)
+    };
     return finish(
-      resize(source, w, h, bw, bh),
+      resize(source, w, h, bw, bh, settings.scale),
       bw,
       bh,
-      settings,
+      preview,
       void 0,
-      scale < 1 ? shrinkSilhouette(source, w, h, bw, bh) : void 0
+      down < 1 ? shrinkSilhouette(source, w, h, bw, bh) : void 0
     );
   }
-  function drawFitted(canvas, base, box) {
+  function drawFitted(canvas, base, box, scale = "smooth") {
     const fit2 = box / Math.max(base.width, base.height), tw = Math.max(1, Math.round(base.width * fit2)), th = Math.max(1, Math.round(base.height * fit2));
     canvas.width = canvas.height = box;
     canvas.getContext("2d").putImageData(
       new ImageData(
-        resize(base.pixels, base.width, base.height, tw, th),
+        resize(base.pixels, base.width, base.height, tw, th, scale),
         tw,
         th
       ),
@@ -13798,12 +13933,27 @@ dialog details {
     chosenFormat = $("format").value;
     sizeControls();
   };
+  function framingChanged() {
+    scheduleReadout();
+    renderPreview();
+  }
+  $("trimMargins").onchange = framingChanged;
+  $("frameScale").onchange = framingChanged;
+  $("framePadding").oninput = (e) => {
+    const v = Number(e.target.value);
+    e.target.setAttribute(
+      "aria-invalid",
+      String(!(Number.isInteger(v) && v >= 0 && v <= FRAME_PAD_MAX))
+    );
+    framingChanged();
+  };
   function currentExport() {
     return {
       size: $("size").value || "original",
       format: $("format").value || "png",
       custom: Number($("customSize").value) || 512,
-      ground: ($("previewGround").value || "#313338").toUpperCase()
+      ground: ($("previewGround").value || "#313338").toUpperCase(),
+      ...frameChoices()
     };
   }
   function applyExport(choices) {
@@ -13813,6 +13963,12 @@ dialog details {
     if (Number.isInteger(choices.custom))
       $("customSize").value = String(choices.custom);
     if (choices.format) chosenFormat = choices.format;
+    $("trimMargins").checked = choices.trim === true;
+    $("framePadding").value = String(
+      Number.isInteger(choices.padding) ? choices.padding : 0
+    );
+    $("framePadding").setAttribute("aria-invalid", "false");
+    $("frameScale").value = choices.scale === "nearest" ? "nearest" : "smooth";
     const ground = [...$("previewGround").options].find(
       (o) => o.value.toUpperCase() === choices.ground
     );
@@ -13870,7 +14026,7 @@ dialog details {
       );
     });
     if (files.length > 1) lines.unshift(line2("Saved together as one ZIP:"));
-    if (files.some((f) => f.enlarged))
+    if (files.some((f) => f.enlarged) && settings.scale !== "nearest")
       lines.push(
         line2(
           "Enlarged from a smaller image, so it may look soft." + (svgSource ? " Draw the SVG larger for a sharper result." : "")
@@ -16225,6 +16381,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 Original C# port and code by Christian Winnerlein (CodesInChaos), public domain, https://github.com/CodesInChaos/Chaos.NaCl . Poly1305 by Andrew M. (floodyberry), MIT or public domain. Curve25519, Ed25519, Salsa20 and HSalsa20 from SUPERCOP ref10 by Dan Bernstein, public domain (http://bench.cr.yp.to/supercop.html). SHA512 by Christian Winnerlein, public domain.</pre></template>
     <template id="release-notes"><pre># Hex Shift 3
+
+**New in 3.9.0:** Export can frame the finished picture, outline included. Trim transparent margins cuts away the empty edge. Padding adds a transparent border, in pixels. Scaling is Smooth, as before, or Nearest neighbour, which keeps hard pixels. All three start off. With them off, an export matches 3.8.0. The same framing is used for one image, its variants, a batch, and the size readout. A session from 3.8.0 still opens. Saving again can record the framing. A file that does not mention it means framing is off.
 
 **New in 3.8.0:** Save session and Open session keep every open image, the colour map, brush marks, the outline, an SVG source, the view, the export choices, and variant colours. Opening the file rebuilds the previews. It does not restore undo or redo, and it does not save by itself. A session is not a recipe: recipes still leave out brush strokes and connected regions. A damaged file is refused and leaves the open images as they are. The file stays where you save it.
 

@@ -4,7 +4,7 @@ import zlib from "node:zlib";
 import sharp from "sharp";
 import { crc32, formatBytes, losslessPNG, outputName } from "../src/export.js";
 import { svgLength } from "../src/import.js";
-import { fit } from "../src/output.js";
+import { finish, fit } from "../src/output.js";
 import { PRESETS, formatsFor, outputsFor } from "../src/presets.js";
 import { deliver } from "../src/deliver.js";
 import { zip } from "../src/zip.js";
@@ -228,6 +228,169 @@ test("output names carry the preset, and sizes read in KB and MB", () => {
   assert.equal(formatBytes(262144), "256 KB");
   assert.equal(formatBytes(262145), "257 KB");
   assert.equal(formatBytes(1048576), "1 MB");
+});
+// 2×2 pixel art: four flat colours, no anti-aliasing.
+function pixelArt() {
+  const pixels = new Uint8ClampedArray(2 * 2 * 4),
+    colours = [
+      [255, 0, 0, 255],
+      [0, 0, 255, 255],
+      [0, 180, 0, 255],
+      [255, 220, 0, 255],
+    ];
+  colours.forEach((colour, i) => pixels.set(colour, i * 4));
+  return pixels;
+}
+// 6×5 with a transparent margin and a 2×2 block at (2, 1). The last pixel of
+// the block is only partly opaque, so trim must keep it.
+function transparentMargin() {
+  const w = 6,
+    h = 5,
+    pixels = new Uint8ClampedArray(w * h * 4),
+    put = (x, y, colour) => pixels.set(colour, (y * w + x) * 4);
+  put(2, 1, [200, 10, 10, 255]);
+  put(3, 1, [10, 200, 10, 255]);
+  put(2, 2, [10, 10, 200, 255]);
+  put(3, 2, [200, 200, 10, 200]);
+  return { w, h, pixels };
+}
+test("nearest neighbour keeps pixel-art blocks and smooth does not", async () => {
+  const pixels = pixelArt(),
+    nearest = await deliver(pixels, 2, 2, {
+      size: "custom",
+      custom: 16,
+      format: "png",
+      scale: "nearest",
+    }),
+    { data, info } = await raw(nearest[0].blob);
+  assert.deepEqual([info.width, info.height], [16, 16]);
+  const at = (x, y) =>
+    [...data.subarray((y * 16 + x) * 4, (y * 16 + x) * 4 + 4)];
+  for (const [sx, sy, colour] of [
+    [0, 0, [255, 0, 0, 255]],
+    [1, 0, [0, 0, 255, 255]],
+    [0, 1, [0, 180, 0, 255]],
+    [1, 1, [255, 220, 0, 255]],
+  ])
+    for (let dy = 0; dy < 8; dy++)
+      for (let dx = 0; dx < 8; dx++)
+        assert.deepEqual(at(sx * 8 + dx, sy * 8 + dy), colour);
+  const smooth = await deliver(pixels, 2, 2, {
+    size: "custom",
+    custom: 16,
+    format: "png",
+    scale: "smooth",
+  });
+  assert.notDeepEqual([...(await raw(smooth[0].blob)).data], [...data]);
+});
+test("trim removes a transparent margin and leaves the bytes alone when off", async () => {
+  const { w, h, pixels } = transparentMargin(),
+    off = await deliver(pixels, w, h, { size: "original", format: "png" }),
+    explicit = await deliver(pixels, w, h, {
+      size: "original",
+      format: "png",
+      trim: false,
+      padding: 0,
+      scale: "smooth",
+    });
+  assert.deepEqual(
+    new Uint8Array(await off[0].blob.arrayBuffer()),
+    new Uint8Array(await explicit[0].blob.arrayBuffer()),
+  );
+  assert.deepEqual(
+    [(await raw(off[0].blob)).info.width, (await raw(off[0].blob)).info.height],
+    [w, h],
+  );
+  const trimmed = await raw(
+    (
+      await deliver(pixels, w, h, {
+        size: "original",
+        format: "png",
+        trim: true,
+      })
+    )[0].blob,
+  );
+  assert.deepEqual([trimmed.info.width, trimmed.info.height], [2, 2]);
+  assert.deepEqual([...trimmed.data.subarray(0, 4)], [200, 10, 10, 255]);
+  assert.deepEqual([...trimmed.data.subarray(12, 16)], [200, 200, 10, 200]);
+  const blank = new Uint8ClampedArray(4 * 4);
+  const kept = await finish(blank, 4, 4, { trim: true });
+  assert.deepEqual([kept.width, kept.height], [4, 4]);
+});
+test("padding adds a transparent border around the finished picture", async () => {
+  const pixels = pixelArt(),
+    padded = await raw(
+      (
+        await deliver(pixels, 2, 2, {
+          size: "original",
+          format: "png",
+          padding: 2,
+        })
+      )[0].blob,
+    );
+  assert.deepEqual([padded.info.width, padded.info.height], [6, 6]);
+  assert.equal(padded.data[3], 0);
+  assert.deepEqual(
+    [...padded.data.subarray((2 * 6 + 2) * 4, (2 * 6 + 2) * 4 + 4)],
+    [255, 0, 0, 255],
+  );
+  await assert.rejects(
+    () => finish(pixels, 2, 2, { padding: 4096 }),
+    /padding/i,
+  );
+});
+test("trim frames the outline, not only the artwork", async () => {
+  const w = 32,
+    h = 32,
+    pixels = new Uint8ClampedArray(w * h * 4);
+  pixels.set([255, 0, 0, 255], (16 * w + 16) * 4);
+  const settings = { outline: { widthPct: 8, colour: "#0000FF" } },
+    loose = await finish(pixels, w, h, settings),
+    tight = await finish(pixels, w, h, { ...settings, trim: true });
+  assert.ok(tight.width < loose.width && tight.height < loose.height);
+  const alpha = (image, x, y) => image.pixels[(y * image.width + x) * 4 + 3];
+  let top = false,
+    bottom = false,
+    left = false,
+    right = false;
+  for (let x = 0; x < tight.width; x++) {
+    if (alpha(tight, x, 0) > 0) top = true;
+    if (alpha(tight, x, tight.height - 1) > 0) bottom = true;
+  }
+  for (let y = 0; y < tight.height; y++) {
+    if (alpha(tight, 0, y) > 0) left = true;
+    if (alpha(tight, tight.width - 1, y) > 0) right = true;
+  }
+  assert.equal(top && bottom && left && right, true);
+  let red = false,
+    blue = false;
+  for (let i = 0; i < tight.pixels.length; i += 4) {
+    if (tight.pixels[i] > 200 && tight.pixels[i + 2] < 40) red = true;
+    if (tight.pixels[i + 2] > 200 && tight.pixels[i] < 40) blue = true;
+  }
+  assert.equal(red && blue, true);
+});
+test("a scaled export with framing off matches the same export with the fields set off", async () => {
+  const pixels = artwork(24, 16),
+    settings = {
+      size: "discord-emoji",
+      format: "png",
+      outline: { widthPct: 4, colour: "#FFFFFF" },
+    },
+    plain = await deliver(pixels, 24, 16, settings),
+    off = await deliver(pixels, 24, 16, {
+      ...settings,
+      trim: false,
+      padding: 0,
+      scale: "smooth",
+    });
+  assert.equal(plain.length, off.length);
+  for (let i = 0; i < plain.length; i++) {
+    assert.deepEqual(
+      new Uint8Array(await plain[i].blob.arrayBuffer()),
+      new Uint8Array(await off[i].blob.arrayBuffer()),
+    );
+  }
 });
 test("SVG lengths accept absolute units and fractions only", () => {
   assert.equal(svgLength("32.5"), 32.5);
