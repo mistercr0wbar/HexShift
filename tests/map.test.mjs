@@ -17,6 +17,7 @@ import {
 } from "../src/engine.js";
 import {
   MAX_STEPS,
+  omissionSummary,
   parseRecipe,
   parseRecipeFile,
   recipeStep,
@@ -275,39 +276,53 @@ test("a recipe saved from a map replays to the same pixels", async () => {
   assert.ok(whiteBefore > 100);
   assert.notDeepEqual(twice, replayed);
 });
-test("recipes: brush strokes and connected regions are flagged, never kept", () => {
+test("recipes name brush strokes and connected regions, and never keep them", () => {
   const data = strip([255, 0, 0], [0, 0, 255]),
-    rows = [row(1, data, 2, 0, 0, "#00FF00", { connected: true })],
-    step = recipeStep(rows, data, 2, new Int8Array([0, 1]));
-  assert.equal(step.approximate, true);
-  const back = parseRecipe(writeRecipe([step]));
-  assert.equal(back[0].rows[0].params.connected, false);
-  assert.equal(
-    "approximate" in JSON.parse(writeRecipe([step])).steps[0],
-    false,
+    rows = [row(1, data, 2, 0, 0, "#00FF00", { connected: true })];
+  rows[0].mask = [1, 0];
+  const step = recipeStep(rows, data, 2, new Int8Array([0, 1]));
+  assert.deepEqual(step.omissions, ["brush", "connected"]);
+  assert.equal(step.approximate, undefined);
+  const saved = JSON.parse(writeRecipe([step]));
+  assert.deepEqual(saved.steps[0].omissions, ["brush", "connected"]);
+  assert.equal("approximate" in saved.steps[0], false);
+  assert.equal("mask" in saved.steps[0].rows[0], false);
+  assert.equal("x" in saved.steps[0].rows[0].seeds[0], false);
+  const back = parseRecipeFile(writeRecipe([step]));
+  assert.equal(back.steps[0].rows[0].params.connected, false);
+  assert.equal(back.steps[0].provenance, "known");
+  assert.equal(omissionSummary(back.steps).kind, "known");
+  assert.match(omissionSummary(back.steps).text, /Brush strokes are left out/);
+  assert.match(omissionSummary(back.steps).text, /Connected regions are left out/);
+  // Rows without samples are left out, and they do not warn.
+  const bare = recipeStep(
+    [{ id: 1, params: defaults(), seeds: [], mask: [1] }],
+    data,
+    2,
+    new Int8Array([1, 1]),
   );
-  // Rows without samples are left out.
-  assert.equal(
-    recipeStep([{ id: 1, params: defaults(), seeds: [] }], data, 2).rows.length,
-    0,
-  );
+  assert.equal(bare.rows.length, 0);
+  assert.deepEqual(bare.omissions, []);
+  assert.equal(omissionSummary([bare]).kind, "none");
 });
-test("recipes omit a polygon and mark the repeat approximate", () => {
+test("recipes omit a polygon's shape and name it only when that colour is saved", () => {
   const data = strip([255, 0, 0], [0, 0, 255]),
     rows = [row(1, data, 2, 0, 0, "#00FF00")];
   rows[0].polygon = [
     { x: 0, y: 0 },
     { x: 1, y: 0 },
-    { x: 0, y: 0 },
+    { x: 0, y: 1 },
   ];
   const step = recipeStep(rows, data, 2, new Int8Array(2));
-  assert.equal(step.approximate, true);
+  assert.deepEqual(step.omissions, ["polygon"]);
   assert.equal(step.rows[0].polygon, undefined);
   const saved = JSON.parse(writeRecipe([step]));
   assert.equal("polygon" in saved.steps[0].rows[0], false);
+  assert.deepEqual(saved.steps[0].omissions, ["polygon"]);
   assert.equal("approximate" in saved.steps[0], false);
-  const back = parseRecipe(writeRecipe([step]));
-  assert.equal(back[0].rows[0].polygon, undefined);
+  const back = parseRecipeFile(writeRecipe([step]));
+  assert.equal(back.steps[0].rows[0].polygon, undefined);
+  assert.match(omissionSummary(back.steps).text, /Polygons are left out/);
   const empty = recipeStep(
     [
       {
@@ -321,7 +336,62 @@ test("recipes omit a polygon and mark the repeat approximate", () => {
     2,
   );
   assert.equal(empty.rows.length, 0);
-  assert.equal(empty.approximate, true);
+  assert.deepEqual(empty.omissions, []);
+  assert.equal(omissionSummary([empty]).kind, "none");
+});
+test("recipe omissions distinguish known, none, generic and unknown", () => {
+  const data = strip([255, 0, 0], [0, 0, 255]),
+    source = row(1, data, 2, 0, 0, "#00FF00");
+  source.params.manual = true;
+  source.params.dh = 12;
+  source.params.soft = 40;
+  source.params.model = "hsl";
+  source.params.ramp = ["#111111", "#888888", "#EEEEEE"];
+  const plain = recipeStep([source], data, 2, new Int8Array(2));
+  assert.deepEqual(plain.omissions, []);
+  const text = writeRecipe([plain]);
+  assert.deepEqual(JSON.parse(text).steps[0].omissions, []);
+  assert.equal(omissionSummary(parseRecipeFile(text).steps).kind, "none");
+  const legacy = JSON.parse(text);
+  delete legacy.steps[0].omissions;
+  const unknown = parseRecipeFile(JSON.stringify(legacy));
+  assert.equal(unknown.steps[0].provenance, "unknown");
+  assert.equal(unknown.steps[0].omissions, undefined);
+  assert.equal(omissionSummary(unknown.steps).kind, "unknown");
+  assert.match(omissionSummary(unknown.steps).text, /does not say whether/);
+  legacy.steps[0].approximate = true;
+  const generic = parseRecipeFile(JSON.stringify(legacy));
+  assert.equal(generic.steps[0].provenance, "generic");
+  assert.equal(omissionSummary(generic.steps).kind, "generic");
+  assert.match(omissionSummary(generic.steps).text, /approximation/);
+  const mixed = parseRecipeFile(
+    JSON.stringify({
+      format: "hexshift-recipe",
+      version: 1,
+      steps: [
+        JSON.parse(text).steps[0],
+        {
+          rows: JSON.parse(text).steps[0].rows,
+          omissions: ["polygon", "brush"],
+        },
+        { rows: JSON.parse(text).steps[0].rows },
+      ],
+    }),
+  );
+  // The first step records none. The second names two reasons, stored in order.
+  assert.deepEqual(mixed.steps[1].omissions, ["brush", "polygon"]);
+  const summary = omissionSummary(mixed.steps);
+  assert.equal(summary.kind, "known");
+  assert.match(summary.text, /Brush strokes are left out/);
+  assert.match(summary.text, /Polygons are left out/);
+  assert.match(summary.text, /Some other steps do not say/);
+  assert.throws(
+    () => parseRecipeFile(JSON.stringify({ ...legacy, steps: [{ ...legacy.steps[0], omissions: ["nope"] }] })),
+    /omissions are unreadable/,
+  );
+  const dup = JSON.parse(text);
+  dup.steps[0].omissions = ["brush", "brush"];
+  assert.throws(() => parseRecipeFile(JSON.stringify(dup)), /omissions are unreadable/);
 });
 test("recipes are parsed safely: format, version, size, counts and ranges", () => {
   const good = JSON.parse(

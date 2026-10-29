@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-9S/w4jmlQa2pDSx2YWrmpbYutrBPHzqs48CaXXF616A='; style-src 'sha256-xq0S2E8sq1pwczuQmWi5AZpagTVkQIih0HJaQV/JZqI='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-d+sTOm2nbS4mEj4wB9QIiFHZBRxZyEnbyDEcAGo5wlI='; style-src 'sha256-xq0S2E8sq1pwczuQmWi5AZpagTVkQIih0HJaQV/JZqI='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta
       name="theme-color"
@@ -2914,8 +2914,8 @@ dialog details {
                     regions</label
                   >
                   <p id="polygonNote" class="help advanced-only" hidden>
-                    This colour is limited to its polygon. Brushes still add and
-                    remove pixels.
+                    A polygon limits the colour you picked. It does not choose
+                    that colour. Brushes still add and remove pixels.
                   </p>
                   <details id="refinement" class="advanced-only">
                     <summary>Refine the match</summary>
@@ -3703,8 +3703,10 @@ dialog details {
                   <details id="recipePanel" class="advanced-only">
                     <summary>Repeat edits</summary>
                     <p class="help">
-                      Brush strokes, connected regions and polygons are not
-                      included. An outline on its own can be repeated.
+                      A recipe repeats sampled colours. Brush strokes, connected
+                      regions and polygons are left out, and Hex Shift asks
+                      before repeating a step that had one. An outline on its
+                      own can be repeated.
                     </p>
                     <div class="palette-actions">
                       <button
@@ -3919,6 +3921,20 @@ dialog details {
       </footer>
     </div>
     <div id="dropOverlay" hidden>Drop an image to open it</div>
+    <dialog
+      id="recipeDialog"
+      aria-labelledby="recipeDialogTitle"
+      aria-describedby="recipeDialogText"
+    >
+      <form method="dialog">
+        <h2 id="recipeDialogTitle">Some spatial edits will not be repeated</h2>
+        <p id="recipeDialogText"></p>
+        <div class="dialog-actions">
+          <button class="button" value="cancel" autofocus>Cancel</button
+          ><button class="button primary" value="continue">Continue</button>
+        </div>
+      </form>
+    </dialog>
     <dialog id="replaceDialog">
       <form method="dialog">
         <h2 id="replaceTitle">Open another image?</h2>
@@ -8772,10 +8788,65 @@ dialog details {
     if (p.ramp) out.ramp = p.ramp.slice();
     return out;
   };
+  var OMISSION_REASONS = ["brush", "connected", "polygon"];
+  var OMISSION_TEXT = {
+    brush: "Brush strokes are left out.",
+    connected: "Connected regions are left out.",
+    polygon: "Polygons are left out."
+  };
+  var GENERIC_OMISSION = "This recipe is marked as an approximation, and it does not say which spatial edits were left out. Continuing does not promise a lossless replay.";
+  var UNKNOWN_OMISSION = "This recipe does not say whether brush strokes, connected regions, or polygons were left out. Continuing does not promise a lossless replay.";
+  function cleanOmissions(source) {
+    if (!Array.isArray(source) || source.length > OMISSION_REASONS.length)
+      throw Error("A recipe's omissions are unreadable.");
+    const seen = /* @__PURE__ */ new Set();
+    for (const item of source) {
+      if (typeof item !== "string" || !OMISSION_REASONS.includes(item) || seen.has(item))
+        throw Error("A recipe's omissions are unreadable.");
+      seen.add(item);
+    }
+    return OMISSION_REASONS.filter((id) => seen.has(id));
+  }
+  function omissionReasons(rows, labels) {
+    const sampled = (rows || []).filter((row) => row?.seeds?.length);
+    const reasons = [];
+    if (sampled.length && labels?.some((value) => value !== 0))
+      reasons.push("brush");
+    if (sampled.some((row) => row.params?.connected)) reasons.push("connected");
+    if (sampled.some((row) => row.polygon?.length)) reasons.push("polygon");
+    return reasons;
+  }
+  function omissionSummary(steps) {
+    const list = Array.isArray(steps) ? steps : [];
+    if (!list.length) return { kind: "none", reasons: [], text: "" };
+    const reasons = /* @__PURE__ */ new Set();
+    let named = false;
+    let generic = false;
+    let unknown = false;
+    for (const step of list) {
+      if (Array.isArray(step?.omissions)) {
+        named = true;
+        for (const id of step.omissions) reasons.add(id);
+      } else if (step?.approximate === true || step?.provenance === "generic")
+        generic = true;
+      else unknown = true;
+    }
+    const ordered = OMISSION_REASONS.filter((id) => reasons.has(id));
+    if (ordered.length) {
+      let text2 = ordered.map((id) => OMISSION_TEXT[id]).join(" ");
+      if (generic || unknown)
+        text2 += " Some other steps do not say what else was left out.";
+      return { kind: "known", reasons: ordered, text: text2 };
+    }
+    if (generic && !unknown)
+      return { kind: "generic", reasons: [], text: GENERIC_OMISSION };
+    if (!named || unknown)
+      return { kind: "unknown", reasons: [], text: UNKNOWN_OMISSION };
+    return { kind: "none", reasons: [], text: "" };
+  }
   function recipeStep(rows, pixels2, width, labels) {
-    const step = { rows: [], approximate: false };
+    const step = { rows: [], omissions: omissionReasons(rows, labels) };
     for (const row of rows) {
-      if (row.polygon?.length) step.approximate = true;
       if (!row.seeds.length) continue;
       step.rows.push({
         params: keep(row.params),
@@ -8790,9 +8861,7 @@ dialog details {
           }
         )
       });
-      if (row.params.connected) step.approximate = true;
     }
-    if (labels?.some((v) => v !== 0)) step.approximate = true;
     return step;
   }
   var OUTLINE_MIN = 0.5;
@@ -8805,13 +8874,24 @@ dialog details {
     return { widthPct, colour };
   }
   function writeRecipe(steps, outline2 = null) {
-    const clean = cleanOutline(outline2), rows = steps.map((s) => ({ rows: s.rows }));
+    const clean = cleanOutline(outline2), rows = steps.map((step) => step.rows);
     if (!rows.length && !clean)
       throw Error("A recipe needs a colour change or an outline.");
     const data = {
       format: "hexshift-recipe",
       version: !rows.length ? 3 : clean ? 2 : 1,
-      steps: rows
+      steps: steps.map((step) => {
+        const out = {
+          rows: step.rows.map((row) => ({
+            params: row.params,
+            seeds: row.seeds.map((seed) => ({ hex: seed.hex }))
+          }))
+        };
+        if (Array.isArray(step.omissions))
+          out.omissions = cleanOmissions(step.omissions);
+        else if (step.approximate === true) out.approximate = true;
+        return out;
+      })
     };
     if (clean) data.outline = clean;
     return JSON.stringify(data, null, 2) + "\n";
@@ -8853,7 +8933,15 @@ dialog details {
       });
       if (samples > MAX_SEEDS)
         throw Error("A recipe step can have at most 64 samples.");
-      return { rows, approximate: false };
+      const parsed = { rows };
+      if (Array.isArray(step.omissions)) {
+        parsed.omissions = cleanOmissions(step.omissions);
+        parsed.provenance = "known";
+      } else if (step.approximate === true) {
+        parsed.approximate = true;
+        parsed.provenance = "generic";
+      } else parsed.provenance = "unknown";
+      return parsed;
     });
     return { steps, outline: data.version === 1 ? null : outline2 };
   }
@@ -8960,18 +9048,34 @@ dialog details {
       return clean;
     });
   }
+  var STEP_OMISSIONS = ["brush", "connected", "polygon"];
+  function cleanStepOmissions(source) {
+    if (!Array.isArray(source) || source.length > STEP_OMISSIONS.length)
+      throw Error("A baked colour step is unreadable.");
+    const seen = /* @__PURE__ */ new Set();
+    for (const item of source) {
+      if (typeof item !== "string" || !STEP_OMISSIONS.includes(item) || seen.has(item))
+        throw Error("A baked colour step is unreadable.");
+      seen.add(item);
+    }
+    return STEP_OMISSIONS.filter((id) => seen.has(id));
+  }
   function cleanSteps(steps, w2, h2) {
     if (!Array.isArray(steps) || steps.length > MAX_STEPS2)
       throw Error("A session has too many baked colour steps.");
     return steps.map((step) => {
       if (!Array.isArray(step?.rows))
         throw Error("A baked colour step is unreadable.");
-      return {
+      const cleaned = {
         rows: step.rows.map((row) => ({
           params: cleanParams2(row?.params),
           seeds: cleanSeeds(row?.seeds, w2, h2)
         }))
       };
+      if (Array.isArray(step.omissions))
+        cleaned.omissions = cleanStepOmissions(step.omissions);
+      else if (step.approximate === true) cleaned.approximate = true;
+      return cleaned;
     });
   }
   function cleanOutline2(source) {
@@ -12447,7 +12551,7 @@ dialog details {
   // src/app.js
   var $ = (id) => document.getElementById(id);
   var pause = makePause();
-  var VERSION = "3.11.0";
+  var VERSION = "3.12.0";
   var w = 0;
   var h = 0;
   var name = "";
@@ -12501,6 +12605,11 @@ dialog details {
   var polygonBefore = $("polygonBefore");
   var polygonAfter = $("polygonAfter");
   var polygonDraft = null;
+  var polygonPointer = null;
+  var polygonEpoch = 0;
+  function closeSlop(pointerType) {
+    return pointerType === "touch" ? 12 : 8;
+  }
   var statusTimer = 0;
   function status(message, { fade = 0 } = {}) {
     const line2 = $("status");
@@ -14602,51 +14711,94 @@ dialog details {
   $("makeVariants").onclick = makeVariants;
   $("exportVariants").onclick = exportVariants;
   renderSavedSets();
-  async function currentSteps() {
-    const doc = activeDocument, iid = imageId;
-    commit("Adjust colour");
+  function recipeRevision() {
+    return { doc: activeDocument, imageId, editId };
+  }
+  function sameRevision(revision) {
+    return revision.doc === activeDocument && revision.imageId === imageId && revision.editId === editId;
+  }
+  async function gatherSteps() {
+    const revision = recipeRevision();
     let preview = null;
     try {
       const r = await latest();
       if (r.changed) preview = r;
     } catch (e) {
-      if (doc !== activeDocument || iid !== imageId) throw e;
+      if (!sameRevision(revision)) throw e;
     }
-    if (doc !== activeDocument || iid !== imageId)
-      throw Error("The active image changed.");
+    if (!sameRevision(revision)) throw Error("The active image changed.");
     const steps = edit.steps.slice();
     if (preview) steps.push(recipeStep(edit.rows, pixels, w, overrides));
-    return { steps: steps.filter((s) => s.rows.length), preview };
+    return {
+      steps: steps.filter((step) => step.rows.length),
+      preview,
+      revision,
+      outline: edit.outline.on ? { widthPct: edit.outline.widthPct, colour: edit.outline.colour } : null
+    };
   }
-  var SPATIAL_NOTE = "Brush strokes, connected regions and polygons are not included.";
-  function noteSpatial() {
-    $("batchNote").textContent = SPATIAL_NOTE;
-    status(SPATIAL_NOTE);
+  async function currentSteps() {
+    const doc = activeDocument, iid = imageId;
+    commit("Adjust colour");
+    const gathered = await gatherSteps();
+    if (doc !== activeDocument || iid !== imageId)
+      throw Error("The active image changed.");
+    return gathered;
+  }
+  function confirmOmissions(summary) {
+    if (!summary || summary.kind === "none") return Promise.resolve(true);
+    const dialog = $("recipeDialog");
+    if (dialog.open) return Promise.resolve(false);
+    $("recipeDialogTitle").textContent = summary.kind === "known" ? "Some spatial edits will not be repeated" : "This recipe does not promise a lossless replay";
+    $("recipeDialogText").textContent = summary.text;
+    dialog.showModal();
+    return new Promise(
+      (resolve) => dialog.addEventListener(
+        "close",
+        () => resolve(dialog.returnValue === "continue"),
+        { once: true }
+      )
+    );
   }
   async function saveRecipe() {
     if (!pixels || batchAbort) return;
-    noteSpatial();
-    let steps;
+    let gathered;
     try {
-      ({ steps } = await currentSteps());
+      gathered = await gatherSteps();
     } catch (e) {
       status("Could not save the recipe: " + e.message);
       return;
     }
-    const { on, widthPct, colour } = edit.outline, outline2 = on ? { widthPct, colour } : null;
-    if (!steps.length && !outline2) {
+    const summary = omissionSummary(gathered.steps);
+    if (!gathered.steps.length && !gathered.outline) {
       status("Nothing to save yet. Change a colour or add an outline first.");
+      return;
+    }
+    if (!await confirmOmissions(summary)) return;
+    if (!sameRevision(gathered.revision)) {
+      status("The image changed. Nothing was saved.");
+      return;
+    }
+    let again;
+    try {
+      again = await gatherSteps();
+    } catch (e) {
+      status("Could not save the recipe: " + e.message);
+      return;
+    }
+    const next = omissionSummary(again.steps);
+    if (!sameRevision(gathered.revision) || next.kind !== summary.kind || next.text !== summary.text) {
+      status("The image changed. Nothing was saved.");
       return;
     }
     const filename = safeStem(name) + "-recipe.json";
     download(
-      new Blob([writeRecipe(steps, outline2)], {
+      new Blob([writeRecipe(again.steps, again.outline)], {
         type: "application/json"
       }),
       filename
     );
     status(
-      "Prepared " + filename + " (" + (steps.length ? steps.length + (steps.length === 1 ? " step). " : " steps). ") : "outline only). ") + SPATIAL_NOTE + " Choose where to save it."
+      "Prepared " + filename + " (" + (again.steps.length ? again.steps.length + (again.steps.length === 1 ? " step). " : " steps). ") : "outline only). ") + (summary.text ? summary.text + " " : "") + "Choose where to save it."
     );
   }
   async function applyRecipe(file) {
@@ -14656,8 +14808,6 @@ dialog details {
       status("Could not apply the recipe: " + reason);
       return openStop(reason);
     }
-    dropDraft();
-    noteSpatial();
     const doc = activeDocument, request = imageId;
     try {
       if (file.size > MAX_RECIPE_BYTES)
@@ -14665,7 +14815,14 @@ dialog details {
       const text2 = await file.text();
       if (doc !== activeDocument || request !== imageId || batchAbort)
         return openStop();
-      const { steps: recipe, outline: recipeOutline } = parseRecipeFile(text2), { steps, preview } = await currentSteps(), iid = imageId, base = preview ? preview.pixels : pixels;
+      const parsed = parseRecipeFile(text2), summary = omissionSummary(parsed.steps), revision = recipeRevision();
+      if (!await confirmOmissions(summary)) return openStop();
+      if (!sameRevision(revision) || batchAbort) {
+        status("The image changed. The recipe was not applied.");
+        return openStop();
+      }
+      dropDraft();
+      const { steps: recipe, outline: recipeOutline } = parsed, { steps, preview } = await currentSteps(), iid = imageId, base = preview ? preview.pixels : pixels;
       status("Applying " + file.name + "\u2026");
       const out = await replay(w, h, base, recipe, pause, () => iid !== imageId);
       if (iid !== imageId) return openStop();
@@ -14718,7 +14875,7 @@ dialog details {
     buttons();
   }
   function batchProgress(text2) {
-    $("batchNote").textContent = SPATIAL_NOTE + " " + text2;
+    $("batchNote").textContent = text2;
     status(text2);
   }
   function cancelBatch() {
@@ -14747,10 +14904,27 @@ dialog details {
   }
   async function applyToDocuments(all = false) {
     if (!pixels || batchAbort) return;
-    noteSpatial();
     const source = activeDocument, targets = documents.filter((d) => all || selectedDocuments.has(d));
     if (!targets.length) {
       status("Select at least one tab with Ctrl-click or Shift-click.");
+      return;
+    }
+    let gathered;
+    try {
+      gathered = await gatherSteps();
+    } catch (e) {
+      status("Could not apply to tabs: " + e.message);
+      return;
+    }
+    const replaying = targets.some((doc) => doc !== source);
+    const summary = replaying ? omissionSummary(gathered.steps) : { kind: "none", reasons: [], text: "" };
+    if (!gathered.steps.length && !edit.outline.on) {
+      status("Nothing to apply yet. Change a colour or add an outline first.");
+      return;
+    }
+    if (!await confirmOmissions(summary)) return;
+    if (!sameRevision(gathered.revision)) {
+      status("The image changed. Nothing was applied.");
       return;
     }
     const run = ++batchRun, cancelled = () => run !== batchRun;
@@ -14758,6 +14932,10 @@ dialog details {
       beginBatch();
       const { steps } = await currentSteps();
       if (cancelled()) return;
+      if (omissionSummary(replaying ? steps : []).text !== summary.text || replaying && omissionSummary(steps).kind !== summary.kind) {
+        status("The image changed. Nothing was applied.");
+        return;
+      }
       if (!steps.length && !edit.outline.on) {
         status("Nothing to apply yet. Change a colour or add an outline first.");
         return;
@@ -14862,7 +15040,25 @@ dialog details {
   }
   async function runBatch(list) {
     if (batchAbort) return;
-    noteSpatial();
+    let gathered;
+    try {
+      gathered = await gatherSteps();
+    } catch (e) {
+      status("Batch failed: " + e.message);
+      return;
+    }
+    const summary = omissionSummary(gathered.steps);
+    if (!gathered.steps.length && !edit.outline.on) {
+      status(
+        "Nothing to apply yet. Change a colour or add an outline first, then run a batch."
+      );
+      return;
+    }
+    if (!await confirmOmissions(summary)) return;
+    if (!sameRevision(gathered.revision)) {
+      status("The image changed. Nothing was applied.");
+      return;
+    }
     const run = ++batchRun, cancelled = () => run !== batchRun;
     try {
       if (list.length > MAX_BATCH)
@@ -14870,6 +15066,11 @@ dialog details {
       beginBatch();
       const { steps } = await currentSteps();
       if (cancelled()) return;
+      const next = omissionSummary(steps);
+      if (next.kind !== summary.kind || next.text !== summary.text) {
+        status("The image changed. Nothing was applied.");
+        return;
+      }
       if (!steps.length && !edit.outline.on) {
         status(
           "Nothing to apply yet. Change a colour or add an outline first, then run a batch."
@@ -14917,7 +15118,7 @@ dialog details {
       const blob = await zip(files), filename = "hexshift-batch.zip", done = list.length - errors.length;
       if (cancelled()) return;
       download(blob, filename);
-      $("batchNote").textContent = SPATIAL_NOTE + " Done: " + done + " of " + list.length + (list.length === 1 ? " image" : " images") + (errors.length ? ". errors.txt in the ZIP lists the others." : ".");
+      $("batchNote").textContent = (summary.text ? summary.text + " " : "") + "Done: " + done + " of " + list.length + (list.length === 1 ? " image" : " images") + (errors.length ? ". errors.txt in the ZIP lists the others." : ".");
       status(
         "Prepared " + filename + " (" + formatBytes(blob.size) + "). Choose where to save it."
       );
@@ -15113,6 +15314,8 @@ dialog details {
     layout();
   }
   function dropDraft() {
+    polygonEpoch++;
+    polygonPointer = null;
     if (!polygonDraft) return;
     polygonDraft = null;
     paintPolygon();
@@ -15133,10 +15336,14 @@ dialog details {
       ctx.clearRect(0, 0, w, h);
       if (committed?.length >= 3)
         strokePoly(ctx, committed, true, "rgba(110, 240, 255, 0.95)");
-      if (draft?.length) strokePoly(ctx, draft, false, "rgba(232, 128, 46, 0.95)");
+      if (draft?.length)
+        strokePoly(ctx, draft, false, "rgba(232, 128, 46, 0.95)", {
+          close: polygonPointer?.close,
+          pointer: polygonPointer
+        });
     }
   }
-  function strokePoly(ctx, points, closed, colour) {
+  function strokePoly(ctx, points, closed, colour, extra = {}) {
     const px = (n) => n / Math.max(zoom || 1, 0.05);
     ctx.save();
     ctx.strokeStyle = colour;
@@ -15157,16 +15364,29 @@ dialog details {
       ctx.globalAlpha = 1;
     }
     ctx.stroke();
+    if (!closed && extra.pointer && points.length) {
+      const last = points.at(-1);
+      ctx.beginPath();
+      ctx.moveTo(last.x + 0.5, last.y + 0.5);
+      ctx.lineTo(extra.pointer.x, extra.pointer.y);
+      ctx.stroke();
+    }
     points.forEach((p, i) => {
+      const closing = i === 0 && !closed && extra.close;
       ctx.beginPath();
       ctx.arc(
         p.x + 0.5,
         p.y + 0.5,
-        px(i === 0 && !closed ? 4.5 : 2.75),
+        px(closing ? 7 : i === 0 && !closed ? 4.5 : 2.75),
         0,
         Math.PI * 2
       );
       ctx.fill();
+      if (closing) {
+        ctx.lineWidth = px(1.5);
+        ctx.strokeStyle = "#fff";
+        ctx.stroke();
+      }
     });
     ctx.restore();
   }
@@ -15198,7 +15418,7 @@ dialog details {
       return;
     }
     const points = polygonDraft.map((p) => ({ x: p.x, y: p.y }));
-    polygonDraft = null;
+    dropDraft();
     action("Polygon selection", () => {
       edit.rows[edit.active].polygon = points;
     });
@@ -15207,19 +15427,57 @@ dialog details {
   function popPolygonPoint() {
     if (!polygonDraft?.length) return;
     polygonDraft.pop();
-    if (!polygonDraft.length) polygonDraft = null;
+    if (!polygonDraft.length) {
+      dropDraft();
+      status("Removed the last polygon point.");
+      return;
+    }
+    if (polygonPointer && polygonDraft.length < 3) polygonPointer.close = false;
     paintPolygon();
     status(
-      polygonDraft ? "Removed the last polygon point. " + polygonDraft.length + " left." : "Removed the last polygon point."
+      "Removed the last polygon point. " + polygonDraft.length + " left."
     );
   }
   function cancelPolygon() {
     if (!polygonDraft?.length) return;
-    polygonDraft = null;
-    paintPolygon();
+    dropDraft();
     status("Polygon cancelled.");
   }
+  function vertexClient(canvas, p) {
+    const r = canvas.getBoundingClientRect();
+    return {
+      x: r.left + (p.x + 0.5) / canvas.width * r.width,
+      y: r.top + (p.y + 0.5) / canvas.height * r.height
+    };
+  }
+  function followPolygon(e, canvas) {
+    const wasClose = polygonPointer?.close;
+    if (tool !== "polygon" || !polygonDraft?.length || !w || !canvas.width) {
+      if (polygonPointer) {
+        polygonPointer = null;
+        paintPolygon();
+      }
+      return;
+    }
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const close = polygonDraft.length >= 3 && Math.hypot(
+      e.clientX - vertexClient(canvas, polygonDraft[0]).x,
+      e.clientY - vertexClient(canvas, polygonDraft[0]).y
+    ) <= closeSlop(e.pointerType || "mouse");
+    polygonPointer = {
+      x: (e.clientX - rect.left) / rect.width * w,
+      y: (e.clientY - rect.top) / rect.height * h,
+      close
+    };
+    paintPolygon();
+    if (close && !wasClose)
+      status(
+        "The first point closes the polygon. It limits the colour you picked."
+      );
+  }
   function setTool(value) {
+    if (value !== tool) dropDraft();
     tool = value;
     for (const [id, active] of [
       ["pan", value === "pan"],
@@ -15257,7 +15515,7 @@ dialog details {
       }
       const p = point(e, c);
       const pan = tool === "pan" || space;
-      if (!p && !pan) return;
+      if (!p && !pan && tool !== "polygon") return;
       try {
         c.parentElement.setPointerCapture(e.pointerId);
       } catch {
@@ -15273,7 +15531,9 @@ dialog details {
         downPoint: p,
         pointerType: e.pointerType || "mouse",
         moved: false,
-        pickDisqualified: false
+        pickDisqualified: false,
+        polygonEpoch,
+        toolAtDown: tool
       };
       if (!pan && (tool === "add" || tool === "subtract")) {
         begin();
@@ -15298,6 +15558,8 @@ dialog details {
         cursor.style.top = e.clientY - r.top + "px";
         cursor.style.width = cursor.style.height = Number($("brushSize").value) * zoom + "px";
       }
+      if (drag?.pointer === e.pointerId && drag.pan) {
+      } else followPolygon(e, c);
       if (!drag || drag.pointer !== e.pointerId) return;
       const dist = Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY);
       if (tool === "pick" && !drag.pan) {
@@ -15326,7 +15588,15 @@ dialog details {
         return;
       }
       if (d.pan || d.pickDisqualified || d.moved) return;
-      if (tool === "polygon") {
+      if (tool === "polygon" || d.toolAtDown === "polygon") {
+        if (tool !== "polygon" || d.polygonEpoch !== polygonEpoch) return;
+        if (polygonDraft?.length >= 3) {
+          const at = vertexClient(c, polygonDraft[0]);
+          if (Math.hypot(e.clientX - at.x, e.clientY - at.y) <= closeSlop(d.pointerType)) {
+            completePolygon();
+            return;
+          }
+        }
         const p = point(e, c);
         if (p) addPolygonPoint(p);
         return;
@@ -15362,6 +15632,9 @@ dialog details {
     c.parentElement.addEventListener("pointerleave", () => {
       $("loupe").hidden = true;
       $("brushCursor").hidden = true;
+      if (!polygonPointer) return;
+      polygonPointer = null;
+      paintPolygon();
     });
   }
   $("open").onclick = () => $("fileInput").click();
@@ -15641,7 +15914,7 @@ dialog details {
   $("polygon").onclick = () => {
     setTool("polygon");
     status(
-      "Polygon: click points on the image. Enter or the first point closes it. Escape cancels."
+      "Polygon: click points on the image. It limits the colour you picked, and it does not choose that colour. Enter or the first point closes it. Escape cancels the draft."
     );
   };
   $("brushSize").oninput = (e) => $("brushSizeValue").textContent = e.target.value + " px";
@@ -17004,6 +17277,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 Original C# port and code by Christian Winnerlein (CodesInChaos), public domain, https://github.com/CodesInChaos/Chaos.NaCl . Poly1305 by Andrew M. (floodyberry), MIT or public domain. Curve25519, Ed25519, Salsa20 and HSalsa20 from SUPERCOP ref10 by Dan Bernstein, public domain (http://bench.cr.yp.to/supercop.html). SHA512 by Christian Winnerlein, public domain.</pre></template>
     <template id="release-notes"><pre># Hex Shift 3
+
+**New in 3.12.0:** A polygon stays on the colour you picked. It does not choose that colour. While you draw, a line follows the pointer from the last point, and the first point highlights when the pointer is close enough to close: 8 pixels for a mouse or pen, 12 for a finger. Enter, Backspace and Escape work as before. Escape drops only the unfinished polygon. Closing it is one undo. Saving or repeating a recipe asks when a sampled colour left out brush strokes, a connected region, or a polygon, and names which. A recipe that records none of those applies without that question. An older recipe that does not say asks, and does not claim the repeat is exact. Cancelling the question changes nothing. Applying a recipe keeps the picture you already edited and warns about the recipe, not about that picture. Repeating onto the same tab bakes it once and does not warn. An outline on its own still repeats.
 
 **New in 3.11.0:** A small movement while picking still picks the colour under the pointer where it went down. A mouse or pen can move 6 pixels, and a finger 10, before that gesture becomes a pan and will not pick. Letting go after a cancelled gesture does not pick. A transparent pixel says to pick an opaque part. Simple names each advanced edit still on the image — a brush or exclusion, a polygon, a connected selection, manual adjustments, a skin-tone ramp, or changed refinement — and opens that colour's control. A file that cannot be opened stays listed, with its name and the reason, until a later open succeeds or the notice is dismissed. Other files in the same open still open. The status bar stays one line.
 

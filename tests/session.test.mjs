@@ -183,6 +183,59 @@ test("a session without a polygon still opens, and a later save can record one",
   ];
   assert.throws(() => parseSession(JSON.stringify(data)), /polygon/);
 });
+test("baked steps keep omission names and do not invent them for an older session", () => {
+  const shaped = doc("one.png", [1, 2, 3, 255]);
+  shaped.edit.steps = [
+    {
+      rows: [
+        {
+          params: defaults(),
+          seeds: [{ hex: "#ff0000", x: 0, y: 0 }],
+          polygon: [
+            { x: 0, y: 0 },
+            { x: 1, y: 0 },
+            { x: 0, y: 1 },
+          ],
+          mask: [1, 0, 0, 0],
+        },
+      ],
+      omissions: ["polygon", "brush"],
+    },
+    {
+      rows: [
+        {
+          params: defaults(),
+          seeds: [{ hex: "#00ff00" }],
+        },
+      ],
+      approximate: true,
+    },
+  ];
+  const text = writeSession({ active: 0, documents: [shaped] }),
+    saved = JSON.parse(text).documents[0].edit.steps,
+    opened = parseSession(text).documents[0].edit.steps;
+  assert.deepEqual(saved[0].omissions, ["brush", "polygon"]);
+  assert.equal(saved[0].rows[0].polygon, undefined);
+  assert.equal(saved[0].rows[0].mask, undefined);
+  assert.deepEqual(saved[0].rows[0].seeds, [{ hex: "#FF0000" }]);
+  assert.equal(saved[1].approximate, true);
+  assert.equal("omissions" in saved[1], false);
+  assert.deepEqual(opened[0].omissions, ["brush", "polygon"]);
+  assert.equal(opened[1].approximate, true);
+  assert.equal(opened[1].omissions, undefined);
+  const legacy = JSON.parse(text);
+  delete legacy.documents[0].edit.steps[0].omissions;
+  delete legacy.documents[0].edit.steps[1].approximate;
+  const again = parseSession(JSON.stringify(legacy)).documents[0].edit.steps;
+  assert.equal("omissions" in again[0], false);
+  assert.equal("approximate" in again[0], false);
+  assert.equal("omissions" in again[1], false);
+  legacy.documents[0].edit.steps[0].omissions = ["lasso"];
+  assert.throws(
+    () => parseSession(JSON.stringify(legacy)),
+    /baked colour step is unreadable/,
+  );
+});
 test("a recipe is not a session, and a session is not a recipe", () => {
   const session = writeSession({
     active: 0,
