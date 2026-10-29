@@ -1445,6 +1445,9 @@ summary::marker {
   border-radius: 10px;
   background: var(--surface);
   box-shadow: var(--shadow);
+  /* The words sit on the picture. Only the dismiss button takes the pointer,
+     so the top edge of the image can still be magnified. */
+  pointer-events: none;
 }
 .first-use p {
   font-size: 12px;
@@ -1457,6 +1460,7 @@ summary::marker {
 .first-use .icon-button {
   border-color: transparent;
   background: transparent;
+  pointer-events: auto;
 }
 .empty-editor {
   position: absolute;

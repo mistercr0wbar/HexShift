@@ -2826,7 +2826,17 @@ function layout() {
     // An outline needs room past the image's edges. How much is set by the outline
     // being on, never by its width, so dragging the width never rescales the picture.
     spare = edit.outline.on ? 40 : 0,
-    top = floating ? tools.offsetHeight + 10 : 8,
+    tip = $("firstUse"),
+    // The tip is an overlay. While it is up, the picture fits below it the
+    // same way it fits below the tool strip.
+    tipOver =
+      floating &&
+      tip &&
+      !tip.hidden &&
+      getComputedStyle(tip).position === "absolute"
+        ? tip.offsetHeight + 12
+        : 0,
+    top = floating ? tools.offsetHeight + 10 + tipOver : 8,
     bottom = floating
       ? Math.max(
           pane.parentElement.querySelector(".canvas-label")?.offsetHeight || 0,
@@ -3291,7 +3301,10 @@ for (const tab of document.querySelectorAll(".dock-tabs button"))
 // window is not written.
 $("background").onchange = background;
 $("backgroundColour").oninput = background;
-$("dismissTip").onclick = () => ($("firstUse").hidden = true);
+$("dismissTip").onclick = () => {
+  $("firstUse").hidden = true;
+  layout();
+};
 picker = createPicker({
   store: colourStore,
   recent: () => recent,
