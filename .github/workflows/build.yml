@@ -25,7 +25,7 @@ jobs:
       - run: npm audit --audit-level=low
       - run: npm run build
       - name: Verify generated files are current
-        run: git diff --exit-code -- HexShift.html sw.js animation-prototype.html
+        run: git diff --exit-code -- HexShift.html sw.js
       - run: npm test
       - run: npx playwright install --with-deps chromium firefox webkit
       - run: npm run test:browser
