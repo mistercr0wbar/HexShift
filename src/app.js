@@ -7,6 +7,7 @@ import {
   deltasFor,
 } from "./colour.js";
 import {
+  MAX_POLYGON,
   MAX_ROWS,
   colourFamilies,
   prepare,
@@ -128,7 +129,11 @@ let activeDocument = null,
 const waiters = new Set(),
   before = $("beforeCanvas"),
   after = $("resultCanvas"),
-  wipeCanvas = $("wipeCanvas");
+  wipeCanvas = $("wipeCanvas"),
+  polygonBefore = $("polygonBefore"),
+  polygonAfter = $("polygonAfter");
+// Points of a polygon that is not closed yet. The closed one lives on the row.
+let polygonDraft = null;
 let statusTimer = 0;
 // `fade` clears the message after that many ms, if nothing has replaced it.
 function status(message, { fade = 0 } = {}) {
@@ -349,6 +354,7 @@ function invalidateDocumentWork() {
   resetOutlineLayer();
   drag = null;
   space = false;
+  dropDraft();
   $("loupe").hidden = $("brushCursor").hidden = true;
 }
 function unstash(doc) {
@@ -387,7 +393,7 @@ function unstash(doc) {
   $("fileName").textContent = name;
   $("fileDims").textContent =
     w + " × " + h + (doc.still ? " · first frame" : "");
-  for (const canvas of [before, after, wipeCanvas]) {
+  for (const canvas of [before, after, wipeCanvas, polygonBefore, polygonAfter]) {
     canvas.width = w;
     canvas.height = h;
   }
@@ -508,7 +514,7 @@ async function closeDocument(id) {
       edit = freshEdit();
       activate();
       clearVariants();
-      for (const canvas of [before, after, wipeCanvas])
+      for (const canvas of [before, after, wipeCanvas, polygonBefore, polygonAfter])
         canvas.width = canvas.height = 0;
       $("fileName").textContent = "No images open";
       $("fileDims").textContent = "";
@@ -777,6 +783,7 @@ function renderMap() {
 }
 function selectRow(k) {
   if (k === edit.active) return;
+  dropDraft();
   commit("Adjust colour");
   edit.active = k;
   activate();
@@ -788,6 +795,7 @@ function addRow() {
   const used = new Set(edit.rows.map((r) => r.id));
   let id = 1;
   while (used.has(id)) id++;
+  dropDraft();
   action("Add colour", () => {
     edit.rows.push(newRow(id, { ...defaults(), model: params.model }));
     edit.active = edit.rows.length - 1;
@@ -796,6 +804,7 @@ function addRow() {
   status("Added a colour. Click the part of the image to change.");
 }
 function removeRow(k) {
+  dropDraft();
   action("Remove colour", () => {
     const { id } = edit.rows[k];
     edit.rows.splice(k, 1);
@@ -808,6 +817,7 @@ function removeRow(k) {
 // One row per colour family, each set to keep its own colour until changed.
 async function mapAll() {
   if (!pixels || batchAbort) return;
+  dropDraft();
   const iid = imageId;
   commit("Adjust colour");
   try {
@@ -1045,6 +1055,8 @@ function sync() {
   renderSeeds();
   renderMap();
   refreshAdvancedHeld();
+  $("polygonNote").hidden = !edit.rows[edit.active]?.polygon?.length;
+  paintPolygon();
   buttons();
 }
 function setTarget(hex) {
@@ -1448,7 +1460,7 @@ async function openBlob(blob, fileName, isSample = false, redraw = false) {
     gesture = null;
     clearVariants();
     resetOutlineLayer();
-    for (const canvas of [before, after, wipeCanvas]) {
+    for (const canvas of [before, after, wipeCanvas, polygonBefore, polygonAfter]) {
       canvas.width = w;
       canvas.height = h;
     }
@@ -1484,6 +1496,7 @@ async function openBlob(blob, fileName, isSample = false, redraw = false) {
 }
 function restore(redo) {
   if (batchAbort || !pixels) return;
+  dropDraft();
   commit("Adjust colour");
   const moved = history.move({ pixels, overrides }, redo);
   if (!moved) return;
@@ -1497,6 +1510,7 @@ function restore(redo) {
 }
 async function apply() {
   if (batchAbort || !pixels) return;
+  dropDraft();
   try {
     commit("Adjust colour");
     const r = await latest();
@@ -1522,6 +1536,7 @@ async function apply() {
   }
 }
 function reset() {
+  dropDraft();
   action("Reset image edits", () => {
     pixels = original.slice();
     overrides = new Int8Array(w * h);
@@ -1534,6 +1549,7 @@ function reset() {
   status("Image edits restored. The outline stays. Undo is available.");
 }
 function resetAll() {
+  dropDraft();
   action("Reset all edits", () => {
     pixels = original.slice();
     overrides = new Int8Array(w * h);
@@ -2337,6 +2353,7 @@ function selectionKey() {
     activeDocument?.revision,
     seeds,
     rest,
+    edit.rows[edit.active]?.polygon || null,
     others,
     sum,
     edit.outline,
@@ -2541,7 +2558,7 @@ async function currentSteps() {
   return { steps: steps.filter((s) => s.rows.length), preview };
 }
 const SPATIAL_NOTE =
-  "Brush strokes and connected regions are not included.";
+  "Brush strokes, connected regions and polygons are not included.";
 function noteSpatial() {
   $("batchNote").textContent = SPATIAL_NOTE;
   status(SPATIAL_NOTE);
@@ -2583,6 +2600,7 @@ async function saveRecipe() {
 // Applies a recipe on top of the current preview, as one undoable change.
 async function applyRecipe(file) {
   if (!pixels || batchAbort) return;
+  dropDraft();
   noteSpatial();
   const doc = activeDocument,
     request = imageId;
@@ -3012,7 +3030,7 @@ function layout() {
     panX = -(box.x + box.w / 2 - w / 2) * zoom;
     panY = -(box.y + box.h / 2 - h / 2) * zoom + shiftY;
   }
-  for (const c of [before, after, wipeCanvas]) {
+  for (const c of [before, after, wipeCanvas, polygonBefore, polygonAfter]) {
     c.style.width = w * zoom + "px";
     c.style.height = h * zoom + "px";
     c.style.transform = `translate(calc(-50% + ${panX}px),calc(-50% + ${panY}px))`;
@@ -3023,6 +3041,7 @@ function layout() {
   $("zoomReadout").textContent = Math.round(zoom * 100) + "%";
   placeOutline();
   placeArtworkBounds(box);
+  paintPolygon();
 }
 function setZoom(value, anchor) {
   if (!w) return;
@@ -3165,12 +3184,126 @@ function movePinch() {
   panY = ay - ((ay - pinch.panY) * z) / pinch.zoom + now.y - pinch.y;
   layout();
 }
+function dropDraft() {
+  if (!polygonDraft) return;
+  polygonDraft = null;
+  paintPolygon();
+}
+function paintPolygon() {
+  for (const canvas of [polygonBefore, polygonAfter]) {
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+  const committed = edit?.rows?.[edit.active]?.polygon,
+    draft = polygonDraft;
+  if (!w || !h || (!committed?.length && !draft?.length)) return;
+  for (const canvas of [polygonBefore, polygonAfter]) {
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, w, h);
+    if (committed?.length >= 3)
+      strokePoly(ctx, committed, true, "rgba(110, 240, 255, 0.95)");
+    if (draft?.length) strokePoly(ctx, draft, false, "rgba(232, 128, 46, 0.95)");
+  }
+}
+function strokePoly(ctx, points, closed, colour) {
+  const px = (n) => n / Math.max(zoom || 1, 0.05);
+  ctx.save();
+  ctx.strokeStyle = colour;
+  ctx.fillStyle = colour;
+  ctx.lineWidth = px(1.75);
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  points.forEach((p, i) => {
+    const x = p.x + 0.5,
+      y = p.y + 0.5;
+    if (i) ctx.lineTo(x, y);
+    else ctx.moveTo(x, y);
+  });
+  if (closed) {
+    ctx.closePath();
+    ctx.globalAlpha = 0.16;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  ctx.stroke();
+  points.forEach((p, i) => {
+    ctx.beginPath();
+    ctx.arc(
+      p.x + 0.5,
+      p.y + 0.5,
+      px(i === 0 && !closed ? 4.5 : 2.75),
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+  });
+  ctx.restore();
+}
+function addPolygonPoint(p) {
+  if (!pixels) return;
+  if (!polygonDraft) polygonDraft = [];
+  const first = polygonDraft[0];
+  if (first && p.x === first.x && p.y === first.y) {
+    if (polygonDraft.length >= 3) completePolygon();
+    else status("A polygon needs at least 3 points.");
+    return;
+  }
+  const last = polygonDraft.at(-1);
+  if (last && last.x === p.x && last.y === p.y) return;
+  if (polygonDraft.length >= MAX_POLYGON) {
+    status("A polygon can have " + MAX_POLYGON + " points.");
+    return;
+  }
+  polygonDraft.push({ x: p.x, y: p.y });
+  paintPolygon();
+  status(
+    "Polygon point " +
+      polygonDraft.length +
+      ". Enter or the first point closes it. Backspace removes a point.",
+  );
+}
+function completePolygon() {
+  if (!pixels || batchAbort) return;
+  if (!polygonDraft || polygonDraft.length < 3) {
+    status("A polygon needs at least 3 points.");
+    return;
+  }
+  const points = polygonDraft.map((p) => ({ x: p.x, y: p.y }));
+  polygonDraft = null;
+  action("Polygon selection", () => {
+    edit.rows[edit.active].polygon = points;
+  });
+  status("Polygon closed. It limits this colour. Brushes still correct it.");
+}
+function popPolygonPoint() {
+  if (!polygonDraft?.length) return;
+  polygonDraft.pop();
+  if (!polygonDraft.length) polygonDraft = null;
+  paintPolygon();
+  status(
+    polygonDraft
+      ? "Removed the last polygon point. " + polygonDraft.length + " left."
+      : "Removed the last polygon point.",
+  );
+}
+function cancelPolygon() {
+  if (!polygonDraft?.length) return;
+  polygonDraft = null;
+  paintPolygon();
+  status("Polygon cancelled.");
+}
 function setTool(value) {
   tool = value;
   for (const [id, active] of [
     ["pan", value === "pan"],
     ["brushAdd", value === "add"],
     ["brushSubtract", value === "subtract"],
+    ["polygon", value === "polygon"],
     ["replaceSample", value === "pick" && !addSample],
     ["addSample", value === "pick" && addSample],
   ])
@@ -3235,7 +3368,9 @@ for (const c of [before, after]) {
     if (
       p &&
       (e.pointerType !== "touch" ||
-        (drag?.pointer === e.pointerId && !drag.pan && tool === "pick"))
+        (drag?.pointer === e.pointerId &&
+          !drag.pan &&
+          (tool === "pick" || tool === "polygon")))
     )
       loupe(e, c);
     else $("loupe").hidden = true;
@@ -3268,6 +3403,7 @@ for (const c of [before, after]) {
     drag = null;
     if ((tool === "add" || tool === "subtract") && !d.pan)
       commit("Brush selection");
+    else if (!d.pan && !d.moved && p && tool === "polygon") addPolygonPoint(p);
     else if (!d.pan && !d.moved && p) {
       const old = addSample;
       addSample ||= e.shiftKey;
@@ -3310,7 +3446,8 @@ async function openFile(f) {
 }
 function sessionDirty(item) {
   if (item.edit.steps.length || item.edit.outline.on) return true;
-  if (item.edit.rows.some((row) => row.seeds.length)) return true;
+  if (item.edit.rows.some((row) => row.seeds.length || row.polygon?.length))
+    return true;
   for (let i = 0; i < item.overrides.length; i++)
     if (item.overrides[i] !== 0) return true;
   const a = item.pixels,
@@ -3526,13 +3663,16 @@ $("model").onchange = (e) =>
 // Clear selection is this colour only. Exclusions (-1) are every colour's.
 $("addRow").onclick = addRow;
 $("mapAll").onclick = mapAll;
-$("clear").onclick = () =>
+$("clear").onclick = () => {
+  dropDraft();
   action("Clear selection", () => {
     const id = edit.rows[edit.active].id;
     seeds.length = 0;
+    delete edit.rows[edit.active].polygon;
     for (let i = 0; i < overrides.length; i++)
       if (overrides[i] === id) overrides[i] = 0;
   });
+};
 $("clearExclusions").onclick = () =>
   action("Clear all exclusions", () => {
     for (let i = 0; i < overrides.length; i++)
@@ -3561,6 +3701,12 @@ $("addSample").onclick = () => {
 $("pan").onclick = () => setTool(tool === "pan" ? "pick" : "pan");
 $("brushAdd").onclick = () => setTool("add");
 $("brushSubtract").onclick = () => setTool("subtract");
+$("polygon").onclick = () => {
+  setTool("polygon");
+  status(
+    "Polygon: click points on the image. Enter or the first point closes it. Escape cancels.",
+  );
+};
 $("brushSize").oninput = (e) =>
   ($("brushSizeValue").textContent = e.target.value + " px");
 $("undo").onclick = () => restore(false);
@@ -3786,6 +3932,7 @@ function advancedOnImage() {
       if (overrides[i] !== 0) return true;
   for (const row of edit.rows) {
     const p = row.params;
+    if (row.polygon?.length) return true;
     if (
       p.connected ||
       p.manual ||
@@ -3921,6 +4068,21 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if (e.altKey) return;
+  if (polygonDraft?.length && key === "enter") {
+    e.preventDefault();
+    completePolygon();
+    return;
+  }
+  if (polygonDraft?.length && key === "backspace") {
+    e.preventDefault();
+    popPolygonPoint();
+    return;
+  }
+  if (polygonDraft?.length && key === "escape") {
+    e.preventDefault();
+    cancelPolygon();
+    return;
+  }
   if (key === "escape") $("clear").click();
   else if (
     e.code === "Space" &&
@@ -3939,6 +4101,7 @@ document.addEventListener("keydown", (e) => {
   else if (key === "a") $("addSample").click();
   else if (key === "b") $("brushAdd").click();
   else if (key === "e") $("brushSubtract").click();
+  else if (key === "p") $("polygon").click();
   else if (key === "h") $("pan").click();
 });
 document.addEventListener("keyup", (e) => {

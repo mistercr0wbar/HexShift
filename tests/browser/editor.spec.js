@@ -1584,3 +1584,109 @@ test("the magnifier follows the pointer to both edges and hides on empty space",
   await cursor(spot.x, spot.y);
   await expect(loupe).toBeHidden();
 });
+test("a polygon limits one colour, and brushes still correct it", async ({
+  page,
+}) => {
+  const w = 8,
+    h = 6,
+    raw = Buffer.alloc(w * h * 4, 255);
+  const put = (x, y, r, g, b) => {
+    const o = (y * w + x) * 4;
+    raw[o] = r;
+    raw[o + 1] = g;
+    raw[o + 2] = b;
+  };
+  for (const [x, y] of [
+    [1, 1],
+    [2, 1],
+    [1, 2],
+    [2, 2],
+  ])
+    put(x, y, 220, 30, 30);
+  for (const [x, y] of [
+    [5, 1],
+    [6, 1],
+    [5, 2],
+    [6, 2],
+  ])
+    put(x, y, 220, 30, 30);
+  const png = await sharp(raw, {
+    raw: { width: w, height: h, channels: 4 },
+  })
+    .png()
+    .toBuffer();
+  await page.locator("#fileInput").setInputFiles({
+    name: "blocks.png",
+    mimeType: "image/png",
+    buffer: png,
+  });
+  await expect(page.locator("#fileDims")).toHaveText("8 × 6");
+  await settled(page);
+  const spot = async (x, y) => {
+    const box = await page.locator("#resultCanvas").boundingBox();
+    return {
+      x: box.x + ((x + 0.5) / w) * box.width,
+      y: box.y + ((y + 0.5) / h) * box.height,
+    };
+  };
+  const clickAt = async (x, y) => {
+    const p = await spot(x, y);
+    await page.mouse.click(p.x, p.y);
+  };
+  await page.keyboard.press("i");
+  await clickAt(1, 1);
+  await expect(page.locator("#seeds .seed")).toHaveCount(1);
+  await page.keyboard.press("p");
+  await expect(page.locator("#polygon")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#status")).toContainText("click points");
+  const from = await spot(5, 1),
+    to = await spot(6, 2);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 8 });
+  await page.mouse.up();
+  await expect(page.locator("#status")).not.toContainText("Polygon point");
+  await clickAt(1, 1);
+  await clickAt(2, 1);
+  await expect(page.locator("#status")).toContainText("Polygon point 2");
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#status")).toContainText("at least 3 points");
+  await expect(page.locator("#seeds .seed")).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#status")).toContainText("cancelled");
+  await expect(page.locator("#seeds .seed")).toHaveCount(1);
+  for (const [x, y] of [
+    [1, 1],
+    [2, 1],
+    [2, 2],
+    [1, 2],
+  ])
+    await clickAt(x, y);
+  await clickAt(1, 1);
+  await expect(page.locator("#status")).toContainText("Polygon closed");
+  await expect(page.locator("#polygonNote")).toBeVisible();
+  await choose(page, "mode", "flat");
+  await page.locator("#targetHex").fill("#1122FF");
+  await page.locator("#targetHex").press("Tab");
+  await settled(page);
+  const pixel = (x, y) =>
+    page.locator("#resultCanvas").evaluate(
+      (c, p) => [...c.getContext("2d").getImageData(p.x, p.y, 1, 1).data],
+      { x, y },
+    );
+  expect(await pixel(1, 1)).toEqual([17, 34, 255, 255]);
+  expect(await pixel(2, 2)).toEqual([17, 34, 255, 255]);
+  expect(await pixel(5, 1)).toEqual([220, 30, 30, 255]);
+  expect(await pixel(0, 0)).toEqual([255, 255, 255, 255]);
+  await page.locator("#brushAdd").click();
+  await page.locator("#brushSize").fill("1");
+  await clickAt(5, 1);
+  await settled(page);
+  expect(await pixel(5, 1)).toEqual([17, 34, 255, 255]);
+  expect(await pixel(6, 1)).toEqual([220, 30, 30, 255]);
+  await page.locator("#brushSubtract").click();
+  await clickAt(1, 1);
+  await settled(page);
+  expect(await pixel(1, 1)).toEqual([220, 30, 30, 255]);
+  expect(await pixel(2, 1)).toEqual([17, 34, 255, 255]);
+});

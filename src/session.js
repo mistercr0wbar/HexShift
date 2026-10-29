@@ -1,6 +1,12 @@
 import { defaults } from "./colour.js";
 import { MAX_DOCUMENTS } from "./documents.js";
-import { validateImage, validateMap, validateParams, validateSeeds } from "./engine.js";
+import {
+  validateImage,
+  validateMap,
+  validateParams,
+  validatePolygon,
+  validateSeeds,
+} from "./engine.js";
 import { FRAME_PAD_MAX } from "./output.js";
 import { CUSTOM_MAX, CUSTOM_MIN, PRESETS } from "./presets.js";
 
@@ -18,7 +24,7 @@ const MAX_STEPS = 32,
   VIEWS = ["result", "side", "wipe"],
   OVERLAYS = ["overlay", "only", "normal"],
   COMPARES = ["working", "original"],
-  TOOLS = ["pick", "pan", "add", "subtract"];
+  TOOLS = ["pick", "pan", "add", "subtract", "polygon"];
 
 export function isSessionFile(file) {
   return (
@@ -73,13 +79,28 @@ function cleanSeeds(seeds, w, h) {
       : { x: s.x, y: s.y },
   );
 }
+function cleanPolygon(source, w, h) {
+  if (source == null) return null;
+  try {
+    validatePolygon(source, w, h);
+  } catch {
+    throw Error("A session's polygon is unreadable.");
+  }
+  return source.map((p) => ({ x: p.x, y: p.y }));
+}
 function cleanRows(rows, w, h) {
   if (!Array.isArray(rows)) throw Error("A session's colour map is unreadable.");
-  return rows.map((row) => ({
-    id: row?.id,
-    params: cleanParams(row?.params),
-    seeds: cleanSeeds(row?.seeds, w, h),
-  }));
+  return rows.map((row) => {
+    const clean = {
+      id: row?.id,
+      params: cleanParams(row?.params),
+      seeds: cleanSeeds(row?.seeds, w, h),
+    };
+    // Absent means no polygon, so a session from 3.9.0 still opens.
+    const polygon = cleanPolygon(row?.polygon ?? null, w, h);
+    if (polygon) clean.polygon = polygon;
+    return clean;
+  });
 }
 function cleanSteps(steps, w, h) {
   if (!Array.isArray(steps) || steps.length > MAX_STEPS)

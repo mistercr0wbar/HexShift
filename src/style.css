@@ -1583,7 +1583,8 @@ summary::marker {
 canvas#beforeCanvas,
 canvas#resultCanvas,
 canvas#wipeCanvas,
-canvas#outlineCanvas {
+canvas#outlineCanvas,
+canvas.polygon-layer {
   position: absolute;
   left: 50%;
   top: 50%;
@@ -1591,10 +1592,11 @@ canvas#outlineCanvas {
   image-rendering: auto;
   touch-action: none;
 }
-canvas#outlineCanvas {
+canvas#outlineCanvas,
+canvas.polygon-layer {
   pointer-events: none;
 }
-.viewport.pixelated canvas {
+.viewport.pixelated canvas:not(.polygon-layer) {
   image-rendering: pixelated;
 }
 #wipeCanvas {

@@ -8,7 +8,7 @@ import {
 } from "./engine.js";
 // A recipe repeats colour changes on other images: a list of steps, each a
 // colour map applied in turn. Samples are stored as colours, not places, so
-// brush strokes and connected-region limits are left out.
+// brush strokes, connected-region limits and polygons are left out.
 export const MAX_RECIPE_BYTES = 64 * 1024,
   MAX_STEPS = 32;
 const NUMBERS = ["hueTol", "shadeTol", "soft", "feather", "dh", "ds", "dl"],
@@ -45,11 +45,12 @@ const keep = (p) => {
   return out;
 };
 // The colour map as a recipe step: rows that have samples, each sample
-// replaced by its colour in `pixels`. `approximate` says brush strokes or
-// connected regions were in play.
+// replaced by its colour in `pixels`. `approximate` says brush strokes,
+// connected regions or a polygon were in play. The polygon is not copied.
 export function recipeStep(rows, pixels, width, labels) {
   const step = { rows: [], approximate: false };
   for (const row of rows) {
+    if (row.polygon?.length) step.approximate = true;
     if (!row.seeds.length) continue;
     step.rows.push({
       params: keep(row.params),

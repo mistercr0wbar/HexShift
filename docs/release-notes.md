@@ -1,5 +1,7 @@
 # Hex Shift 3
 
+**New in 3.10.0:** A polygon can limit the active colour to an area of the image. Click the points; Enter or the first point closes it. Backspace removes the last point and Escape cancels. It is not a freehand lasso. The add and subtract brushes still correct the result. The polygon belongs to that colour. It is not the strokes that keep pixels out of every colour. A session keeps it. An older session still opens. A recipe leaves the polygon out and says so before it repeats.
+
 **New in 3.9.0:** Export can frame the finished picture, outline included. Trim transparent margins cuts away the empty edge. Padding adds a transparent border, in pixels. Scaling is Smooth, as before, or Nearest neighbour, which keeps hard pixels. All three start off. With them off, an export matches 3.8.0. The same framing is used for one image, its variants, a batch, and the size readout. A session from 3.8.0 still opens. Saving again can record the framing. A file that does not mention it means framing is off.
 
 **New in 3.8.0:** Save session and Open session keep every open image, the colour map, brush marks, the outline, an SVG source, the view, the export choices, and variant colours. Opening the file rebuilds the previews. It does not restore undo or redo, and it does not save by itself. A session is not a recipe: recipes still leave out brush strokes and connected regions. A damaged file is refused and leaves the open images as they are. The file stays where you save it.
