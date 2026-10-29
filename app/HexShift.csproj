@@ -34,7 +34,7 @@
 
   <ItemGroup>
     <!-- compile against the SDK only; the DLLs are embedded below, not copied next to the exe -->
-    <PackageReference Include="Microsoft.Web.WebView2" Version="[1.0.4258.31]" GeneratePathProperty="true" ExcludeAssets="build;native;contentFiles;runtime" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="[1.0.4314.35]" GeneratePathProperty="true" ExcludeAssets="build;native;contentFiles;runtime" />
     <!-- lets the net48 build run on any machine with the .NET SDK, including the GitHub runner -->
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="[1.0.3]" PrivateAssets="all" />
     <!-- Ed25519 checks for update feeds and installers. No dependencies; embedded below like WebView2. -->
