@@ -1,6 +1,7 @@
 // The workspace: layouts and panels, the menu bar, the outline in the viewer, the
 // update check shown in the page, and the things that must hold still while you drag.
 import { test, expect } from "@playwright/test";
+import { ensureHeart } from "./fixture.mjs";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import sharp from "sharp";
@@ -11,6 +12,7 @@ const settled = (page, timeout = 15000) =>
     timeout,
   });
 async function ready(page) {
+  await ensureHeart(page);
   await expect(page.locator("#palette button").first()).toBeVisible();
   await settled(page);
 }
@@ -241,11 +243,17 @@ test("panels collapse by their headers, and the layout follows the window", asyn
   expect(s.x).toBeLessThan(c.x);
   expect(c.x).toBeLessThan(e.x);
   await expect(page.locator("#splitRight")).toBeHidden();
-  // The dock's height follows its handle's arrow keys.
+  // An arrow that only opens empty dock space is given back to the picture.
+  // The size the person asked for is still stored.
   const before = (await page.locator("#dock").boundingBox()).height;
   await page.locator("#dockHandle").focus();
   await page.keyboard.press("ArrowUp");
-  expect((await page.locator("#dock").boundingBox()).height).toBe(before + 16);
+  expect((await page.locator("#dock").boundingBox()).height).toBe(before);
+  expect(
+    await page.evaluate(
+      () => JSON.parse(localStorage.getItem("hexshift-layout")).sizes.dock,
+    ),
+  ).toBe(before + 16);
 
   // A phone: one group of panels at a time from the tab bar; nothing collapses
   // there, even a panel that was collapsed in the other layouts.
@@ -391,10 +399,10 @@ test("a locked layout ignores moves, and reset still clears it", async ({
 test("an unreadable layout is ignored and left untouched", async ({ page }) => {
   await page.evaluate(() => localStorage.setItem("hexshift-layout", "{"));
   await page.reload();
-  await ready(page);
   await expect(page.locator("#status")).toContainText(
     "Saved layout could not be read and was ignored.",
   );
+  await ready(page);
   await expect(page.locator("#main")).toHaveAttribute("data-preset", "side");
   expect(
     await page.evaluate(() => localStorage.getItem("hexshift-layout")),
@@ -1278,4 +1286,154 @@ test("in the Windows app File > Exit asks before leaving unsaved work", async ({
   await item(page, "Exit").click();
   await page.getByRole("button", { name: "Quit", exact: true }).click();
   await expect.poll(closed).toBe(true);
+});
+
+test("a panel can sit beside a neighbour or share its tabs, and layout undo puts it back", async ({
+  page,
+}) => {
+  await page.locator('[data-panel="adjust"] .panel-menu').click();
+  await page.getByRole("menuitem", { name: "Place left", exact: true }).click();
+  await expect(page.locator("#layoutLive")).toHaveText(
+    "Adjust placed to the left of Colour.",
+  );
+  const adjust = await page.locator('[data-panel="adjust"]').boundingBox();
+  const colour = await page.locator('[data-panel="colour"]').boundingBox();
+  expect(adjust.x + adjust.width / 2).toBeLessThan(colour.x + colour.width / 2);
+  const overlap =
+    Math.min(adjust.x + adjust.width, colour.x + colour.width) -
+    Math.max(adjust.x, colour.x);
+  expect(overlap).toBeLessThan(8);
+  expect(
+    Math.min(adjust.y + adjust.height, colour.y + colour.height),
+  ).toBeGreaterThan(Math.max(adjust.y, colour.y));
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+  ).toBe(true);
+
+  await openView(page);
+  await page.getByRole("menuitem", { name: "Layout", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Undo layout", exact: true }).click();
+  await expect(page.locator("#layoutLive")).toHaveText("Layout undone.");
+  const stacked = await page.locator('[data-panel="adjust"]').boundingBox();
+  const colourAgain = await page.locator('[data-panel="colour"]').boundingBox();
+  expect(stacked.y).toBeGreaterThan(colourAgain.y + colourAgain.height - 8);
+
+  await page.locator('[data-panel="adjust"] .panel-menu').click();
+  await page.getByRole("menuitem", { name: "Move into tabs", exact: true }).click();
+  await expect(page.locator("#layoutLive")).toHaveText(
+    "Adjust tabbed with Swatches.",
+  );
+  await expect(page.locator(".panel-tab")).toHaveText(["Swatches", "Adjust"]);
+  await expect(page.locator('[data-panel="adjust"]')).toBeVisible();
+  await expect(page.locator('[data-panel="swatches"]')).toBeHidden();
+  await page.locator('.panel-tab[data-tab="swatches"]').click();
+  await expect(page.locator('[data-panel="swatches"]')).toBeVisible();
+  await expect(page.locator('[data-panel="adjust"]')).toBeHidden();
+  await page.reload();
+  await ready(page);
+  await expect(page.locator(".panel-tab")).toHaveText(["Swatches", "Adjust"]);
+  await expect(page.locator('[data-panel="swatches"]')).toBeVisible();
+
+  const before = await page.evaluate(() => localStorage.getItem("hexshift-layout"));
+  const grip = page.locator('[data-panel="selection"] .panel-grip');
+  const from = await grip.boundingBox();
+  const target = await page.locator('[data-panel="colour"]').boundingBox();
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x + 40, target.y + target.height / 2, { steps: 12 });
+  await expect(page.locator("#dropIndicator")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.mouse.up();
+  expect(await page.evaluate(() => localStorage.getItem("hexshift-layout"))).toBe(
+    before,
+  );
+  await expect(
+    page.locator('[data-region="left"] [data-panel="selection"]'),
+  ).toHaveCount(1);
+});
+
+test("a tall dock keeps only the height its panels use, and artwork bounds stay off the export", async ({
+  browser,
+  baseURL,
+}) => {
+  const saved = {
+    v: 1,
+    mode: "custom",
+    locked: false,
+    collapsed: [],
+    touched: [],
+    hidden: ["swatches", "outline"],
+    regions: {
+      left: [["selection"]],
+      right: [["export"]],
+      bottom: [["colour", "adjust"]],
+    },
+    sizes: { left: 280, right: 320, dock: 600 },
+    spans: { colour: 500 },
+    phoneTabs: ["selection", "colour", "swatches", "export"],
+  };
+  const context = await browser.newContext({
+    viewport: { width: 1600, height: 1000 },
+    baseURL,
+  });
+  await context.addInitScript((text) => {
+    localStorage.setItem("hexshift-layout", text);
+  }, JSON.stringify(saved));
+  const page = await context.newPage();
+  await page.goto("/");
+  await ready(page);
+  const dock = await page.locator('[data-region="bottom"]').boundingBox();
+  const colour = await page.locator('[data-panel="colour"]').boundingBox();
+  const adjust = await page.locator('[data-panel="adjust"]').boundingBox();
+  expect(dock.height).toBeLessThan(400);
+  expect(adjust.y).toBeGreaterThanOrEqual(colour.y + colour.height - 2);
+  expect(adjust.y + adjust.height).toBeLessThanOrEqual(dock.y + dock.height + 2);
+  const canvas = await page.locator("#resultCanvas").boundingBox();
+  expect(canvas.height).toBeGreaterThan(80);
+  const track = await page.locator("#dh").evaluate((el) => el.getBoundingClientRect().width);
+  expect(track).toBeGreaterThan(40);
+  expect(track).toBeLessThanOrEqual(230);
+  const keys = await page.evaluate(() => Object.keys(localStorage).sort());
+  await page
+    .getByRole("menubar")
+    .getByRole("menuitem", { name: "View", exact: true })
+    .click();
+  await page.getByRole("menuitemcheckbox", { name: "Artwork bounds" }).click();
+  const guide = page.locator(".pane.after .artwork-bounds");
+  await expect(guide).toBeVisible();
+  const bounds = await guide.boundingBox();
+  const painted = await page.locator("#resultCanvas").evaluate((c) => {
+    const data = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+    let minX = c.width,
+      minY = c.height,
+      maxX = -1,
+      maxY = -1;
+    for (let y = 0; y < c.height; y++)
+      for (let x = 0; x < c.width; x++) {
+        if (!data[(y * c.width + x) * 4 + 3]) continue;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    const art = c.getBoundingClientRect();
+    return {
+      w: (maxX - minX + 1) * (art.width / c.width),
+      h: (maxY - minY + 1) * (art.height / c.height),
+    };
+  });
+  expect(Math.abs(bounds.width - painted.w)).toBeLessThan(2);
+  expect(Math.abs(bounds.height - painted.h)).toBeLessThan(2);
+  expect(
+    await page.locator("#resultCanvas").evaluate((c) => {
+      const data = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+      for (let i = 3; i < data.length; i += 4) if (data[i] === 0) return true;
+      return false;
+    }),
+  ).toBe(true);
+  expect(await page.evaluate(() => Object.keys(localStorage).sort())).toEqual(keys);
+  await page.reload();
+  await ready(page);
+  await expect(page.locator(".artwork-bounds").first()).toBeHidden();
+  await context.close();
 });

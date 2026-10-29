@@ -150,7 +150,10 @@ fieldset {
   z-index: 30;
   pointer-events: none;
   background: var(--accent);
-  border-radius: 2px;
+  opacity: 0.28;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 6px;
 }
 .sprite {
   position: absolute;
@@ -872,6 +875,70 @@ summary::marker {
   background: var(--accent);
   outline: none;
 }
+.panel-split.v {
+  width: 6px;
+  height: auto;
+  margin: 0 -3px;
+  align-self: stretch;
+  cursor: col-resize;
+}
+.split-h {
+  display: flex;
+  flex: none;
+  flex-direction: row;
+  min-width: 0;
+  min-height: 0;
+}
+.split-h > .stack,
+.split-h > .split-h {
+  min-width: 0;
+  min-height: 0;
+}
+.tab-group {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.tab-strip {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  min-width: 0;
+  padding: 2px 2px 0;
+  overflow: auto;
+}
+.panel-tab {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.panel-tab[aria-selected="true"] {
+  background: var(--hover);
+  color: var(--ink);
+}
+.tab-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.tab-body > .panel {
+  border-bottom: 0;
+}
 
 /* Panels */
 .panel {
@@ -1005,6 +1072,8 @@ summary::marker {
   flex-direction: column;
   gap: var(--gap);
   padding: 0 var(--pad) 8px;
+  /* A wide dock does not stretch every control across the window. */
+  max-width: 440px;
 }
 .panel-body > * {
   margin: 0;
@@ -1012,6 +1081,7 @@ summary::marker {
 .panel select,
 .panel .segmented {
   width: 100%;
+  max-width: 440px;
 }
 .field-grid {
   display: grid;
@@ -1033,9 +1103,12 @@ summary::marker {
 /* One row to a slider: its name, the track, and the number. */
 .slider {
   display: grid;
-  grid-template-columns: 7.6em minmax(0, 1fr) 4.4em;
+  grid-template-columns: minmax(0, 7.6em) minmax(40px, 220px) 4.4em;
   align-items: center;
+  justify-content: start;
   column-gap: 6px;
+  width: fit-content;
+  max-width: 100%;
   min-height: var(--ctl-sm);
 }
 .slider label {
@@ -1296,6 +1369,10 @@ summary::marker {
   align-items: flex-start;
   gap: 6px;
   flex-wrap: wrap;
+  /* Two or three rows, then the strip scrolls. A short picture is not covered
+     by a stack of toolbars. */
+  max-height: min(46%, 148px);
+  overflow: auto;
   pointer-events: none;
 }
 .canvas-tools {
@@ -1368,6 +1445,9 @@ summary::marker {
   border-radius: 10px;
   background: var(--surface);
   box-shadow: var(--shadow);
+  /* The words sit on the picture. Only the dismiss button takes the pointer,
+     so the top edge of the image can still be magnified. */
+  pointer-events: none;
 }
 .first-use p {
   font-size: 12px;
@@ -1380,6 +1460,20 @@ summary::marker {
 .first-use .icon-button {
   border-color: transparent;
   background: transparent;
+  pointer-events: auto;
+}
+.empty-editor {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 24px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--muted);
+  pointer-events: none;
 }
 .viewport {
   position: relative;
@@ -1444,6 +1538,16 @@ canvas#outlineCanvas {
 }
 .viewport[data-view="wipe"] #wipeCanvas {
   display: block;
+}
+.artwork-bounds {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  box-sizing: border-box;
+  border: 1px dashed var(--accent);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 4;
 }
 .canvas-label {
   position: absolute;

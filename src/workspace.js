@@ -15,20 +15,26 @@ import {
   LAYOUT_KEY,
   PANELS,
   SPAN_LIMITS,
-  fitSavedSizes,
+  CENTRE_MIN,
+  allocate,
   applyPreset,
+  canStep,
   defaultLayout,
   hidePanel,
-  insertPanel,
   locate,
   materialize,
   moveBy,
   movePhoneTab,
   moveToRegion,
+  panelsIn,
   panelTitle,
   parseLayout,
+  placePanel,
+  placeRelative,
   placement,
   regionSpoken,
+  setActive,
+  setFlex,
   showPanel,
   validateLayout,
 } from "./layout.js";
@@ -178,17 +184,24 @@ export function createWorkspace(main, opts = {}) {
     preset = null,
     lastDesktop = "side",
     ready = false,
+    persisted = false,
     announceToken = 0,
     openFor = null,
     openButton = null;
   const collapsed = new Set(),
-    touched = new Set();
+    touched = new Set(),
+    undoStack = [],
+    redoStack = [];
 
   try {
     const text = storage()?.getItem(LAYOUT_KEY);
-    if (text != null) layout = parseLayout(text);
+    if (text != null) {
+      layout = parseLayout(text);
+      persisted = true;
+    }
   } catch {
     layout = defaultLayout();
+    persisted = false;
     warning = "Saved layout could not be read and was ignored.";
   }
   for (const id of layout.collapsed) collapsed.add(id);
@@ -210,6 +223,7 @@ export function createWorkspace(main, opts = {}) {
       if (!store) throw Error("unavailable");
       store.setItem(LAYOUT_KEY, JSON.stringify(clean));
       layout = clean;
+      persisted = true;
       return true;
     } catch {
       return false;
@@ -243,6 +257,62 @@ export function createWorkspace(main, opts = {}) {
     const plan = visualPlan();
     return plan ? locate(plan, id) : null;
   };
+  // Layout undo is separate from image undo. It remembers the arrangement
+  // before a move, resize, hide, preset, lock, collapse or reset. Fitting a
+  // window does not. A step that had not been stored removes the key again.
+  function remember() {
+    undoStack.push({ layout: structuredClone(layout), persisted });
+    if (undoStack.length > 50) undoStack.shift();
+    redoStack.length = 0;
+  }
+  function applyEntry(entry) {
+    layout = structuredClone(entry.layout);
+    collapsed.clear();
+    touched.clear();
+    for (const id of layout.collapsed) collapsed.add(id);
+    for (const id of layout.touched) touched.add(id);
+    if (entry.persisted) return persist();
+    try {
+      storage()?.removeItem(LAYOUT_KEY);
+    } catch {
+      return false;
+    }
+    persisted = false;
+    for (const name of ["--col-left", "--col-right", "--dock-h"])
+      app.style.removeProperty(name);
+    for (const id of PANELS) panels[id].style.height = "";
+    return true;
+  }
+  function undoLayout() {
+    const entry = undoStack.pop();
+    if (!entry) return;
+    const back = { layout: structuredClone(layout), persisted };
+    if (!applyEntry(entry)) {
+      undoStack.push(entry);
+      report?.("Could not save the layout.");
+      return;
+    }
+    redoStack.push(back);
+    applyCurrent();
+    fit();
+    announce("Layout undone.");
+    onPreset?.();
+  }
+  function redoLayout() {
+    const entry = redoStack.pop();
+    if (!entry) return;
+    const back = { layout: structuredClone(layout), persisted };
+    if (!applyEntry(entry)) {
+      redoStack.push(entry);
+      report?.("Could not save the layout.");
+      return;
+    }
+    undoStack.push(back);
+    applyCurrent();
+    fit();
+    announce("Layout redone.");
+    onPreset?.();
+  }
   function commit(result, message) {
     if (!result?.changed) {
       if (result?.reason === "locked") announce("Layout is locked.");
@@ -251,12 +321,14 @@ export function createWorkspace(main, opts = {}) {
     const previous = layout,
       folds = [...collapsed],
       touchedIds = [...touched];
+    remember();
     layout = result.layout;
     collapsed.clear();
     touched.clear();
     for (const id of layout.collapsed) collapsed.add(id);
     for (const id of layout.touched) touched.add(id);
     if (!persist()) {
+      undoStack.pop();
       failSave(previous, folds, touchedIds);
       return false;
     }
@@ -271,16 +343,24 @@ export function createWorkspace(main, opts = {}) {
     const previous = layout,
       folds = [...collapsed],
       touchedIds = [...touched];
+    remember();
     layout = { ...layout, sizes: { ...layout.sizes, [key]: value } };
-    if (!persist()) failSave(previous, folds, touchedIds);
+    if (!persist()) {
+      undoStack.pop();
+      failSave(previous, folds, touchedIds);
+    }
   }
   function saveSpan(id, value) {
     if (!ready || layout.locked || layout.spans[id] === value) return;
     const previous = layout,
       folds = [...collapsed],
       touchedIds = [...touched];
+    remember();
     layout = { ...layout, spans: { ...layout.spans, [id]: value } };
-    if (!persist()) failSave(previous, folds, touchedIds);
+    if (!persist()) {
+      undoStack.pop();
+      failSave(previous, folds, touchedIds);
+    }
   }
 
   function renderCollapse() {
@@ -307,6 +387,55 @@ export function createWorkspace(main, opts = {}) {
         items[i].after(makeSplit(id));
       }
     }
+    for (const row of main.querySelectorAll(".region:not([hidden]) .split-h")) {
+      const blocks = [...row.children].filter(
+        (el) => el.classList.contains("stack") || el.classList.contains("split-h"),
+      );
+      for (let i = 0; i < blocks.length - 1; i++) blocks[i].after(makeColumnSplit(row, i));
+    }
+  }
+  function makeColumnSplit(row, index) {
+    const handle = document.createElement("div");
+    handle.className = "panel-split v";
+    handle.setAttribute("role", "separator");
+    handle.setAttribute("aria-orientation", "vertical");
+    handle.setAttribute("aria-label", "Resize columns");
+    handle.setAttribute("aria-valuemin", "80");
+    handle.setAttribute("aria-valuemax", "800");
+    const blocks = () =>
+      [...row.children].filter(
+        (el) => el.classList.contains("stack") || el.classList.contains("split-h"),
+      );
+    const read = () => blocks()[index]?.offsetWidth || 80;
+    handle.setAttribute("aria-valuenow", String(Math.round(read())));
+    handle.tabIndex = layout.locked ? -1 : 0;
+    resizer(handle, {
+      axis: "x",
+      invert: false,
+      min: () => 80,
+      max: () => Math.max(81, row.clientWidth - 80),
+      read,
+      write: (v) => {
+        const kids = blocks();
+        const mine = kids[index],
+          other = kids[index + 1];
+        if (!mine || !other) return;
+        mine.style.flex = Math.round(v) + " 1 0px";
+        other.style.flex = Math.max(80, Math.round(row.clientWidth - v)) + " 1 0px";
+      },
+      locked: () => layout.locked,
+      announce,
+      commit: () => {
+        const kids = blocks();
+        const region = row.closest("[data-region]")?.dataset.region;
+        if (!region || kids.length < 2) return;
+        const path = row.dataset.path ? row.dataset.path.split(".").filter(Boolean).map(Number) : [];
+        const flex = kids.map((el) => Math.max(1, Math.round(el.offsetWidth)));
+        const result = setFlex(layout, region, path, flex);
+        commit(result, "Columns resized.");
+      },
+    });
+    return handle;
   }
   function makeSplit(id) {
     const handle = document.createElement("div");
@@ -334,7 +463,11 @@ export function createWorkspace(main, opts = {}) {
       write: (v) => (panels[id].style.height = v + "px"),
       locked: () => layout.locked,
       announce,
-      commit: (v) => saveSpan(id, v),
+      commit: (v) => {
+        saveSpan(id, v);
+        containTallPanels();
+        reclaimDock();
+      },
     });
     return handle;
   }
@@ -345,7 +478,7 @@ export function createWorkspace(main, opts = {}) {
       for (const id of PHONE_GROUPS[tab]) if (!hidden.has(id)) ids.push(id);
     return ids;
   }
-  function place(plan) {
+  function placeStacks(plan) {
     const shown = new Set();
     for (const [name, region] of Object.entries(regions)) {
       const stacks = region.querySelector(".stacks"),
@@ -356,6 +489,7 @@ export function createWorkspace(main, opts = {}) {
           stack.className = "stack";
           for (const id of ids) {
             shown.add(id);
+            panels[id].hidden = false;
             stack.append(panels[id]);
           }
           return stack;
@@ -365,6 +499,123 @@ export function createWorkspace(main, opts = {}) {
     }
     for (const id of PANELS) if (!shown.has(id)) park.append(panels[id]);
   }
+  function fillLeaf(container, node, shown) {
+    if (node.panels.length === 1) {
+      const id = node.panels[0];
+      shown.add(id);
+      panels[id].hidden = false;
+      container.append(panels[id]);
+      return;
+    }
+    const group = document.createElement("div");
+    group.className = "tab-group";
+    group.dataset.active = node.active;
+    const strip = document.createElement("div");
+    strip.className = "tab-strip";
+    strip.setAttribute("role", "tablist");
+    strip.setAttribute("aria-label", node.panels.map(panelTitle).join(", "));
+    const body = document.createElement("div");
+    body.className = "tab-body";
+    for (const id of node.panels) {
+      shown.add(id);
+      const tab = document.createElement("button");
+      tab.type = "button";
+      tab.className = "panel-tab";
+      tab.dataset.tab = id;
+      tab.setAttribute("role", "tab");
+      tab.setAttribute("aria-selected", String(id === node.active));
+      tab.textContent = panelTitle(id);
+      tab.addEventListener("click", () => activateTab(id));
+      strip.append(tab);
+      panels[id].hidden = id !== node.active;
+      body.append(panels[id]);
+    }
+    strip.addEventListener("keydown", (e) => {
+      if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(e.key)) return;
+      const current = strip.querySelector('[aria-selected="true"]')?.dataset.tab;
+      const loc = current && locate(layout.regions, current);
+      if (!loc) return;
+      let index = loc.tabs.indexOf(current);
+      if (e.key === "ArrowRight") index = (index + 1) % loc.tabs.length;
+      else if (e.key === "ArrowLeft") index = (index - 1 + loc.tabs.length) % loc.tabs.length;
+      else if (e.key === "Home") index = 0;
+      else index = loc.tabs.length - 1;
+      e.preventDefault();
+      e.stopPropagation();
+      activateTab(loc.tabs[index]);
+    });
+    group.append(strip, body);
+    container.append(group);
+  }
+  function renderBlock(node, shown, path) {
+    if (node.t === "split" && node.d === "h") {
+      const row = document.createElement("div");
+      row.className = "split-h";
+      row.dataset.path = path;
+      node.children.forEach((child, i) => {
+        const block = renderBlock(child, shown, path ? path + "." + i : String(i));
+        const grow = node.flex?.[i] || 1;
+        block.style.flex = grow + " 1 0px";
+        row.append(block);
+      });
+      return row;
+    }
+    const stack = document.createElement("div");
+    stack.className = "stack";
+    if (node.t === "leaf") fillLeaf(stack, node, shown);
+    else
+      node.children.forEach((child, i) => {
+        const childPath = path ? path + "." + i : String(i);
+        if (child.t === "leaf") fillLeaf(stack, child, shown);
+        else stack.append(renderBlock(child, shown, childPath));
+      });
+    return stack;
+  }
+  function placeTrees(plan) {
+    const shown = new Set();
+    for (const [name, region] of Object.entries(regions)) {
+      const host = region.querySelector(".stacks");
+      const node = plan[name];
+      if (!node || !panelsIn(node).length) {
+        region.hidden = true;
+        host.replaceChildren();
+        continue;
+      }
+      region.hidden = false;
+      if (node.t === "split" && node.d === "h")
+        host.replaceChildren(
+          ...node.children.map((child, i) => renderBlock(child, shown, String(i))),
+        );
+      else host.replaceChildren(renderBlock(node, shown, ""));
+    }
+    for (const id of PANELS) if (!shown.has(id)) park.append(panels[id]);
+  }
+  function activateTab(id) {
+    const result = setActive(layout, id);
+    if (!result.changed) return;
+    const previous = layout,
+      folds = [...collapsed],
+      touchedIds = [...touched];
+    remember();
+    layout = result.layout;
+    if (!persist()) {
+      undoStack.pop();
+      failSave(previous, folds, touchedIds);
+      return;
+    }
+    const group = panels[id].closest(".tab-group");
+    if (!group) {
+      applyCurrent();
+      fit();
+      return;
+    }
+    group.dataset.active = id;
+    for (const child of group.querySelectorAll(":scope > .tab-body > [data-panel]"))
+      child.hidden = child.dataset.panel !== id;
+    for (const tab of group.querySelectorAll(".panel-tab"))
+      tab.setAttribute("aria-selected", String(tab.dataset.tab === id));
+    group.querySelector(`.panel-tab[data-tab="${id}"]`)?.focus();
+  }
   function clearInlineGrid() {
     main.style.gridTemplateColumns = "";
     main.style.gridTemplateRows = "";
@@ -373,18 +624,19 @@ export function createWorkspace(main, opts = {}) {
   function setCustomGrid(plan) {
     const columns = [],
       top = [];
-    if (plan.left.length) {
+    const occupied = (node) => !!node && panelsIn(node).length > 0;
+    if (occupied(plan.left)) {
       columns.push("var(--col-left)");
       top.push("left");
     }
     columns.push("minmax(0, 1fr)");
     top.push("centre");
-    if (plan.right.length) {
+    if (occupied(plan.right)) {
       columns.push("var(--col-right)");
       top.push("right");
     }
     main.style.gridTemplateColumns = columns.join(" ");
-    if (plan.bottom.length) {
+    if (occupied(plan.bottom)) {
       const bottom = Array(columns.length).fill("bottom").join(" ");
       main.style.gridTemplateRows = "minmax(220px, 1fr) var(--dock-h)";
       main.style.gridTemplateAreas = `"${top.join(" ")}" "${bottom}"`;
@@ -403,7 +655,7 @@ export function createWorkspace(main, opts = {}) {
     }
     // Hidden regions do not spend the picture's reserve. Preferred sizes stay
     // in `layout.sizes`; only the variables on the page change.
-    const fitted = fitSavedSizes(layout.sizes, {
+    const fitted = allocate(layout.sizes, {
       width: main.clientWidth,
       height: main.clientHeight,
       left: !regions.left.hidden,
@@ -468,12 +720,12 @@ export function createWorkspace(main, opts = {}) {
     clearInlineGrid();
     if (next === "phone") {
       const ids = phoneOrder();
-      place({ left: [], right: [], bottom: ids.length ? [ids] : [] });
+      placeStacks({ left: [], right: [], bottom: ids.length ? [ids] : [] });
     } else if (next === "custom") {
       const plan = placement(layout, "custom", PRESETS);
       setCustomGrid(plan);
-      place(plan);
-    } else place(placement(layout, next, PRESETS));
+      placeTrees(plan);
+    } else placeTrees(placement(layout, next, PRESETS));
     syncSplitters();
     renderCollapse();
     syncPhoneTabs();
@@ -496,30 +748,72 @@ export function createWorkspace(main, opts = {}) {
       }
     }
   }
-  function growDock() {
-    if (layout.sizes.dock != null) return;
-    const cap = Math.min(600, Math.max(160, innerHeight - 320));
-    for (let guard = 0; guard < 40 && overflowing(); guard++) {
-      const height = regions.bottom.offsetHeight;
-      if (height + 16 > cap) return;
-      app.style.setProperty("--dock-h", Math.min(cap, height + 16) + "px");
+  // How tall a panel is when it shows its own controls and no empty body.
+  // A stretched body reports its own scroll height as the void, so the
+  // controls are measured instead.
+  function contentHeight(panel) {
+    const head = panel.querySelector(".panel-head")?.offsetHeight || 0;
+    const body = panel.querySelector(".panel-body");
+    if (!body || body.hidden) return head;
+    const kids = [...body.children].filter((el) => el.offsetHeight > 0);
+    let inner = 0;
+    for (const kid of kids) inner += kid.offsetHeight;
+    const style = getComputedStyle(body);
+    const pad =
+      (parseFloat(style.paddingTop) || 0) +
+      (parseFloat(style.paddingBottom) || 0);
+    const gap = parseFloat(style.rowGap) || parseFloat(style.gap) || 0;
+    if (kids.length > 1) inner += gap * (kids.length - 1);
+    return Math.ceil(head + inner + pad) + 1;
+  }
+  // A saved panel height taller than its controls leaves a void that pushes
+  // the next panel out of the dock. The applied height comes back to the
+  // controls. The stored height is left as the person set it.
+  function containTallPanels() {
+    if (main.querySelector(".panel-split.dragging")) return;
+    for (const panel of main.querySelectorAll(
+      ".region:not([hidden]) [data-panel]",
+    )) {
+      if (!panel.style.height || panel.dataset.collapsed === "true") continue;
+      const need = contentHeight(panel);
+      if (panel.offsetHeight > need + 8) panel.style.height = need + "px";
     }
   }
+  // The bottom dock keeps the height its panels are using. Spare space goes
+  // back to the picture. A dock taller than the picture can spare scrolls
+  // inside itself instead of covering the toolbars above it.
+  function reclaimDock() {
+    const region = regions.bottom;
+    if (region.hidden || preset === "phone") return;
+    if (main.querySelector(".splitter.dragging, .panel-split.dragging")) return;
+    const stacks = region.querySelectorAll(":scope > .stacks > .stack");
+    let needed = 0;
+    for (const stack of stacks) {
+      let height = 0;
+      for (const child of stack.children) height += child.offsetHeight;
+      needed = Math.max(needed, height);
+    }
+    if (!needed) return;
+    const maxDock = Math.max(120, main.clientHeight - CENTRE_MIN);
+    const next = Math.min(Math.ceil(needed) + 2, maxDock);
+    if (Math.abs(region.offsetHeight - next) > 1)
+      app.style.setProperty("--dock-h", next + "px");
+  }
   function fit() {
-    if (preset === "phone" || preset === "custom") {
+    if (preset === "phone") {
       refreshSplits();
+      syncLocks();
       return;
     }
-    if (preset === "dock") {
-      if (layout.mode === "dock") {
-        growDock();
-        foldAuto();
-      }
-      refreshSplits();
-      return;
+    containTallPanels();
+    reclaimDock();
+    if (preset !== "custom") {
+      foldAuto();
+      containTallPanels();
+      reclaimDock();
     }
-    foldAuto();
     refreshSplits();
+    syncLocks();
   }
 
   function chosen() {
@@ -622,8 +916,10 @@ export function createWorkspace(main, opts = {}) {
     const previous = layout,
       folds = [...collapsed],
       touchedIds = [...touched];
+    remember();
     layout = { ...layout, locked: !!on };
     if (!persist()) {
+      undoStack.pop();
       failSave(previous, folds, touchedIds);
       return;
     }
@@ -631,12 +927,19 @@ export function createWorkspace(main, opts = {}) {
     announce(on ? "Layout locked." : "Layout unlocked.");
   }
   function reset() {
+    const previous = layout,
+      folds = [...collapsed],
+      touchedIds = [...touched];
+    remember();
     try {
       storage()?.removeItem(LAYOUT_KEY);
     } catch {
+      undoStack.pop();
+      failSave(previous, folds, touchedIds);
       report?.("Could not save the layout.");
       return;
     }
+    persisted = false;
     layout = defaultLayout();
     collapsed.clear();
     touched.clear();
@@ -675,24 +978,59 @@ export function createWorkspace(main, opts = {}) {
         ["Hide", locked || shown <= 1, () => tryHide(id)],
       ];
     }
-    const loc = visualLocate(id),
-      stack = loc ? visualPlan()[loc.region][loc.stack] : [];
+    const plan = visualPlan();
+    const place = (zone, label) => [
+      label,
+      locked || !canPlace(id, zone),
+      () => tryPlace(id, zone),
+    ];
     return [
-      ["Move to left column", locked || loc?.region === "left", () => tryRegion(id, "left")],
+      ["Move to left column", locked || !plan || locate(plan, id)?.region === "left", () => tryRegion(id, "left")],
       [
         "Move to right column",
-        locked || loc?.region === "right",
+        locked || !plan || locate(plan, id)?.region === "right",
         () => tryRegion(id, "right"),
       ],
-      ["Move to bottom", locked || loc?.region === "bottom", () => tryRegion(id, "bottom")],
-      ["Move up", locked || !loc || loc.index === 0, () => tryBy(id, -1)],
-      [
-        "Move down",
-        locked || !loc || loc.index >= stack.length - 1,
-        () => tryBy(id, 1),
-      ],
+      ["Move to bottom", locked || !plan || locate(plan, id)?.region === "bottom", () => tryRegion(id, "bottom")],
+      ["Move up", locked || !plan || !canStep(plan, id, -1), () => tryBy(id, -1)],
+      ["Move down", locked || !plan || !canStep(plan, id, 1), () => tryBy(id, 1)],
+      place("left", "Place left"),
+      place("right", "Place right"),
+      place("above", "Place above"),
+      place("below", "Place below"),
+      place("centre", "Move into tabs"),
       ["Hide", locked || shown <= 1, () => tryHide(id)],
     ];
+  }
+  function canPlace(id, zone) {
+    if (layout.locked || preset === "phone") return false;
+    try {
+      return placeRelative(editing(), id, zone).changed === true;
+    } catch {
+      return false;
+    }
+  }
+  function tryPlace(id, zone) {
+    closeMenu();
+    if (layout.locked) {
+      announce("Layout is locked.");
+      return;
+    }
+    const result = placeRelative(editing(), id, zone);
+    const beside = result.beside ? panelTitle(result.beside) : "";
+    const where = {
+      left: "to the left of",
+      right: "to the right of",
+      above: "above",
+      below: "below",
+    }[zone];
+    commit(
+      result,
+      zone === "centre"
+        ? panelTitle(id) + " tabbed with " + beside + "."
+        : panelTitle(id) + " placed " + where + " " + beside + ".",
+    );
+    focusPanel(id);
   }
   function openMenu(id, button, which = "first") {
     closeMenu();
@@ -799,31 +1137,43 @@ export function createWorkspace(main, opts = {}) {
         startY = e.clientY;
       let dragging = false;
       grip.setPointerCapture(e.pointerId);
+      let cancelled = false;
+      const onKey = (ev) => {
+        if (ev.key !== "Escape") return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        cancelled = true;
+        dragging = false;
+        if (indicator) indicator.hidden = true;
+      };
+      window.addEventListener("keydown", onKey, true);
       const move = (m) => {
+        if (cancelled) return;
         if (!dragging) {
           if (Math.hypot(m.clientX - startX, m.clientY - startY) < 4) return;
           dragging = true;
         }
-        const hit = hitTest(m.clientX, m.clientY);
+        const hit = aimed(id, m.clientX, m.clientY);
         if (hit) showIndicator(hit);
         else if (indicator) indicator.hidden = true;
       };
       const stop = (m) => {
+        window.removeEventListener("keydown", onKey, true);
         grip.removeEventListener("pointermove", move);
         grip.removeEventListener("pointerup", stop);
         grip.removeEventListener("pointercancel", stop);
-        const dropped = dragging && m.type !== "pointercancel";
+        const dropped = dragging && !cancelled && m.type !== "pointercancel";
         dragging = false;
         if (indicator) indicator.hidden = true;
         if (!dropped) return;
-        const hit = hitTest(m.clientX, m.clientY);
+        const hit = aimed(id, m.clientX, m.clientY);
         if (!hit) return;
         const before = visualLocate(id),
-          result = insertPanel(editing(), id, hit);
+          result = placePanel(editing(), id, hit);
         if (!result.changed) return;
         commit(
           result,
-          dragMessage(id, before, locate(result.layout.regions, id)),
+          dragMessage(id, before, locate(result.layout.regions, id), hit),
         );
         focusPanel(id);
       };
@@ -832,61 +1182,60 @@ export function createWorkspace(main, opts = {}) {
       grip.addEventListener("pointercancel", stop);
     });
   }
-  function endOf(name) {
-    const plan = visualPlan();
-    const stacks = plan?.[name] || [];
-    if (!stacks.length) return { region: name, stack: 0, index: 0 };
-    return {
-      region: name,
-      stack: stacks.length - 1,
-      index: stacks[stacks.length - 1].length,
-    };
+  // The zone the pointer is in. The middle groups the panel as a tab. An edge
+  // is the nearer side, so a corner follows the edge it is closer to.
+  function zoneOf(rect, x, y) {
+    const px = (x - rect.left) / Math.max(1, rect.width),
+      py = (y - rect.top) / Math.max(1, rect.height),
+      dx = Math.min(px, 1 - px),
+      dy = Math.min(py, 1 - py);
+    if (dx > 0.26 && dy > 0.26) return "centre";
+    if (dx < dy) return px < 0.5 ? "left" : "right";
+    return py < 0.5 ? "above" : "below";
+  }
+  function aimed(id, x, y) {
+    const hit = hitTest(x, y);
+    if (!hit || hit.target === id) return hit && hit.target !== id ? hit : hit?.zone === "end" ? hit : null;
+    try {
+      if (!placePanel(editing(), id, hit).changed) return null;
+    } catch {
+      return null;
+    }
+    return hit;
   }
   function hitTest(x, y) {
     const bounds = main.getBoundingClientRect();
     if (x < bounds.left || x > bounds.right || y < bounds.top || y > bounds.bottom)
       return null;
     const el = document.elementFromPoint(x, y);
+    const fromPanel = (panelId, zone) => {
+      const loc = visualLocate(panelId);
+      if (!loc) return null;
+      return { region: loc.region, zone, target: panelId };
+    };
     if (el?.classList?.contains("panel-split")) {
       const prev = el.previousElementSibling;
-      const loc = prev?.dataset.panel ? visualLocate(prev.dataset.panel) : null;
-      if (loc) return { region: loc.region, stack: loc.stack, index: loc.index + 1 };
+      const panelId = prev?.dataset?.panel || prev?.querySelector?.("[data-panel]")?.dataset.panel;
+      if (panelId) return fromPanel(panelId, el.classList.contains("v") ? "right" : "below");
     }
-    if (el?.id === "splitLeft") return endOf("left");
-    if (el?.id === "splitRight") return endOf("right");
-    if (el?.id === "dockHandle") return endOf("bottom");
+    if (el?.id === "splitLeft") return { region: "left", zone: "end" };
+    if (el?.id === "splitRight") return { region: "right", zone: "end" };
+    if (el?.id === "dockHandle") return { region: "bottom", zone: "end" };
+    const tab = el?.closest?.(".panel-tab");
+    if (tab?.dataset.tab) return fromPanel(tab.dataset.tab, "centre");
     const panel = el?.closest?.("[data-panel]");
     if (panel && main.contains(panel) && !panel.closest("#panelPark")) {
-      const loc = visualLocate(panel.dataset.panel);
-      if (!loc) return null;
       const rect = panel.getBoundingClientRect();
-      const after = y > rect.top + rect.height / 2;
-      return {
-        region: loc.region,
-        stack: loc.stack,
-        index: loc.index + (after ? 1 : 0),
-      };
+      return fromPanel(panel.dataset.panel, zoneOf(rect, x, y));
     }
     const regionEl = el?.closest?.("[data-region]");
-    if (regionEl && main.contains(regionEl)) {
-      const name = regionEl.dataset.region,
-        plan = visualPlan(),
-        stacks = plan?.[name] || [];
-      if (!stacks.length) return { region: name, stack: 0, index: 0 };
-      const stackEls = [...regionEl.querySelectorAll(":scope > .stacks > .stack")];
-      let stack = stackEls.length - 1;
-      stackEls.forEach((node, i) => {
-        const rect = node.getBoundingClientRect();
-        if (x >= rect.left && x <= rect.right) stack = i;
-      });
-      return { region: name, stack, index: (stacks[stack] || []).length };
-    }
+    if (regionEl && main.contains(regionEl))
+      return { region: regionEl.dataset.region, zone: "end" };
     if (regions.bottom.hidden && y > bounds.bottom - 48)
-      return { region: "bottom", stack: 0, index: 0 };
-    if (regions.left.hidden && x < bounds.left + 28)
-      return { region: "left", stack: 0, index: 0 };
+      return { region: "bottom", zone: "end" };
+    if (regions.left.hidden && x < bounds.left + 28) return { region: "left", zone: "end" };
     if (regions.right.hidden && x > bounds.right - 28)
-      return { region: "right", stack: 0, index: 0 };
+      return { region: "right", zone: "end" };
     return null;
   }
   function showIndicator(hit) {
@@ -904,40 +1253,64 @@ export function createWorkspace(main, opts = {}) {
   }
   function indicatorBox(hit) {
     const region = regions[hit.region];
-    if (region.hidden) {
-      const rect = main.getBoundingClientRect();
+    if (region.hidden || !hit.target) {
+      const rect = region.hidden ? main.getBoundingClientRect() : region.getBoundingClientRect();
       if (hit.region === "bottom")
-        return { left: rect.left, top: rect.bottom - 4, width: rect.width, height: 4 };
+        return { left: rect.left, top: (region.hidden ? rect.bottom : rect.bottom) - 6, width: rect.width, height: 6 };
       if (hit.region === "left")
-        return { left: rect.left, top: rect.top, width: 4, height: rect.height };
-      return { left: rect.right - 4, top: rect.top, width: 4, height: rect.height };
+        return { left: rect.left, top: rect.top, width: region.hidden ? 6 : rect.width, height: region.hidden ? rect.height : 6 };
+      return {
+        left: region.hidden ? rect.right - 6 : rect.left,
+        top: rect.top,
+        width: region.hidden ? 6 : rect.width,
+        height: region.hidden ? rect.height : 6,
+      };
     }
-    const stack = region.querySelectorAll(":scope > .stacks > .stack")[hit.stack];
-    const items = stack ? [...stack.querySelectorAll(":scope > [data-panel]")] : [];
-    const panel = items[hit.index] || items.at(-1);
-    if (!panel) {
-      const rect = (stack || region).getBoundingClientRect();
-      return { left: rect.left, top: rect.top, width: rect.width, height: 4 };
-    }
-    const rect = panel.getBoundingClientRect(),
-      after = hit.index >= items.length;
+    const panel = panels[hit.target];
+    if (!panel || !panel.isConnected) return null;
+    const rect = panel.getBoundingClientRect();
+    if (hit.zone === "centre")
+      return {
+        left: rect.left + 6,
+        top: rect.top + 6,
+        width: Math.max(8, rect.width - 12),
+        height: Math.max(8, rect.height - 12),
+      };
+    if (hit.zone === "left")
+      return { left: rect.left, top: rect.top, width: Math.max(8, rect.width / 2), height: rect.height };
+    if (hit.zone === "right")
+      return {
+        left: rect.left + rect.width / 2,
+        top: rect.top,
+        width: Math.max(8, rect.width / 2),
+        height: rect.height,
+      };
+    if (hit.zone === "above")
+      return { left: rect.left, top: rect.top, width: rect.width, height: Math.max(8, rect.height / 2) };
     return {
       left: rect.left,
-      top: (after ? rect.bottom : rect.top) - 2,
+      top: rect.top + rect.height / 2,
       width: rect.width,
-      height: 4,
+      height: Math.max(8, rect.height / 2),
     };
   }
-  function dragMessage(id, before, after) {
+  function dragMessage(id, before, after, hit) {
     const title = panelTitle(id);
     if (!before || !after) return title + " moved.";
     if (before.region !== after.region)
       return title + " moved to " + regionSpoken(after.region) + ".";
-    if (before.stack === after.stack && after.index < before.index)
-      return title + " moved up.";
-    if (before.stack === after.stack && after.index > before.index)
-      return title + " moved down.";
-    return title + " moved to " + regionSpoken(after.region) + ".";
+    if (hit?.zone === "centre" && hit.target)
+      return title + " tabbed with " + panelTitle(hit.target) + ".";
+    if ((hit?.zone === "above" || hit?.zone === "below") && after.index !== before.index)
+      return title + " moved " + (after.index < before.index ? "up" : "down") + ".";
+    const where = {
+      left: "to the left of",
+      right: "to the right of",
+      above: "above",
+      below: "below",
+    }[hit?.zone];
+    if (where && hit.target) return title + " placed " + where + " " + panelTitle(hit.target) + ".";
+    return title + " moved.";
   }
 
   for (const panel of Object.values(panels)) {
@@ -985,6 +1358,7 @@ export function createWorkspace(main, opts = {}) {
       const previous = layout,
         folds = [...collapsed],
         touchedIds = [...touched];
+      if (byPerson && ready) remember();
       if (on) collapsed.add(id);
       else collapsed.delete(id);
       if (byPerson) touched.add(id);
@@ -996,7 +1370,10 @@ export function createWorkspace(main, opts = {}) {
           collapsed: nextCollapsed,
           touched: PANELS.filter((item) => touched.has(item)),
         };
-        if (!persist()) failSave(previous, folds, touchedIds);
+        if (!persist()) {
+          undoStack.pop();
+          failSave(previous, folds, touchedIds);
+        }
       }
       renderCollapse();
       refreshSplits();
@@ -1008,12 +1385,19 @@ export function createWorkspace(main, opts = {}) {
     setLocked,
     toggleHidden,
     reset,
+    canUndoLayout: () => undoStack.length > 0,
+    canRedoLayout: () => redoStack.length > 0,
+    undoLayout,
+    redoLayout,
     refresh() {
       const next = presented();
       if (next === preset) {
         // The preset name did not change, so folds stay put. Saved column
-        // sizes still have to fit the window that is on screen now.
+        // sizes still have to fit the window that is on screen now, and a
+        // dock gives back any height its panels are not using.
         applySizes({ replace: false });
+        containTallPanels();
+        reclaimDock();
         return false;
       }
       applyCurrent();
@@ -1032,7 +1416,11 @@ export function createWorkspace(main, opts = {}) {
     write: (v) => px("--dock-h", v),
     locked: () => layout.locked,
     announce,
-    commit: (v) => saveSize("dock", v),
+    commit: (v) => {
+      saveSize("dock", v);
+      containTallPanels();
+      reclaimDock();
+    },
   });
 
   applyCurrent();

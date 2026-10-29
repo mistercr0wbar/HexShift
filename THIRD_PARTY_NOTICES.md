@@ -2,7 +2,7 @@
 
 ## Microsoft Fluent Emoji
 
-The sample red heart is from https://github.com/microsoft/fluentui-emoji . Copyright (c) Microsoft Corporation. MIT licence; the permission and warranty terms are included in LICENSE.
+The red heart in `src/sample.js`, used by tests and review screenshots, is from https://github.com/microsoft/fluentui-emoji . Copyright (c) Microsoft Corporation. MIT licence; the permission and warranty terms are included in LICENSE. The app does not embed or open that image.
 
 ## Colour theme palettes
 

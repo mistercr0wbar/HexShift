@@ -1,8 +1,10 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { ensureHeart } from "./fixture.mjs";
 const settled = (page) =>
   expect(page.locator(".app")).toHaveAttribute("data-busy", "false");
 async function ready(page) {
+  await ensureHeart(page);
   await expect(page.locator("#palette button").first()).toBeVisible();
   await settled(page);
 }
@@ -243,10 +245,10 @@ test("a corrupt store is reported and ignored, and a full 48-colour store stays 
     localStorage.setItem("hexshift-colours", "{broken"),
   );
   await page.reload();
-  await ready(page);
   await expect(page.locator("#status")).toContainText(
     "could not be read and were ignored",
   );
+  await ready(page);
   await page.evaluate(() =>
     localStorage.setItem(
       "hexshift-colours",

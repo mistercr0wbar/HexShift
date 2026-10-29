@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import sample from "../../src/sample.js";
+import { ensureHeart } from "./fixture.mjs";
 import sharp from "sharp";
 import AxeBuilder from "@axe-core/playwright";
 import { THEMES, MODIFIERS, resolveTheme } from "../../src/themes.js";
@@ -68,6 +69,7 @@ async function openPanel(page, id) {
     await toggle.click();
 }
 async function ready(page) {
+  await ensureHeart(page);
   await expect(page.locator("#palette button").first()).toBeVisible();
   await settled(page);
 }
@@ -742,6 +744,7 @@ test("responsive workspace, keyboard palette and theme persist without image sto
   await page.locator("#saveCurrentColour").click();
   expect(await page.evaluate(() => Object.keys(localStorage).sort())).toEqual([
     "hexshift-colours",
+    "hexshift-introduced",
     "hexshift-layout",
     "hexshift-theme",
   ]);
@@ -1032,6 +1035,7 @@ test("on touch screens controls are finger-sized and two fingers pinch to zoom",
   });
   const page = await context.newPage();
   await page.goto("/");
+  await ensureHeart(page);
   await expect(page.locator("#palette button").first()).toBeAttached();
   await settled(page);
   for (const selector of [
@@ -1149,10 +1153,10 @@ test("themes and modifiers apply, persist in the one theme setting and pass acce
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   expect(
     await page.evaluate(() => [
-      Object.keys(localStorage),
+      Object.keys(localStorage).sort(),
       localStorage.getItem("hexshift-theme"),
     ]),
-  ).toEqual([["hexshift-theme"], "night:nord"]);
+  ).toEqual([["hexshift-introduced", "hexshift-theme"], "night:nord"]);
   await page.reload();
   await ready(page);
   expect(await token(page, "--surface")).toBe("#21262f");
@@ -1341,7 +1345,7 @@ test("closing repeated imports releases fallback pixel buffers", async ({
   });
   const page = await context.newPage();
   await page.goto(baseURL);
-  await ready(page);
+  await settled(page);
   const cdp = await context.newCDPSession(page),
     fixture = await sharp({
       create: { width: 512, height: 512, channels: 4, background: "#f00000" },
@@ -1349,17 +1353,15 @@ test("closing repeated imports releases fallback pixel buffers", async ({
       .png()
       .toBuffer();
   async function load() {
-    const count = await page.getByRole("tab").count(),
-      sample =
-        (await page.locator("#fileName").textContent()) === "red_heart.png";
+    const count = await page.getByRole("tab").count();
     await page.locator("#fileInput").setInputFiles({
       name: "memory.png",
       mimeType: "image/png",
       buffer: fixture,
     });
     await expect(page.locator("#fileDims")).toHaveText("512 × 512");
-    await expect(page.getByRole("tab")).toHaveCount(sample ? count : count + 1);
-    await ready(page);
+    await expect(page.getByRole("tab")).toHaveCount(count + 1);
+    await settled(page);
   }
   await load();
   await cdp.send("HeapProfiler.collectGarbage");
@@ -1377,4 +1379,119 @@ test("closing repeated imports releases fallback pixel buffers", async ({
       (first.backingStorageSize || first.usedSize),
   ).toBeLessThan(16 * 1024 * 1024);
   await context.close();
+});
+
+test("a new window is a blank editor, and the getting-started tip shows once", async ({
+  browser,
+  baseURL,
+}) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.goto(baseURL + "/");
+  await expect(page.locator("#fileName")).toHaveText("No images open");
+  await expect(page.locator("#emptyEditor")).toBeVisible();
+  await expect(page.locator("#status")).toHaveText("Open an image to begin.");
+  await expect(page.locator("#export")).toBeDisabled();
+  await expect(page.getByRole("tab")).toHaveCount(0);
+  await expect(page.locator("#firstUse")).toBeVisible();
+  await expect(page.locator("#firstUse")).toContainText(
+    "Pick a colour. Make it yours.",
+  );
+  await ensureHeart(page);
+  await expect(page.locator("#emptyEditor")).toBeHidden();
+  await expect(page.locator("#fileName")).toHaveText("red_heart.png");
+  await page.reload();
+  await expect(page.locator("#firstUse")).toBeHidden();
+  await expect(page.locator("#emptyEditor")).toBeVisible();
+  await expect(page.locator("#fileName")).toHaveText("No images open");
+  await context.close();
+
+  for (const [key, value] of [
+    ["hexshift-theme", "default:default"],
+    ["hexshift-layout", "{"],
+    ["hexshift-colours", "{"],
+    ["hexshift-introduced", "1"],
+  ]) {
+    const again = await browser.newContext();
+    await again.addInitScript(
+      ([storedKey, storedValue]) => localStorage.setItem(storedKey, storedValue),
+      [key, value],
+    );
+    const next = await again.newPage();
+    await next.goto(baseURL + "/");
+    await expect(next.locator("#firstUse")).toBeHidden();
+    await expect(next.locator("#emptyEditor")).toBeVisible();
+    await again.close();
+  }
+});
+
+test("the magnifier follows the pointer to both edges and hides on empty space", async ({
+  page,
+}) => {
+  const canvas = page.locator("#resultCanvas");
+  const box = await canvas.boundingBox();
+  const { w, h } = await canvas.evaluate((el) => ({
+    w: el.width,
+    h: el.height,
+  }));
+  const loupe = page.locator("#loupe");
+  const place = () => loupe.boundingBox();
+  const cursor = (x, y) => page.mouse.move(x, y);
+
+  const cx = box.x + box.width / 2,
+    cy = box.y + box.height / 2;
+  await cursor(cx, cy);
+  await expect(loupe).toBeVisible();
+  const mid = await place();
+  const near =
+    (mid.x >= cx + 12 && mid.x < cx + 40) ||
+    (mid.x + mid.width <= cx - 12 && mid.x + mid.width > cx - 40);
+  expect(near).toBe(true);
+  expect(mid.y).toBeGreaterThan(cy);
+
+  await cursor(box.x + 1, box.y + box.height / 2);
+  await expect(page.locator("#pixelReadout")).toContainText(/^0,/);
+  await cursor(box.x + box.width - 1, box.y + box.height / 2);
+  await expect(page.locator("#pixelReadout")).toContainText(
+    new RegExp("^" + (w - 1) + ","),
+  );
+  const right = await place();
+  const cursorX = box.x + box.width - 1;
+  // Beside the pointer, on whichever side still fits. Not parked on the pixel.
+  expect(
+    right.x >= cursorX + 12 || right.x + right.width <= cursorX - 12,
+  ).toBe(true);
+
+  await cursor(box.x + box.width / 2, box.y + 1);
+  await expect(page.locator("#pixelReadout")).toContainText(/, 0 ·/);
+  await cursor(box.x + box.width / 2, box.y + box.height - 1);
+  await expect(page.locator("#pixelReadout")).toContainText(
+    new RegExp(", " + (h - 1) + " ·"),
+  );
+  const bottom = await place();
+  const cursorY = box.y + box.height - 1;
+  expect(
+    bottom.y >= cursorY + 12 || bottom.y + bottom.height <= cursorY - 12,
+  ).toBe(true);
+
+  await cursor(box.x + box.width * 0.62, box.y + box.height / 2);
+  const across = await place();
+  await cursor(box.x + box.width * 0.86, box.y + box.height / 2);
+  const further = await place();
+  expect(Math.abs(further.x - across.x)).toBeGreaterThan(10);
+
+  const spot = await page.evaluate(() => {
+    const art = document.querySelector("#resultCanvas").getBoundingClientRect();
+    const space = document
+      .querySelector("#resultCanvas")
+      .parentElement.getBoundingClientRect();
+    if (art.bottom + 8 < space.bottom)
+      return { x: art.left + art.width / 2, y: art.bottom + 8 };
+    if (art.right + 8 < space.right)
+      return { x: art.right + 8, y: art.top + art.height / 2 };
+    return null;
+  });
+  expect(spot).toBeTruthy();
+  await cursor(spot.x, spot.y);
+  await expect(loupe).toBeHidden();
 });

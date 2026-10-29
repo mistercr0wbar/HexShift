@@ -8,6 +8,7 @@ import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { THEMES, MODIFIERS, DEFAULT_THEME } from "../src/themes.js";
+import sample from "../src/sample.js";
 
 const kind = ["themes", "website"].find((k) => process.argv.includes(k));
 const sizes =
@@ -41,6 +42,12 @@ for (const [label, width, height] of sizes)
         mode + ":" + theme,
       );
       await page.goto(pathToFileURL(resolve("HexShift.html")).href);
+      // The app opens blank. Screenshots open a file so the editor is shown at work.
+      await page.locator("#fileInput").setInputFiles({
+        name: "red_heart.png",
+        mimeType: "image/png",
+        buffer: Buffer.from(sample.split(",")[1], "base64"),
+      });
       await page
         .locator("#palette button")
         .first()
