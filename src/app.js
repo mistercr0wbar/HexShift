@@ -145,6 +145,8 @@ let polygonDraft = null;
 // that belongs to a draft already cleared.
 let polygonPointer = null;
 let polygonEpoch = 0;
+// A committed point being dragged. The row stays unchanged until the gesture ends.
+let polygonHold = null;
 function closeSlop(pointerType) {
   return pointerType === "touch" ? 12 : 8;
 }
@@ -3450,6 +3452,7 @@ function startPinch(space, e) {
   // Drop the first finger's gesture before anything that can throw. A pinch
   // must not end in a pick, including when pointer capture is unavailable.
   const brushing = drag && !drag.pan && (tool === "add" || tool === "subtract");
+  if (drag?.grab) cancelGrab(drag);
   if (drag) drag.pickDisqualified = true;
   drag = null;
   if (brushing) commit("Brush selection");
@@ -3474,7 +3477,9 @@ function movePinch() {
 function dropDraft() {
   polygonEpoch++;
   polygonPointer = null;
-  if (!polygonDraft) return;
+  const held = polygonHold;
+  polygonHold = null;
+  if (!polygonDraft && !held) return;
   polygonDraft = null;
   paintPolygon();
 }
@@ -3483,7 +3488,7 @@ function paintPolygon() {
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
-  const committed = edit?.rows?.[edit.active]?.polygon,
+  const committed = polygonHold?.points ?? edit?.rows?.[edit.active]?.polygon,
     draft = polygonDraft;
   if (!w || !h || (!committed?.length && !draft?.length)) return;
   for (const canvas of [polygonBefore, polygonAfter]) {
@@ -3494,11 +3499,14 @@ function paintPolygon() {
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, w, h);
     if (committed?.length >= 3)
-      strokePoly(ctx, committed, true, "rgba(110, 240, 255, 0.95)");
+      strokePoly(ctx, committed, true, "rgba(110, 240, 255, 0.95)", {
+        grab: polygonHold ? polygonHold.index : -1,
+      });
     if (draft?.length)
       strokePoly(ctx, draft, false, "rgba(232, 128, 46, 0.95)", {
         close: polygonPointer?.close,
-        pointer: polygonPointer,
+        pointer: drag?.grab ? null : polygonPointer,
+        grab: drag?.grab?.source === "draft" ? drag.grab.index : -1,
       });
   }
 }
@@ -3533,16 +3541,17 @@ function strokePoly(ctx, points, closed, colour, extra = {}) {
   }
   points.forEach((p, i) => {
     const closing = i === 0 && !closed && extra.close;
+    const grabbed = extra.grab === i;
     ctx.beginPath();
     ctx.arc(
       p.x + 0.5,
       p.y + 0.5,
-      px(closing ? 7 : i === 0 && !closed ? 4.5 : 2.75),
+      px(closing || grabbed ? 7 : i === 0 && !closed ? 4.5 : 2.75),
       0,
       Math.PI * 2,
     );
     ctx.fill();
-    if (closing) {
+    if (closing || grabbed) {
       ctx.lineWidth = px(1.5);
       ctx.strokeStyle = "#fff";
       ctx.stroke();
@@ -3612,6 +3621,106 @@ function vertexClient(canvas, p) {
     x: r.left + ((p.x + 0.5) / canvas.width) * r.width,
     y: r.top + ((p.y + 0.5) / canvas.height) * r.height,
   };
+}
+// The same displayed distance that closes a polygon. A point inside it can be dragged.
+function grabTarget(canvas, clientX, clientY, pointerType) {
+  if (tool !== "polygon" || !canvas?.width) return null;
+  const points = polygonDraft?.length
+    ? polygonDraft
+    : edit?.rows?.[edit.active]?.polygon;
+  if (!points?.length) return null;
+  if (!polygonDraft?.length && points.length < 3) return null;
+  const slop = closeSlop(pointerType || "mouse");
+  let best = null;
+  let bestD = slop;
+  points.forEach((p, index) => {
+    const at = vertexClient(canvas, p);
+    const d = Math.hypot(clientX - at.x, clientY - at.y);
+    if (d > bestD) return;
+    bestD = d;
+    best = {
+      source: polygonDraft?.length ? "draft" : "committed",
+      index,
+      point: { x: p.x, y: p.y },
+    };
+  });
+  return best;
+}
+// Image pixel under the pointer, kept on the picture so a point can sit on the edge.
+function imagePoint(e, canvas) {
+  const r = canvas.getBoundingClientRect();
+  if (!r.width || !r.height || !w || !h) return null;
+  return {
+    x: clamp(Math.floor(((e.clientX - r.left) / r.width) * w), 0, w - 1),
+    y: clamp(Math.floor(((e.clientY - r.top) / r.height) * h), 0, h - 1),
+  };
+}
+function moveGrabbed(grab, next) {
+  if (!next) return;
+  if (grab.source === "draft") {
+    const p = polygonDraft?.[grab.index];
+    if (!p || (p.x === next.x && p.y === next.y)) return;
+    polygonDraft[grab.index] = { x: next.x, y: next.y };
+    paintPolygon();
+    return;
+  }
+  const held = polygonHold;
+  if (!held || held.index !== grab.index) return;
+  const p = held.points[held.index];
+  if (!p || (p.x === next.x && p.y === next.y)) return;
+  held.points[held.index] = { x: next.x, y: next.y };
+  paintPolygon();
+}
+function cancelGrab(d) {
+  if (!d?.grab) return;
+  if (
+    d.grab.source === "draft" &&
+    polygonDraft?.[d.grab.index] &&
+    d.polygonEpoch === polygonEpoch
+  )
+    polygonDraft[d.grab.index] = { x: d.grab.from.x, y: d.grab.from.y };
+  polygonHold = null;
+  d.grab = null;
+  d.suppress = true;
+  paintPolygon();
+}
+function finishGrab(d, e, canvas) {
+  const grab = d.grab;
+  const stale = tool !== "polygon" || d.polygonEpoch !== polygonEpoch;
+  const under = point(e, canvas);
+  const onPoint = under && under.x === grab.from.x && under.y === grab.from.y;
+  if (grab.source === "draft") {
+    if (stale || !polygonDraft?.[grab.index]) return;
+    const now = polygonDraft[grab.index];
+    const changed = now.x !== grab.from.x || now.y !== grab.from.y;
+    if (changed) {
+      status("Moved polygon point " + (grab.index + 1) + ".");
+      return;
+    }
+    // A click that did not move the point is the old click. At a zoom, that
+    // click can sit on another point's pixel while still closing or adding.
+    return "click";
+  }
+  const held = polygonHold;
+  polygonHold = null;
+  if (stale || !held) {
+    paintPolygon();
+    return;
+  }
+  const before = edit.rows[edit.active]?.polygon;
+  const same =
+    before?.length === held.points.length &&
+    before.every((p, i) => p.x === held.points[i].x && p.y === held.points[i].y);
+  if (same) {
+    paintPolygon();
+    if (onPoint) return;
+    return "click";
+  }
+  const points = held.points.map((p) => ({ x: p.x, y: p.y }));
+  action("Move polygon point", () => {
+    edit.rows[edit.active].polygon = points;
+  });
+  status("Moved a polygon point. It still limits this colour.");
 }
 // The edge from the last vertex to the pointer, and a close target when the
 // pointer is within 8 CSS pixels (12 for touch) of the first vertex.
@@ -3706,6 +3815,29 @@ for (const c of [before, after]) {
       polygonEpoch,
       toolAtDown: tool,
     };
+    if (!pan && tool === "polygon") {
+      const hit = grabTarget(c, e.clientX, e.clientY, drag.pointerType);
+      if (hit) {
+        drag.grab = {
+          source: hit.source,
+          index: hit.index,
+          from: hit.point,
+        };
+        if (hit.source === "committed")
+          polygonHold = {
+            index: hit.index,
+            points: edit.rows[edit.active].polygon.map((p) => ({
+              x: p.x,
+              y: p.y,
+            })),
+          };
+        before.parentElement.style.cursor = after.parentElement.style.cursor =
+          "grabbing";
+        polygonPointer = null;
+        paintPolygon();
+        status("Drag to move this point.");
+      }
+    }
     if (!pan && (tool === "add" || tool === "subtract")) {
       begin();
       brush(p.x, p.y);
@@ -3739,9 +3871,18 @@ for (const c of [before, after]) {
       cursor.style.width = cursor.style.height =
         Number($("brushSize").value) * zoom + "px";
     }
-    if (drag?.pointer === e.pointerId && drag.pan) {
+    if (drag?.pointer === e.pointerId && drag.grab && !drag.pan) {
+      moveGrabbed(drag.grab, imagePoint(e, c));
+    } else if (drag?.pointer === e.pointerId && drag.pan) {
       /* panning keeps the draft still */
-    } else followPolygon(e, c);
+    } else {
+      followPolygon(e, c);
+      if (tool === "polygon" && !drag) {
+        const hit = grabTarget(c, e.clientX, e.clientY, e.pointerType || "mouse");
+        before.parentElement.style.cursor = after.parentElement.style.cursor =
+          hit ? "grab" : "crosshair";
+      }
+    }
     if (!drag || drag.pointer !== e.pointerId) return;
     const dist = Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY);
     // Crossing the pick threshold turns that gesture into a pan. It stays a
@@ -3769,6 +3910,14 @@ for (const c of [before, after]) {
     if (!drag || drag.pointer !== e.pointerId) return;
     const d = drag;
     drag = null;
+    if (d.suppress) return;
+    if (d.grab) {
+      const fell = finishGrab(d, e, c);
+      if (tool === "polygon")
+        before.parentElement.style.cursor = after.parentElement.style.cursor =
+          "crosshair";
+      if (fell !== "click") return;
+    }
     if ((tool === "add" || tool === "subtract") && !d.pan) {
       commit("Brush selection");
       return;
@@ -3805,6 +3954,7 @@ for (const c of [before, after]) {
   const abandonDrag = (e) => {
     if (!drag || drag.pointer !== e.pointerId) return;
     const brushing = !drag.pan && (tool === "add" || tool === "subtract");
+    if (drag.grab) cancelGrab(drag);
     drag = null;
     if (brushing) commit("Brush selection");
   };
@@ -4146,7 +4296,7 @@ $("brushSubtract").onclick = () => setTool("subtract");
 $("polygon").onclick = () => {
   setTool("polygon");
   status(
-    "Polygon: click points on the image. It limits the colour you picked, and it does not choose that colour. Enter or the first point closes it. Escape cancels the draft.",
+    "Polygon: click points on the image. It limits the colour you picked, and it does not choose that colour. Drag a point to move it. Enter or the first point closes it. Escape cancels the draft.",
   );
 };
 $("brushSize").oninput = (e) =>
@@ -4641,6 +4791,19 @@ document.addEventListener("keydown", (e) => {
   if (polygonDraft?.length && key === "backspace") {
     e.preventDefault();
     popPolygonPoint();
+    return;
+  }
+  if (polygonHold && key === "escape") {
+    e.preventDefault();
+    polygonHold = null;
+    if (drag) {
+      drag.suppress = true;
+      drag.grab = null;
+    }
+    before.parentElement.style.cursor = after.parentElement.style.cursor =
+      "crosshair";
+    paintPolygon();
+    status("Left the polygon point where it was.");
     return;
   }
   if (polygonDraft?.length && key === "escape") {

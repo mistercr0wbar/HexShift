@@ -272,6 +272,122 @@ test("a zoomed close uses CSS pixels, including a finger", async ({ page }) => {
   await expect(page.locator("#status")).toContainText("Polygon closed");
 });
 
+test("a polygon point can be dragged, and that drag is one undo", async ({
+  page,
+}) => {
+  const w = 80,
+    h = 80;
+  await open(page, [await png("move.png", "#FFFFFF", w, h)]);
+  await page.locator("#actual").click();
+  await expect(page.locator("#zoomReadout")).toHaveText("100%");
+  await page.keyboard.press("p");
+  const box = await page.locator("#resultCanvas").boundingBox();
+  const at = (x, y) => spotOf(box, w, h, x, y);
+  for (const [x, y] of [
+    [20, 20],
+    [50, 20],
+    [50, 50],
+  ]) {
+    const p = at(x, y);
+    await page.mouse.click(p.x, p.y);
+  }
+  await page.mouse.click(at(20, 20).x, at(20, 20).y);
+  await expect(page.locator("#status")).toContainText("Polygon closed");
+  const rested = await ink(page);
+  await expect(page.locator("#undo")).toHaveAttribute(
+    "aria-label",
+    "Undo Polygon selection",
+  );
+  const from = at(50, 20);
+  const to = at(50, 40);
+  await page.mouse.move(from.x, from.y);
+  await expect
+    .poll(() =>
+      page
+        .locator("#resultCanvas")
+        .evaluate((el) => getComputedStyle(el.parentElement).cursor),
+    )
+    .toBe("grab");
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 6 });
+  expect(await ink(page)).not.toBe(rested);
+  await expect(page.locator("#undo")).toHaveAttribute(
+    "aria-label",
+    "Undo Polygon selection",
+  );
+  await page.mouse.up();
+  await expect(page.locator("#status")).toContainText("Moved a polygon point");
+  await expect(page.locator("#undo")).toHaveAttribute(
+    "aria-label",
+    "Undo Move polygon point",
+  );
+  const moved = await ink(page);
+  expect(moved).not.toBe(rested);
+  await page.locator("#undo").click();
+  expect(await ink(page)).toBe(rested);
+  await expect(page.locator("#undo")).toHaveAttribute(
+    "aria-label",
+    "Undo Polygon selection",
+  );
+  await page.locator("#redo").click();
+  expect(await ink(page)).toBe(moved);
+  await page.mouse.click(to.x, to.y);
+  await expect(page.locator("#status")).not.toContainText("Polygon point 1");
+  await expect(page.locator("#undo")).toHaveAttribute(
+    "aria-label",
+    "Undo Move polygon point",
+  );
+  await page.mouse.move(to.x, to.y);
+  await page.mouse.down();
+  await page.mouse.move(at(50, 55).x, at(50, 55).y, { steps: 4 });
+  expect(await ink(page)).not.toBe(moved);
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#status")).toContainText(
+    "Left the polygon point",
+  );
+  await page.mouse.up();
+  expect(await ink(page)).toBe(moved);
+  await expect(page.locator("#undo")).toHaveAttribute(
+    "aria-label",
+    "Undo Move polygon point",
+  );
+});
+
+test("dragging a draft point is not history, and a click still closes", async ({
+  page,
+}) => {
+  const w = 80,
+    h = 80;
+  await open(page, [await png("draft.png", "#FFFFFF", w, h)]);
+  await page.locator("#actual").click();
+  await page.keyboard.press("p");
+  const box = await page.locator("#resultCanvas").boundingBox();
+  const at = (x, y) => spotOf(box, w, h, x, y);
+  for (const [x, y] of [
+    [20, 30],
+    [46, 30],
+    [46, 52],
+  ]) {
+    const p = at(x, y);
+    await page.mouse.click(p.x, p.y);
+  }
+  await expect(page.locator("#undo")).toBeDisabled();
+  const from = at(46, 30);
+  const to = at(60, 30);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.locator("#status")).toContainText("Moved polygon point 2");
+  await expect(page.locator("#undo")).toBeDisabled();
+  await page.mouse.click(at(20, 30).x, at(20, 30).y);
+  await expect(page.locator("#status")).toContainText("Polygon closed");
+  await expect(page.locator("#undo")).toHaveAttribute(
+    "aria-label",
+    "Undo Polygon selection",
+  );
+});
+
 test("recipe warnings name only the spatial edits that would be repeated", async ({
   page,
 }) => {

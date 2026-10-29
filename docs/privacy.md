@@ -1,6 +1,6 @@
 # Hex Shift privacy
 
-Updated 29 October 2026 for version 3.13.0 (browser and Windows).
+Updated 29 October 2026 for version 3.14.0 (browser and Windows).
 
 Images are processed on your device. Images, selections, edits and undo history
 stay in memory and are lost when the page closes or reloads, unless you save a
