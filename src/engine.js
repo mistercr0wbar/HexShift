@@ -47,7 +47,7 @@ export function validateEdit(p, seeds, overrides, w, h) {
     throw Error("Invalid selection buffer.");
 }
 // A sample is a pixel ({x, y}) or, in recipes, a colour ({hex}).
-function validateSeeds(seeds, w, h) {
+export function validateSeeds(seeds, w, h) {
   if (
     !Array.isArray(seeds) ||
     seeds.length > MAX_SEEDS ||

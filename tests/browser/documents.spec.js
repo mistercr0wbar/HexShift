@@ -468,3 +468,51 @@ test("quitting checks edits in background tabs through both native-close and Fil
   await page.getByRole("button", { name: "Quit", exact: true }).click();
   await expect.poll(() => page.evaluate(() => !!window.__closed)).toBe(true);
 });
+
+test("a session file restores both tabs and a recipe does not replace them", async ({
+  page,
+}) => {
+  await open(page, [await png("red.png", "#E02020")]);
+  await open(page, [await png("blue.png", "#2040E0")]);
+  await expect(page.getByRole("tab")).toHaveCount(2);
+  const toggle = page.locator('.panel[data-panel="outline"] .panel-toggle');
+  if ((await toggle.getAttribute("aria-expanded")) === "false")
+    await toggle.click();
+  await page.locator("#outline").check();
+  const download = page.waitForEvent("download");
+  await page
+    .getByRole("menubar")
+    .getByRole("menuitem", { name: "File", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: /^Save session/ }).click();
+  const saved = await download;
+  expect(saved.suggestedFilename()).toBe("hexshift.hexshift");
+  await expect(page.locator("#status")).toContainText("Choose where to save it.");
+  await expect(page.getByRole("tab")).toHaveCount(2);
+  const buffer = await readFile(await saved.path());
+  await page.reload();
+  await ready(page);
+  await expect(page.locator("#fileName")).toHaveText("No images open");
+  await page.locator("#sessionInput").setInputFiles({
+    name: "hexshift.hexshift",
+    mimeType: "application/vnd.hexshift.session+json",
+    buffer,
+  });
+  await expect(page.locator("#fileName")).toHaveText("blue.png");
+  await expect(page.getByRole("tab")).toHaveCount(2);
+  await ready(page);
+  if ((await toggle.getAttribute("aria-expanded")) === "false")
+    await toggle.click();
+  await expect(page.locator("#outline")).toBeChecked();
+  await expect(page.locator("#undo")).toHaveAttribute("aria-label", "Undo");
+  await page.locator("#sessionInput").setInputFiles({
+    name: "colours.hexshift",
+    mimeType: "application/vnd.hexshift.session+json",
+    buffer: Buffer.from(
+      JSON.stringify({ format: "hexshift-recipe", version: 1, steps: [] }),
+    ),
+  });
+  await expect(page.locator("#status")).toContainText("recipe, not a session");
+  await expect(page.locator("#fileName")).toHaveText("blue.png");
+  await expect(page.getByRole("tab")).toHaveCount(2);
+});

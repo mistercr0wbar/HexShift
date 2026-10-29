@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-KyYEILjxwy08ghGW7OWJ3lGCB75AW/PCLgfQR9ia4Aw='; style-src 'sha256-hM53KM69A+bkJMUdHGRJ/9pA8zC2+MNDD9ivSiHjxoI='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-A3MWuHR0WtDj5449adX+9ZLophJxh/JzCpSqOrxJKBk='; style-src 'sha256-hM53KM69A+bkJMUdHGRJ/9pA8zC2+MNDD9ivSiHjxoI='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta
       name="theme-color"
@@ -2712,6 +2712,12 @@ dialog details {
           type="file"
           accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
           multiple
+          hidden
+        />
+        <input
+          id="sessionInput"
+          type="file"
+          accept=".hexshift,application/vnd.hexshift.session+json"
           hidden
         />
       </header>
@@ -8563,6 +8569,274 @@ dialog details {
     return pixels2;
   }
 
+  // src/session.js
+  var SESSION_MIME = "application/vnd.hexshift.session+json";
+  var MAX_SESSION_BYTES = 128 * 1024 * 1024;
+  var MAX_STEPS2 = 32;
+  var MAX_VARIANTS = 64;
+  var MAX_NAME = 200;
+  var MAX_SVG_BYTES = 2 * 1024 * 1024;
+  var SVG_EDGES2 = [256, 512, 1024, 2048];
+  var PRESET_IDS = PRESETS.map((p) => p.id);
+  var FORMATS2 = ["png", "webp", "webp-small", "zip"];
+  var VIEWS = ["result", "side", "wipe"];
+  var OVERLAYS = ["overlay", "only", "normal"];
+  var COMPARES = ["working", "original"];
+  var TOOLS = ["pick", "pan", "add", "subtract"];
+  function isSessionFile(file) {
+    return /\.hexshift$/i.test(file?.name || "") || file?.type === SESSION_MIME;
+  }
+  function encodeBytes(view) {
+    const bytes = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+    let text2 = "";
+    for (let i = 0; i < bytes.length; i += 32768)
+      text2 += String.fromCharCode(...bytes.subarray(i, i + 32768));
+    return btoa(text2);
+  }
+  function decodeBytes(text2, Type) {
+    if (typeof text2 !== "string" || !text2.length)
+      throw Error("A session's image data is unreadable.");
+    let bin;
+    try {
+      bin = atob(text2);
+    } catch {
+      throw Error("A session's image data is unreadable.");
+    }
+    const out = new Type(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  function cleanParams2(source) {
+    if (!source || typeof source !== "object" || Array.isArray(source))
+      throw Error("A session row has no settings.");
+    const p = defaults();
+    for (const key of ["hueTol", "shadeTol", "soft", "feather", "dh", "ds", "dl"])
+      if (key in source) p[key] = Number(source[key]);
+    if ("mode" in source) p.mode = source.mode;
+    if ("model" in source) p.model = source.model;
+    if ("target" in source) p.target = String(source.target).toUpperCase();
+    if ("protect" in source) p.protect = source.protect === true;
+    if ("cleanEdges" in source) p.cleanEdges = source.cleanEdges === true;
+    if ("connected" in source) p.connected = source.connected === true;
+    p.manual = source.manual === true;
+    p.ramp = Array.isArray(source.ramp) ? source.ramp.map((v) => String(v).toUpperCase()) : null;
+    validateParams(p);
+    return p;
+  }
+  function cleanSeeds(seeds2, w2, h2) {
+    validateSeeds(seeds2, w2, h2);
+    return seeds2.map(
+      (s) => typeof s.hex === "string" ? { hex: s.hex.toUpperCase() } : { x: s.x, y: s.y }
+    );
+  }
+  function cleanRows(rows, w2, h2) {
+    if (!Array.isArray(rows)) throw Error("A session's colour map is unreadable.");
+    return rows.map((row) => ({
+      id: row?.id,
+      params: cleanParams2(row?.params),
+      seeds: cleanSeeds(row?.seeds, w2, h2)
+    }));
+  }
+  function cleanSteps(steps, w2, h2) {
+    if (!Array.isArray(steps) || steps.length > MAX_STEPS2)
+      throw Error("A session has too many baked colour steps.");
+    return steps.map((step) => {
+      if (!Array.isArray(step?.rows))
+        throw Error("A baked colour step is unreadable.");
+      return {
+        rows: step.rows.map((row) => ({
+          params: cleanParams2(row?.params),
+          seeds: cleanSeeds(row?.seeds, w2, h2)
+        }))
+      };
+    });
+  }
+  function cleanOutline2(source) {
+    if (!source || typeof source !== "object" || Array.isArray(source))
+      throw Error("A session's outline is unreadable.");
+    const widthPct = Number(source.widthPct), colour = String(source.colour || "").toUpperCase();
+    if (!(widthPct >= 0.5 && widthPct <= 15) || !/^#[\dA-F]{6}$/.test(colour))
+      throw Error(
+        "A session's outline is 0.5 to 15 percent wide, in #RRGGBB."
+      );
+    return { on: source.on === true, widthPct, colour };
+  }
+  function cleanName(source) {
+    const name2 = String(source ?? "").replace(/[\u0000-\u001f]/g, "").trim().slice(0, MAX_NAME);
+    return name2 || "image";
+  }
+  function cleanView(source) {
+    const view = source && typeof source === "object" ? source : {};
+    const zoom2 = Number(view.zoom);
+    const panX2 = Number(view.panX), panY2 = Number(view.panY), wipe = Number(view.wipe), brush2 = Number(view.brush);
+    if (!(zoom2 >= 0.01 && zoom2 <= 8192) || !Number.isFinite(panX2) || !Number.isFinite(panY2))
+      throw Error("A session's view is unreadable.");
+    if (Math.abs(panX2) > 1e5 || Math.abs(panY2) > 1e5)
+      throw Error("A session's view is unreadable.");
+    return {
+      zoom: zoom2,
+      fitMode: view.fitMode !== false,
+      panX: panX2,
+      panY: panY2,
+      mode: VIEWS.includes(view.mode) ? view.mode : "side",
+      overlay: OVERLAYS.includes(view.overlay) ? view.overlay : "normal",
+      compare: COMPARES.includes(view.compare) ? view.compare : "working",
+      wipe: wipe >= 0 && wipe <= 100 ? wipe : 50,
+      tool: TOOLS.includes(view.tool) ? view.tool : "pick",
+      addSample: view.addSample === true,
+      brush: Number.isInteger(brush2) && brush2 >= 1 && brush2 <= 128 ? brush2 : 16
+    };
+  }
+  function cleanExport(source) {
+    const exp = source && typeof source === "object" ? source : {};
+    const custom = Number(exp.custom), ground = String(exp.ground || "").toUpperCase();
+    if (!PRESET_IDS.includes(exp.size) || !FORMATS2.includes(exp.format))
+      throw Error("A session's export choices are unreadable.");
+    if (!Number.isInteger(custom) || custom < CUSTOM_MIN || custom > CUSTOM_MAX)
+      throw Error("A session's export choices are unreadable.");
+    if (!/^#[\dA-F]{6}$/.test(ground))
+      throw Error("A session's export choices are unreadable.");
+    return { size: exp.size, format: exp.format, custom, ground };
+  }
+  function cleanSvg(source) {
+    if (source == null) return null;
+    if (typeof source !== "object" || Array.isArray(source))
+      throw Error("A session's SVG is unreadable.");
+    const edge = Number(source.edge), text2 = source.text;
+    if (!SVG_EDGES2.includes(edge) || typeof text2 !== "string")
+      throw Error("A session's SVG is unreadable.");
+    if (new TextEncoder().encode(text2).length > MAX_SVG_BYTES)
+      throw Error("SVG files must be 2 MiB or smaller.");
+    return { edge, text: text2 };
+  }
+  function cleanVariant(source) {
+    if (source == null) return null;
+    if (typeof source !== "object" || Array.isArray(source))
+      throw Error("A session's variants are unreadable.");
+    if (!Array.isArray(source.entries) || source.entries.length < 1 || source.entries.length > MAX_VARIANTS)
+      throw Error("A session's variants need 1 to 64 colours.");
+    return {
+      id: String(source.id || "").slice(0, 80),
+      label: String(source.label || "").slice(0, 80),
+      entries: source.entries.map((entry) => {
+        const hex3 = String(entry?.hex || "").toUpperCase();
+        if (!/^#[\dA-F]{6}$/.test(hex3))
+          throw Error("A session's variant colours must be #RRGGBB.");
+        let ramp = null;
+        if (entry.ramp != null) {
+          if (!Array.isArray(entry.ramp) || entry.ramp.length < 1 || entry.ramp.length > 8)
+            throw Error("A session's variant colours must be #RRGGBB.");
+          ramp = entry.ramp.map((v) => {
+            const colour = String(v).toUpperCase();
+            if (!/^#[\dA-F]{6}$/.test(colour))
+              throw Error("A session's variant colours must be #RRGGBB.");
+            return colour;
+          });
+        }
+        return {
+          label: String(entry.label || hex3).slice(0, 80),
+          hex: hex3,
+          ramp
+        };
+      })
+    };
+  }
+  function cleanDocument(source) {
+    if (!source || typeof source !== "object" || Array.isArray(source))
+      throw Error("A session's image is unreadable.");
+    const width = Number(source.width), height = Number(source.height), original2 = decodeBytes(source.original, Uint8ClampedArray), pixels2 = decodeBytes(source.pixels, Uint8ClampedArray);
+    validateImage(width, height, original2);
+    validateImage(width, height, pixels2);
+    const overrides2 = decodeBytes(source.overrides, Int8Array);
+    const rows = cleanRows(source.edit?.rows, width, height), active = source.edit?.active;
+    validateMap(rows, overrides2, active, width, height);
+    return {
+      name: cleanName(source.name),
+      width,
+      height,
+      still: source.still === true,
+      original: original2,
+      pixels: pixels2,
+      overrides: overrides2,
+      edit: {
+        rows,
+        active,
+        steps: cleanSteps(source.edit?.steps || [], width, height),
+        outline: cleanOutline2(source.edit?.outline)
+      },
+      svg: cleanSvg(source.svg),
+      view: cleanView(source.view),
+      export: cleanExport(source.export),
+      variant: cleanVariant(source.variant)
+    };
+  }
+  function writeSession({ active, documents: documents2 }) {
+    if (!Array.isArray(documents2) || documents2.length < 1)
+      throw Error("A session needs an image.");
+    if (documents2.length > MAX_DOCUMENTS)
+      throw Error("A session can hold " + MAX_DOCUMENTS + " images.");
+    if (!Number.isInteger(active) || active < 0 || active >= documents2.length)
+      throw Error("A session's open tab is unreadable.");
+    const data = {
+      format: "hexshift-session",
+      version: 1,
+      active,
+      documents: documents2.map((doc) => {
+        const clean = cleanDocument({
+          ...doc,
+          original: encodeBytes(doc.original),
+          pixels: encodeBytes(doc.pixels),
+          overrides: encodeBytes(doc.overrides)
+        });
+        return {
+          name: clean.name,
+          width: clean.width,
+          height: clean.height,
+          still: clean.still,
+          original: encodeBytes(clean.original),
+          pixels: encodeBytes(clean.pixels),
+          overrides: encodeBytes(clean.overrides),
+          edit: clean.edit,
+          svg: clean.svg,
+          view: clean.view,
+          export: clean.export,
+          variant: clean.variant
+        };
+      })
+    };
+    const text2 = JSON.stringify(data, null, 2) + "\n";
+    if (new TextEncoder().encode(text2).length > MAX_SESSION_BYTES)
+      throw Error("A session must be 128 MB or smaller.");
+    return text2;
+  }
+  function parseSession(text2) {
+    if (typeof text2 !== "string") throw Error("A session must be text.");
+    if (new TextEncoder().encode(text2).length > MAX_SESSION_BYTES)
+      throw Error("A session must be 128 MB or smaller.");
+    let data;
+    try {
+      data = JSON.parse(text2.replace(/^\uFEFF/, ""));
+    } catch {
+      throw Error("This file is not a Hex Shift session.");
+    }
+    if (!data || typeof data !== "object" || Array.isArray(data))
+      throw Error("This file is not a Hex Shift session.");
+    if (data.format === "hexshift-recipe")
+      throw Error("This is a recipe, not a session.");
+    if (data.format !== "hexshift-session")
+      throw Error("This file is not a Hex Shift session.");
+    if (data.version !== 1)
+      throw Error("This session needs a newer version of Hex Shift.");
+    if (!Array.isArray(data.documents) || data.documents.length < 1)
+      throw Error("A session needs an image.");
+    if (data.documents.length > MAX_DOCUMENTS)
+      throw Error("A session can hold " + MAX_DOCUMENTS + " images.");
+    const documents2 = data.documents.map(cleanDocument);
+    if (!Number.isInteger(data.active) || data.active < 0 || data.active >= documents2.length)
+      throw Error("A session's open tab is unreadable.");
+    return { active: data.active, documents: documents2 };
+  }
+
   // src/host.js
   function systemColours(onChange) {
     const scheme = matchMedia("(prefers-color-scheme: dark)"), webview = window.chrome?.webview;
@@ -11828,7 +12102,7 @@ dialog details {
   // src/app.js
   var $ = (id) => document.getElementById(id);
   var pause = makePause();
-  var VERSION = "3.7.0";
+  var VERSION = "3.8.0";
   var w = 0;
   var h = 0;
   var name = "";
@@ -12046,8 +12320,10 @@ dialog details {
         compare: $("compare").value,
         wipe: $("wipe").value,
         tool,
-        addSample
+        addSample,
+        brush: Number($("brushSize").value)
       },
+      exportChoices: currentExport(),
       variants: {
         key: variantsKey,
         set: variantSet,
@@ -12104,6 +12380,11 @@ dialog details {
     $("wipeControl").hidden = doc.view.mode !== "wipe";
     $("compare").hidden = doc.view.mode === "result";
     setTool(doc.view.tool);
+    if (doc.view.brush) {
+      $("brushSize").value = String(doc.view.brush);
+      $("brushSizeValue").textContent = doc.view.brush + " px";
+    }
+    applyExport(doc.exportChoices);
     $("sourceProps").hidden = !svgSource;
     if (svgSource) $("svgSize").value = String(svgSource.edge);
     $("fileName").textContent = name;
@@ -12126,6 +12407,8 @@ dialog details {
     draw();
     prepareCurrent(true);
     layout();
+    if (variantSet && !$("variants").children.length && !batchAbort)
+      paintVariants(variantSet);
   }
   function renderTabs() {
     documentTabs?.render(
@@ -12928,6 +13211,11 @@ dialog details {
       "Quit Hex Shift?",
       "Your open tabs have edits. Export them first if you want to keep them.",
       "Quit"
+    ],
+    session: [
+      "Open this session?",
+      "Your open tabs have edits. Opening a session replaces them. Save a session or export first if you want to keep them.",
+      "Open session"
     ]
   };
   async function openBlob(blob, fileName, isSample = false, redraw = false) {
@@ -13510,6 +13798,27 @@ dialog details {
     chosenFormat = $("format").value;
     sizeControls();
   };
+  function currentExport() {
+    return {
+      size: $("size").value || "original",
+      format: $("format").value || "png",
+      custom: Number($("customSize").value) || 512,
+      ground: ($("previewGround").value || "#313338").toUpperCase()
+    };
+  }
+  function applyExport(choices) {
+    if (!choices) return;
+    if ([...$("size").options].some((o) => o.value === choices.size))
+      $("size").value = choices.size;
+    if (Number.isInteger(choices.custom))
+      $("customSize").value = String(choices.custom);
+    if (choices.format) chosenFormat = choices.format;
+    const ground = [...$("previewGround").options].find(
+      (o) => o.value.toUpperCase() === choices.ground
+    );
+    if (ground) $("previewGround").value = ground.value;
+    sizeControls();
+  }
   $("customSize").oninput = (e) => {
     const v = Number(e.target.value);
     e.target.setAttribute(
@@ -13660,7 +13969,7 @@ dialog details {
       pickFromScreen();
     };
   }
-  var MAX_VARIANTS = 64;
+  var MAX_VARIANTS2 = 64;
   var variantRun = 0;
   var variantsKey = null;
   var variantSet = null;
@@ -13669,7 +13978,7 @@ dialog details {
     return {
       id: set.id,
       label: set.label,
-      entries: set.entries.slice(0, MAX_VARIANTS).map((entry) => ({
+      entries: set.entries.slice(0, MAX_VARIANTS2).map((entry) => ({
         label: entry.label,
         hex: entry.hex,
         ramp: entry.ramp ? entry.ramp.slice() : null
@@ -14455,10 +14764,141 @@ dialog details {
   }
   $("open").onclick = () => $("fileInput").click();
   async function openFile(f) {
-    if (isPaletteFile(f)) await openPalette(f, f.name);
+    if (isSessionFile(f)) await openSessionFile(f);
+    else if (isPaletteFile(f)) await openPalette(f, f.name);
     else if (/\.json$/i.test(f.name) || f.type === "application/json")
       await applyRecipe(f);
     else await openBlob(f, f.name);
+  }
+  function sessionDirty(item) {
+    if (item.edit.steps.length || item.edit.outline.on) return true;
+    if (item.edit.rows.some((row) => row.seeds.length)) return true;
+    for (let i = 0; i < item.overrides.length; i++)
+      if (item.overrides[i] !== 0) return true;
+    const a = item.pixels, b = item.original;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return true;
+    return false;
+  }
+  async function saveSession() {
+    if (!documents.length || batchAbort) return;
+    commit("Adjust colour");
+    stash();
+    const records = [];
+    for (const doc of documents) {
+      let svg2 = null;
+      if (doc.svgSource)
+        svg2 = {
+          edge: doc.svgSource.edge,
+          text: await doc.svgSource.blob.text()
+        };
+      records.push({
+        name: doc.name,
+        width: doc.w,
+        height: doc.h,
+        still: !!doc.still,
+        original: doc.original,
+        pixels: doc.pixels,
+        overrides: doc.overrides,
+        edit: doc.edit,
+        svg: svg2,
+        view: doc.view,
+        export: doc.exportChoices || currentExport(),
+        variant: doc.variants?.set ? cloneVariantSet(doc.variants.set) : null
+      });
+    }
+    let text2;
+    try {
+      text2 = writeSession({
+        active: Math.max(0, documents.indexOf(activeDocument)),
+        documents: records
+      });
+    } catch (e) {
+      status("Could not save the session: " + e.message);
+      return;
+    }
+    const filename = safeStem(documents.length === 1 ? name : "hexshift") + ".hexshift";
+    download(new Blob([text2], { type: SESSION_MIME }), filename);
+    status("Prepared " + filename + ". Choose where to save it.");
+  }
+  async function openSessionFile(file) {
+    if (batchAbort) {
+      status("Wait for the batch to finish, or cancel it first.");
+      return;
+    }
+    if ($("replaceDialog").open) return;
+    commit("Adjust colour");
+    stash();
+    let parsed;
+    try {
+      if (file.size > MAX_SESSION_BYTES)
+        throw Error("A session must be 128 MB or smaller.");
+      parsed = parseSession(await file.text());
+    } catch (e) {
+      status("Could not open the session: " + e.message);
+      return;
+    }
+    if (documents.some((d) => d.edited) && !await askDiscard("session"))
+      return;
+    if (batchAbort || $("replaceDialog").open) return;
+    document.activeElement?.blur();
+    invalidateDocumentWork();
+    for (const doc of documents) {
+      worker?.postMessage({ type: "release", documentId: doc.id });
+      for (const key of [...preparedImages.keys()])
+        if (key.startsWith(doc.id + ":")) preparedImages.delete(key);
+    }
+    documents.length = 0;
+    selectedDocuments = /* @__PURE__ */ new Set();
+    for (const item of parsed.documents) {
+      const dirty2 = sessionDirty(item);
+      documents.push({
+        id: ++documentSequence,
+        revision: 0,
+        sample: false,
+        still: item.still,
+        w: item.width,
+        h: item.height,
+        name: item.name,
+        original: item.original,
+        pixels: item.pixels,
+        overrides: item.overrides,
+        edit: item.edit,
+        palette: [],
+        svgSource: item.svg ? {
+          blob: new Blob([item.svg.text], { type: "image/svg+xml" }),
+          name: item.name,
+          edge: item.svg.edge
+        } : null,
+        history: new History(),
+        dirty: dirty2,
+        result: null,
+        edited: dirty2,
+        view: item.view,
+        exportChoices: item.export,
+        variants: {
+          key: null,
+          set: item.variant,
+          nodes: [],
+          hidden: !item.variant,
+          exportHidden: !item.variant,
+          stale: false,
+          label: item.variant ? "Variants: " + item.variant.label : "",
+          labelHidden: !item.variant,
+          note: "",
+          noteHidden: true
+        }
+      });
+    }
+    const active = documents[parsed.active];
+    selectedDocuments = /* @__PURE__ */ new Set([active]);
+    selectionAnchor = active;
+    unstash(active);
+    $("emptyEditor").hidden = true;
+    renderTabs();
+    documentTabs?.reveal(active.id);
+    status(
+      "Opened " + file.name + " (" + documents.length + (documents.length === 1 ? " image)." : " images).")
+    );
   }
   var openingFiles = Promise.resolve();
   function openFiles(files) {
@@ -14470,6 +14910,11 @@ dialog details {
   $("fileInput").onchange = (e) => {
     const files = [...e.target.files];
     if (files.length) openFiles(files);
+    e.target.value = "";
+  };
+  $("sessionInput").onchange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) openSessionFile(file);
     e.target.value = "";
   };
   $("targetHex").addEventListener("input", (e) => {
@@ -14842,7 +15287,9 @@ dialog details {
     const key = e.key.toLowerCase();
     if (e.ctrlKey || e.metaKey) {
       if (e.altKey) return;
-      if (key === "o") $("fileInput").click();
+      if (key === "o" && e.shiftKey) $("sessionInput").click();
+      else if (key === "o") $("fileInput").click();
+      else if (key === "s" && e.shiftKey) saveSession();
       else if (key === "e") save();
       else if (key === "c" && e.shiftKey) save(true);
       else if (key === "z") restore(e.shiftKey);
@@ -15119,6 +15566,20 @@ dialog details {
             shortcut: "Ctrl+O",
             enabled: () => !batchAbort,
             run: () => $("fileInput").click()
+          },
+          {
+            type: "item",
+            label: "Open session\u2026",
+            shortcut: "Ctrl+Shift+O",
+            enabled: () => !batchAbort,
+            run: () => $("sessionInput").click()
+          },
+          {
+            type: "item",
+            label: "Save session\u2026",
+            shortcut: "Ctrl+Shift+S",
+            enabled: () => documents.length > 0 && !batchAbort,
+            run: saveSession
           },
           {
             type: "item",
@@ -15764,6 +16225,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 Original C# port and code by Christian Winnerlein (CodesInChaos), public domain, https://github.com/CodesInChaos/Chaos.NaCl . Poly1305 by Andrew M. (floodyberry), MIT or public domain. Curve25519, Ed25519, Salsa20 and HSalsa20 from SUPERCOP ref10 by Dan Bernstein, public domain (http://bench.cr.yp.to/supercop.html). SHA512 by Christian Winnerlein, public domain.</pre></template>
     <template id="release-notes"><pre># Hex Shift 3
+
+**New in 3.8.0:** Save session and Open session keep every open image, the colour map, brush marks, the outline, an SVG source, the view, the export choices, and variant colours. Opening the file rebuilds the previews. It does not restore undo or redo, and it does not save by itself. A session is not a recipe: recipes still leave out brush strokes and connected regions. A damaged file is refused and leaves the open images as they are. The file stays where you save it.
 
 **New in 3.7.0:** Simple and Advanced. A new profile opens in Simple: open, pick, tolerance and shade, the colour map, Shift, Flat or Transparent, outline, and export. It shows Advanced once and asks which to use next time. The answer is kept on this device as `hexshift-mode`. Reset layout does not clear it. A profile that already has a layout or saved colours stays in Advanced. Switching mode does not change the picture, the colour map, or the saved arrangement. An advanced edit already on the image stays on while Simple is showing, and one control opens Advanced. Adjust starts folded. The names say what they do: Pick colour, Add another colour, Exclude from all colours, Bake current colours (export does not need it), Reset image edits, and Reset all edits, which also turns the outline off. Clear selection clears the current colour only. Clear all exclusions clears pixels excluded from every colour. Match automatically returns a brushed region to matching. Outline width shows percent and pixels. SVG drawn at sits with the image and still warns that redrawing clears edits. When a fine slider has left the target, the line says so, and Return to target follows the colour again. Softness and feather sit under Refine the match. Repeat edits covers selected tabs, all tabs, or files to a ZIP, and says that brush strokes and connected regions are not included. An outline on its own can be repeated (recipe version 3). Older recipe files still open. Undo and Redo name the next action.
 
