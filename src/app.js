@@ -21,6 +21,7 @@ import { decodeBlob } from "./import.js";
 import { canEncodeWebP, formatBytes, outputName, safeStem } from "./export.js";
 import { deliver } from "./deliver.js";
 import {
+  FRAME_PAD_MAX,
   finish,
   resize,
   outlineLayer,
@@ -1701,12 +1702,24 @@ function draw() {
   placeOutline();
 }
 // What export, copy, the size readout, the real-size strip and batch finish an image
-// with. The size and format are UI-only; the outline belongs to the edit.
+// with. The size, format and framing are UI choices; the outline belongs to the edit.
+function frameChoices() {
+  const padding = Number($("framePadding").value);
+  return {
+    trim: $("trimMargins").checked,
+    padding:
+      Number.isInteger(padding) && padding >= 0 && padding <= FRAME_PAD_MAX
+        ? padding
+        : 0,
+    scale: $("frameScale").value === "nearest" ? "nearest" : "smooth",
+  };
+}
 function finishSettings() {
   const settings = {
     size: $("size").value,
     format: $("format").value,
     custom: Number($("customSize").value),
+    ...frameChoices(),
   };
   if (edit.outline.on)
     settings.outline = {
@@ -1754,27 +1767,33 @@ async function renderPreview() {
     return;
   }
   if (ticket !== previewTicket) return;
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = window.devicePixelRatio || 1,
+    mode = finishSettings().scale;
   PREVIEW_SIZES.forEach((size, k) =>
-    drawFitted(previewCanvases[k], base, Math.round(size * dpr)),
+    drawFitted(previewCanvases[k], base, Math.round(size * dpr), mode),
   );
 }
 // The image at preview size (at most 256 px), finished like the export, outline included.
+// Padding is scaled with the preview so a border stays in proportion.
 async function outlinedBase(source, settings = finishSettings()) {
-  const scale = Math.min(1, 256 / Math.max(w, h)),
-    bw = Math.max(1, Math.round(w * scale)),
-    bh = Math.max(1, Math.round(h * scale));
+  const down = Math.min(1, 256 / Math.max(w, h)),
+    bw = Math.max(1, Math.round(w * down)),
+    bh = Math.max(1, Math.round(h * down)),
+    preview = {
+      ...settings,
+      padding: Math.round((Number(settings.padding) || 0) * down),
+    };
   return finish(
-    resize(source, w, h, bw, bh),
+    resize(source, w, h, bw, bh, settings.scale),
     bw,
     bh,
-    settings,
+    preview,
     undefined,
-    scale < 1 ? shrinkSilhouette(source, w, h, bw, bh) : undefined,
+    down < 1 ? shrinkSilhouette(source, w, h, bw, bh) : undefined,
   );
 }
 // Draws `base` centred in a square canvas of `box` pixels, as large as fits.
-function drawFitted(canvas, base, box) {
+function drawFitted(canvas, base, box, scale = "smooth") {
   const fit = box / Math.max(base.width, base.height),
     tw = Math.max(1, Math.round(base.width * fit)),
     th = Math.max(1, Math.round(base.height * fit));
@@ -1783,7 +1802,7 @@ function drawFitted(canvas, base, box) {
     .getContext("2d")
     .putImageData(
       new ImageData(
-        resize(base.pixels, base.width, base.height, tw, th),
+        resize(base.pixels, base.width, base.height, tw, th, scale),
         tw,
         th,
       ),
@@ -2037,12 +2056,27 @@ $("format").onchange = () => {
   chosenFormat = $("format").value;
   sizeControls();
 };
+function framingChanged() {
+  scheduleReadout();
+  renderPreview();
+}
+$("trimMargins").onchange = framingChanged;
+$("frameScale").onchange = framingChanged;
+$("framePadding").oninput = (e) => {
+  const v = Number(e.target.value);
+  e.target.setAttribute(
+    "aria-invalid",
+    String(!(Number.isInteger(v) && v >= 0 && v <= FRAME_PAD_MAX)),
+  );
+  framingChanged();
+};
 function currentExport() {
   return {
     size: $("size").value || "original",
     format: $("format").value || "png",
     custom: Number($("customSize").value) || 512,
     ground: ($("previewGround").value || "#313338").toUpperCase(),
+    ...frameChoices(),
   };
 }
 function applyExport(choices) {
@@ -2052,6 +2086,12 @@ function applyExport(choices) {
   if (Number.isInteger(choices.custom))
     $("customSize").value = String(choices.custom);
   if (choices.format) chosenFormat = choices.format;
+  $("trimMargins").checked = choices.trim === true;
+  $("framePadding").value = String(
+    Number.isInteger(choices.padding) ? choices.padding : 0,
+  );
+  $("framePadding").setAttribute("aria-invalid", "false");
+  $("frameScale").value = choices.scale === "nearest" ? "nearest" : "smooth";
   const ground = [...$("previewGround").options].find(
     (o) => o.value.toUpperCase() === choices.ground,
   );
@@ -2126,7 +2166,7 @@ async function sizeReadout() {
     );
   });
   if (files.length > 1) lines.unshift(line("Saved together as one ZIP:"));
-  if (files.some((f) => f.enlarged))
+  if (files.some((f) => f.enlarged) && settings.scale !== "nearest")
     lines.push(
       line(
         "Enlarged from a smaller image, so it may look soft." +

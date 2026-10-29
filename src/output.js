@@ -189,10 +189,26 @@ function taps(from, to) {
   }
   return list;
 }
+// One source pixel per output pixel. Integer scales become solid blocks, which
+// is what pixel art needs. Smooth, below, stays the default and is unchanged.
+function resizeNearest(pixels, w, h, ow, oh) {
+  const out = new Uint8ClampedArray(ow * oh * 4);
+  for (let y = 0; y < oh; y++) {
+    const sy = Math.min(h - 1, Math.floor((y * h) / oh));
+    for (let x = 0; x < ow; x++) {
+      const sx = Math.min(w - 1, Math.floor((x * w) / ow)),
+        from = (sy * w + sx) * 4;
+      out.set(pixels.subarray(from, from + 4), (y * ow + x) * 4);
+    }
+  }
+  return out;
+}
 // Resamples in premultiplied alpha, so fully transparent neighbours never
 // darken or tint edges. Deterministic (no canvas), so tests match browsers.
-export function resize(pixels, w, h, ow, oh) {
+// `scale` "nearest" is opt-in. Anything else, including omitted, is smooth.
+export function resize(pixels, w, h, ow, oh, scale = "smooth") {
   if (ow === w && oh === h) return pixels;
+  if (scale === "nearest") return resizeNearest(pixels, w, h, ow, oh);
   const pre = new Float32Array(w * h * 4);
   for (let i = 0; i < w * h; i++) {
     const a = pixels[i * 4 + 3] / 255;
@@ -240,11 +256,62 @@ export function shrinkSilhouette(pixels, w, h, ow, oh) {
   }
   return out;
 }
+// Transparent pixels added around a finished picture. 512 px a side is enough
+// for a sticker border and still has to fit the image limits.
+export const FRAME_PAD_MAX = 512;
+// Crops fully transparent edges. A picture that is entirely transparent, or
+// already tight, is returned as it is.
+export function trimTransparent(pixels, w, h) {
+  let minX = w,
+    minY = h,
+    maxX = -1,
+    maxY = -1;
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      if (!pixels[(y * w + x) * 4 + 3]) continue;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+  if (maxX < 0 || (minX === 0 && minY === 0 && maxX === w - 1 && maxY === h - 1))
+    return { pixels, width: w, height: h };
+  const width = maxX - minX + 1,
+    height = maxY - minY + 1,
+    out = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < height; y++)
+    out.set(
+      pixels.subarray(
+        ((y + minY) * w + minX) * 4,
+        ((y + minY) * w + maxX + 1) * 4,
+      ),
+      y * width * 4,
+    );
+  return { pixels: out, width, height };
+}
+// `pad` transparent pixels on every side. The result has to stay within the
+// same limits as an outline.
+export function padTransparent(pixels, w, h, pad) {
+  const width = w + pad * 2,
+    height = h + pad * 2;
+  if (width > 8192 || height > 8192 || width * height > MAX_PIXELS)
+    throw Error(
+      "The padding would make the image larger than 4,194,304 pixels or 8,192 pixels on a side. Use less padding or a smaller image.",
+    );
+  const out = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < h; y++)
+    out.set(
+      pixels.subarray(y * w * 4, (y + 1) * w * 4),
+      ((y + pad) * width + pad) * 4,
+    );
+  return { pixels: out, width, height };
+}
 // Scales the image so its longest side is `box`, then (with `pad`) centres it
 // on a transparent box × box square. Matches `fitted()` in presets.js.
-export function fit(pixels, w, h, box, pad) {
+// `scale` is smooth unless it is "nearest".
+export function fit(pixels, w, h, box, pad, scale = "smooth") {
   const { width, height } = fitted(w, h, box, false),
-    scaled = resize(pixels, w, h, width, height);
+    scaled = resize(pixels, w, h, width, height, scale);
   if (!pad || (width === box && height === box))
     return { pixels: scaled, width, height };
   const out = new Uint8ClampedArray(box * box * 4),
@@ -258,7 +325,9 @@ export function fit(pixels, w, h, box, pad) {
   return { pixels: out, width: box, height: box };
 }
 // The export pipeline: what is saved, copied and shown in the output preview.
-// `silhouette` lets a reduced preview keep the full-size outline shape.
+// Outline first, then optional trim and padding, so the frame includes the
+// stroke. Scaling happens later, in fit, from the same settings. `silhouette`
+// lets a reduced preview keep the full-size outline shape.
 export async function finish(pixels, w, h, settings = {}, yieldFn, silhouette) {
   let out = { pixels, width: w, height: h };
   const rgb = settings.outline && parseHex(settings.outline.colour);
@@ -270,5 +339,9 @@ export async function finish(pixels, w, h, settings = {}, yieldFn, silhouette) {
       { widthPct: settings.outline.widthPct, rgb, silhouette },
       yieldFn,
     );
+  if (settings.trim) out = trimTransparent(out.pixels, out.width, out.height);
+  const padding = Number(settings.padding);
+  if (Number.isInteger(padding) && padding > 0)
+    out = padTransparent(out.pixels, out.width, out.height, padding);
   return out;
 }

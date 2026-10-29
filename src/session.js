@@ -1,6 +1,7 @@
 import { defaults } from "./colour.js";
 import { MAX_DOCUMENTS } from "./documents.js";
 import { validateImage, validateMap, validateParams, validateSeeds } from "./engine.js";
+import { FRAME_PAD_MAX } from "./output.js";
 import { CUSTOM_MAX, CUSTOM_MIN, PRESETS } from "./presets.js";
 
 // A session is the open tabs: images and edits, not a recipe and not an export.
@@ -153,7 +154,31 @@ function cleanExport(source) {
     throw Error("A session's export choices are unreadable.");
   if (!/^#[\dA-F]{6}$/.test(ground))
     throw Error("A session's export choices are unreadable.");
-  return { size: exp.size, format: exp.format, custom, ground };
+  // Absent framing fields are the 3.8.0 export: nothing trimmed, no padding,
+  // smooth scaling. A present field that is not a real choice is refused.
+  if ("trim" in exp && exp.trim != null && typeof exp.trim !== "boolean")
+    throw Error("A session's export choices are unreadable.");
+  let padding = 0;
+  if ("padding" in exp && exp.padding != null) {
+    padding = Number(exp.padding);
+    if (!Number.isInteger(padding) || padding < 0 || padding > FRAME_PAD_MAX)
+      throw Error("A session's export choices are unreadable.");
+  }
+  let scale = "smooth";
+  if ("scale" in exp && exp.scale != null) {
+    if (exp.scale !== "smooth" && exp.scale !== "nearest")
+      throw Error("A session's export choices are unreadable.");
+    scale = exp.scale;
+  }
+  return {
+    size: exp.size,
+    format: exp.format,
+    custom,
+    ground,
+    trim: exp.trim === true,
+    padding,
+    scale,
+  };
 }
 function cleanSvg(source) {
   if (source == null) return null;

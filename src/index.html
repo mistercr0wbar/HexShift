@@ -987,6 +987,33 @@
                       </option>
                     </select>
                   </div>
+                  <div class="frame-line">
+                    <label class="check" for="trimMargins"
+                      ><input
+                        type="checkbox"
+                        id="trimMargins"
+                        title="Cut the empty edge off the finished picture, including the outline"
+                      />
+                      Trim transparent margins</label
+                    >
+                    <label for="framePadding"
+                      >Padding<input
+                        id="framePadding"
+                        type="number"
+                        min="0"
+                        max="512"
+                        step="1"
+                        value="0"
+                        inputmode="numeric"
+                        title="Transparent pixels around the finished picture, including the outline"
+                    /></label>
+                    <label for="frameScale"
+                      >Scaling<select id="frameScale">
+                        <option value="smooth">Smooth</option>
+                        <option value="nearest">Nearest neighbour</option>
+                      </select></label
+                    >
+                  </div>
                   <div id="sizeReadout" class="readout"></div>
                   <div class="output-preview">
                     <label for="previewGround" class="small-label"
