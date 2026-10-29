@@ -20,6 +20,7 @@ const allowed = new Set([
   "/icons/icon-512.png",
   "/icons/icon-512-maskable.png",
   "/icons/apple-touch-icon.png",
+  "/animation-prototype.html",
 ]);
 http
   .createServer(async (req, res) => {

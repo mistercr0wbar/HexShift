@@ -77,6 +77,7 @@ await writeFile(
   (await readText("src/sw.js")).replace("__VERSION__", version),
 );
 await mkdir("dist", { recursive: true });
+await import("./build-animation.mjs");
 console.log(
   `Built portable HTML (${Math.round(Buffer.byteLength(html) / 1024)} KiB), shell ${version}.`,
 );

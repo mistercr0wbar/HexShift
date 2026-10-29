@@ -25,23 +25,24 @@ The Windows report of an unexpected Advanced state was not reproduced against th
 ## 3.12.0 — Finishable polygons and truthful recipe warnings
 
 - Scope: a polygon stays Advanced-only on the active colour and does not choose that colour. The draft draws the last-vertex-to-pointer edge and highlights a close target. Close is within 8 CSS pixels (mouse/pen) or 12 (touch) of the displayed first vertex, after three vertices, including a click that starts just outside the bitmap. Enter, Backspace and Escape stay. Escape drops only the draft. A draft is not history; closing is one entry. Draft and pointer state clear on document, row, tool and cancel, and a late release from the previous gesture does nothing. One omission summary covers Save recipe, selected tabs, all tabs, Files to ZIP, and applying an imported recipe. Export all tabs renders pixels and does not warn. Named reasons (brush, connected, polygon) survive baking, history, sessions and recipe files. Recipes still contain no coordinates or masks. Known omissions, an explicit empty list, an old approximation flag, and a legacy file with no field stay distinct. Continue/Cancel is one dialog. Cancel changes nothing. A stale revision is not applied. An imported recipe keeps the target's already rendered spatial edits and warns about the recipe. Applying only to the source tab bakes once and does not warn.
-- State: **implemented**. Not verified. Not released.
-- Commit: the `grok/v3-12` change that carries this file. The release commit is the annotated tag `v3.12.0` after the squash, which does not exist yet.
+- State: **implemented** and **released**. Not verified. The manual checklist was not run, so the missing checks stay missing.
+- Commit: `787a0d3e4909df0454982af61d0af741fe8eaf6d` on `main` (squash of `grok/v3-12` `252b2e2ab5a0a7ad3c05674729b9e3d11b1d1fbf`). Annotated tag `v3.12.0` points at that commit. The trees match.
 - Tests, 29 October 2026, this machine, Node v24.20.0:
   - `npm test`: 109 passed, 0 failed.
   - `npm audit --audit-level=low`: 0 vulnerabilities.
   - `tests/browser/polygon-recipe.spec.js` on Chromium, Firefox and WebKit, `HEXSHIFT_PORT=4184`: 18 passed. That covers displayed close, rubber-band ink, history, zoomed CSS-pixel close including a synthetic touch, a click just outside the bitmap, late Escape, row and tool changes, each omission on its own and together, legacy and explicit-none recipes, cancel and a stale revision, source-only versus other tabs, Files to ZIP, outline-only save, and an imported recipe over an existing polygon.
   - Full Playwright suite, `HEXSHIFT_PORT=4184`, 3 workers: 345 passed, 8 skipped, 1 failed. The skips are the existing Firefox and WebKit skips. The failure was WebKit `Cancel appears only after a long wait, in its own place`: `#cancel` stayed hidden for the 800 ms the test allows. That timer is unchanged in this version. Rerun alone on WebKit: 1 passed. The other 345 were not rerun after that.
-- Manual evidence: `docs/manual-tests.md` is not in this repository, and that checklist was not run by hand. `HostTests.exe verify-release` was not run, so this is not `RELEASE CHECK PASSED`.
-- Blockers: none in the editor code. Publication still needs the pull request, checks, windows-app, the tag, and approval of the protected `release` environment.
-- Artifact hashes: local portable shell `b986f09c5957a95e`. Nothing published.
-- Release URL: none.
+- Manual evidence: `docs/manual-tests.md` is not in this repository, and that checklist was not run by hand. No disposable Windows install without WebView2. No live upgrade from an installed 3.11.0.
+- Blockers: none for publication.
+- Release checks, 29 October 2026: tag workflow https://github.com/mistercr0wbar/HexShift/actions/runs/40939933193 completed success. In the `release` job, `HostTests.exe verify-release` printed `RELEASE CHECK PASSED` before the draft was created. The job then published the draft.
+- Artifact hashes: the seven published assets match `SHA256SUMS.txt`. Installer `HexShift-3.12.0-Setup.exe` is 2,587,539 bytes, SHA-256 `3afede109df22dc5aa6160355f006a9b79b5c2b9ac5bfb6ad893224b8f3c7f5e`. `appcast.json` SHA-256 `b16f46d2944b6fac800c5a8efeaefb8088dcca686b363fd72981f9457a16c76c`. Local portable shell `b986f09c5957a95e`. The live update addresses now offer 3.13.0, which was published afterwards. That is the current feed, not a failed 3.12.0 publish.
+- Release URL: https://github.com/mistercr0wbar/HexShift/releases/tag/v3.12.0 (published 2026-10-29T19:47:38Z, not a draft).
 
 ## 3.13.0 — Explicit, bounded import downscaling
 
 - Scope: an edited image stays at most 4,194,304 pixels and 8,192 pixels on a side. A static PNG, JPEG, or WebP above that, and within 16,777,216 pixels, 16,384 pixels on a side, and 16 MiB, can be downscaled while it is decoded. The dialog shows the oriented size and the proposed size. Smooth is selected. Nearest is available. That choice is not export scaling. Cancel leaves the file unopened and does not list a failure. A browser that cannot return the proposed size is told so, and the file is not opened at full size. Animated PNG, animated WebP, and GIF are not offered this; an animated image that already fits still opens as its first frame. Files to ZIP reports each oversized file and does not ask. The scale is `min(1, 8192/w, 8192/h, sqrt(4194304/(w*h)))`, rounded down, and a side is kept at least one pixel.
-- State: **implemented**. Not verified. Not released.
-- Commit: the implementation is the parent of this note, rebased onto the 3.12.0 squash `787a0d3e4909df0454982af61d0af741fe8eaf6d`. The release commit does not exist yet.
+- State: **implemented** and **released**. Not verified. The manual checklist was not run, and Windows memory was not measured, so those missing checks stay missing.
+- Commit: `a3f10843ef7bb250969e9215cfb0a44b97bd66a1` on `main` (squash of `grok/v3-13` `bc4f140647f588f4a77cf8c3aff6c27131b2bb22`). Annotated tag `v3.13.0` points at that commit. The trees match.
 - Tests, 29 October 2026, this machine, Node v24.20.0:
   - `npm test`: 114 passed, 0 failed.
   - `npm audit --audit-level=low`: 0 vulnerabilities.
@@ -49,11 +50,24 @@ The Windows report of an unexpected Advanced state was not reproduced against th
   - `tests/browser/downscale.spec.js` on Chromium, Firefox, and WebKit, `HEXSHIFT_PORT=4185`: 33 passed. That covers the side-only and pixel-count offers, Smooth and Nearest, export scaling left alone, transparency, a one-pixel side, EXIF orientation 6, cancel, keyboard confirmation, a narrow window and 200% zoom, mixed success and failure, a redraw that supersedes an open offer, Files to ZIP, an in-limit APNG labelled as the first frame, and a resize probe or result that does not match the proposal.
   - Full Playwright suite, `HEXSHIFT_PORT=4185`, 3 workers: 378 passed, 8 skipped, 1 failed. The skips are the existing Firefox and WebKit skips. The failure was WebKit `Cancel appears only after a long wait, in its own place`: `#cancel` stayed hidden for the 800 ms the test allows. That timer is unchanged in this version. Rerun alone on WebKit: 1 passed. The other 378 were not rerun after that.
 - Memory, same day, Playwright Chromium, Firefox, and WebKit on this machine. Windows was not measured. A solid 4096×4096 PNG (233,653 bytes) opened at 2048×2048, and a solid 16384×1024 PNG (222,127 bytes) opened at 8192×512. Peak extra RSS, including the browser, was 413,816–514,908 KiB: Chromium 503,928 and 470,016 KiB, and on a second run 510,436 and 514,908 KiB; Firefox 454,176 and 413,816 KiB; WebKit 476,980 and 489,112 KiB. Chromium's page JS heap went from 3,551,918 to 161,812,137 bytes, and from 3,588,310 to 166,471,175 bytes. Closing the page returned the next measurement to the idle baseline. The ceilings were not reduced. This does not separate codec scratch from Hex Shift's own copies, and it is not a Windows measurement.
-- Manual evidence: `docs/manual-tests.md` is not in this repository, and that checklist was not run by hand. `HostTests.exe verify-release` was not run, so this is not `RELEASE CHECK PASSED`.
-- Blockers: none in the editor code. Publication still needs the pull request, checks, windows-app, the tag, and approval of the protected `release` environment.
-- Artifact hashes: local portable shell `146cbe8a5f493454`. Nothing published.
-- Release URL: none.
+- Manual evidence: `docs/manual-tests.md` is not in this repository, and that checklist was not run by hand. No disposable Windows install without WebView2. No live upgrade from an installed 3.12.0. Windows memory was not measured.
+- Blockers: none for publication.
+- Release checks, 29 October 2026: tag workflow https://github.com/mistercr0wbar/HexShift/actions/runs/40942038629 completed success. In the `release` job, `HostTests.exe verify-release` printed `RELEASE CHECK PASSED` before the draft was created. The job then published the draft.
+- Artifact hashes: the seven published assets match `SHA256SUMS.txt`. Installer `HexShift-3.13.0-Setup.exe` is 2,589,484 bytes, SHA-256 `588e6cb9925f9b98db06fa5251ca52d6ffce098fdce097602caf1049b580cf36`. `appcast.json` SHA-256 `3de0957efe45ba75a46ce42541e47163d279894b377a9022d9d7746ad01c5be7`. Local portable shell `146cbe8a5f493454`. `https://thecr0wbar.xyz/updates/hexshift/appcast.json` and `.signature` byte-match the release, and so do `https://github.com/mistercr0wbar/HexShift/releases/latest/download/appcast.json` and `.signature`. The appcast offers 3.13.0 and `https://github.com/mistercr0wbar/HexShift/releases/download/v3.13.0/HexShift-3.13.0-Setup.exe`.
+- Release URL: https://github.com/mistercr0wbar/HexShift/releases/tag/v3.13.0 (published 2026-10-29T20:00:40Z, not a draft).
+- Not checked: `https://mistercr0wbar.github.io/HexShift/` still does not serve this release. Its index was last modified 5 September 2026, it has no 3.13.0 text, and its `sw.js` is 1,149 bytes.
 
 ## Animation prototype
 
-- State: not started. It does not block 3.11.0, 3.12.0 or 3.13.0, and it does not add animation to those releases.
+- Scope: a standalone GIF and animated-WebP page, with partial-frame compositing, and a written no-go. See `docs/animation-prototype.md`. It does not block 3.11.0, 3.12.0 or 3.13.0, and it does not add animation to those releases or promise it in v4.
+- State: **implemented** on `grok/animation-prototype`. Not merged. Not a product release. Recommendation: **no-go**. The pinned codec reports libwebp 1.1.0 (package README says v1.0.2), which is older than the CVE-2023-4863 fix in 1.3.2. The Windows host was not run.
+- Commit: this branch. Product version stays 3.13.0. Portable shell stays `146cbe8a5f493454`.
+- Tests, 29 October 2026, this machine, Node v24.20.0:
+  - `npm test`: 122 passed, 0 failed. That includes the 8 animation tests.
+  - `npm audit --audit-level=low`: 0 vulnerabilities.
+  - `npm run build` twice: portable HTML 637 KiB, shell `146cbe8a5f493454` both times. `animation-prototype.html` was byte-identical across builds (691 KiB). `git diff` of `HexShift.html` and `sw.js` was empty.
+  - `tests/browser/animation.spec.js` on Chromium, Firefox, and WebKit, `HEXSHIFT_PORT=4186`: 3 passed. The page made no request besides itself, the sample reported libwebp 1.1.0, and an already-aborted decode returned `AbortError`.
+  - Full Playwright suite, `HEXSHIFT_PORT=4186`, 3 workers: 381 passed, 8 skipped, 1 failed. The skips are the existing Firefox and WebKit skips. The failure was WebKit `Cancel appears only after a long wait, in its own place`: `#cancel` stayed hidden for the 800 ms the test allows. That timer is unchanged on this branch. Rerun alone on WebKit: 1 passed. The other 381 were not rerun after that.
+- Manual evidence: Windows `HexShift.exe` was not used. Codec heaps after a 4×2 WebP round trip were 16,777,216 bytes each and are not part of the 128 MiB application budget.
+- Blockers: none for the prototype pull request. Production animation stays unassigned.
+- Release URL: none. This branch is not a release.
