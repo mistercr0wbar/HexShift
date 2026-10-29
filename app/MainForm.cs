@@ -180,6 +180,7 @@ namespace HexShift
             { "application/zip", new[] { ".zip", "ZIP archive (*.zip)|*.zip", "Save the emoji pack" } },
             { "application/x-gimp-palette", new[] { ".gpl", "GIMP palette (*.gpl)|*.gpl", "Save the palette" } },
             { "application/json", new[] { ".json", "Hex Shift recipe (*.json)|*.json", "Save the recipe" } },
+            { "application/vnd.hexshift.session+json", new[] { ".hexshift", "Hex Shift session (*.hexshift)|*.hexshift", "Save the session" } },
         };
 
         internal static bool IsExportDownload(string document, string url, string mime)

@@ -51,6 +51,13 @@ import {
   replay,
   writeRecipe,
 } from "./recipe.js";
+import {
+  MAX_SESSION_BYTES,
+  SESSION_MIME,
+  isSessionFile,
+  parseSession,
+  writeSession,
+} from "./session.js";
 import { screenPicker, systemColours, updateChannel } from "./host.js";
 import { createMenubar } from "./menu.js";
 import { createWorkspace } from "./workspace.js";
@@ -308,7 +315,9 @@ function stash() {
       wipe: $("wipe").value,
       tool,
       addSample,
+      brush: Number($("brushSize").value),
     },
+    exportChoices: currentExport(),
     variants: {
       key: variantsKey,
       set: variantSet,
@@ -367,6 +376,11 @@ function unstash(doc) {
   $("wipeControl").hidden = doc.view.mode !== "wipe";
   $("compare").hidden = doc.view.mode === "result";
   setTool(doc.view.tool);
+  if (doc.view.brush) {
+    $("brushSize").value = String(doc.view.brush);
+    $("brushSizeValue").textContent = doc.view.brush + " px";
+  }
+  applyExport(doc.exportChoices);
   $("sourceProps").hidden = !svgSource;
   if (svgSource) $("svgSize").value = String(svgSource.edge);
   $("fileName").textContent = name;
@@ -390,6 +404,8 @@ function unstash(doc) {
   draw();
   prepareCurrent(true);
   layout();
+  if (variantSet && !$("variants").children.length && !batchAbort)
+    paintVariants(variantSet);
 }
 function renderTabs() {
   documentTabs?.render(
@@ -1322,6 +1338,11 @@ const dialogText = {
     "Your open tabs have edits. Export them first if you want to keep them.",
     "Quit",
   ],
+  session: [
+    "Open this session?",
+    "Your open tabs have edits. Opening a session replaces them. Save a session or export first if you want to keep them.",
+    "Open session",
+  ],
 };
 // Resolves true once the image is open. `redraw` reopens the current SVG at
 // the size chosen under "SVG drawn at".
@@ -2016,6 +2037,27 @@ $("format").onchange = () => {
   chosenFormat = $("format").value;
   sizeControls();
 };
+function currentExport() {
+  return {
+    size: $("size").value || "original",
+    format: $("format").value || "png",
+    custom: Number($("customSize").value) || 512,
+    ground: ($("previewGround").value || "#313338").toUpperCase(),
+  };
+}
+function applyExport(choices) {
+  if (!choices) return;
+  if ([...$("size").options].some((o) => o.value === choices.size))
+    $("size").value = choices.size;
+  if (Number.isInteger(choices.custom))
+    $("customSize").value = String(choices.custom);
+  if (choices.format) chosenFormat = choices.format;
+  const ground = [...$("previewGround").options].find(
+    (o) => o.value.toUpperCase() === choices.ground,
+  );
+  if (ground) $("previewGround").value = ground.value;
+  sizeControls();
+}
 $("customSize").oninput = (e) => {
   const v = Number(e.target.value);
   e.target.setAttribute(
@@ -3220,10 +3262,149 @@ $("open").onclick = () => $("fileInput").click();
 // Palette files (.gpl, .hex, .pal, .txt) open as palettes, recipes (.json)
 // apply to the image, anything else opens as an image.
 async function openFile(f) {
-  if (isPaletteFile(f)) await openPalette(f, f.name);
+  if (isSessionFile(f)) await openSessionFile(f);
+  else if (isPaletteFile(f)) await openPalette(f, f.name);
   else if (/\.json$/i.test(f.name) || f.type === "application/json")
     await applyRecipe(f);
   else await openBlob(f, f.name);
+}
+function sessionDirty(item) {
+  if (item.edit.steps.length || item.edit.outline.on) return true;
+  if (item.edit.rows.some((row) => row.seeds.length)) return true;
+  for (let i = 0; i < item.overrides.length; i++)
+    if (item.overrides[i] !== 0) return true;
+  const a = item.pixels,
+    b = item.original;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return true;
+  return false;
+}
+async function saveSession() {
+  if (!documents.length || batchAbort) return;
+  commit("Adjust colour");
+  stash();
+  const records = [];
+  for (const doc of documents) {
+    let svg = null;
+    if (doc.svgSource)
+      svg = {
+        edge: doc.svgSource.edge,
+        text: await doc.svgSource.blob.text(),
+      };
+    records.push({
+      name: doc.name,
+      width: doc.w,
+      height: doc.h,
+      still: !!doc.still,
+      original: doc.original,
+      pixels: doc.pixels,
+      overrides: doc.overrides,
+      edit: doc.edit,
+      svg,
+      view: doc.view,
+      export: doc.exportChoices || currentExport(),
+      variant: doc.variants?.set ? cloneVariantSet(doc.variants.set) : null,
+    });
+  }
+  let text;
+  try {
+    text = writeSession({
+      active: Math.max(0, documents.indexOf(activeDocument)),
+      documents: records,
+    });
+  } catch (e) {
+    status("Could not save the session: " + e.message);
+    return;
+  }
+  const filename =
+    safeStem(documents.length === 1 ? name : "hexshift") + ".hexshift";
+  download(new Blob([text], { type: SESSION_MIME }), filename);
+  status("Prepared " + filename + ". Choose where to save it.");
+}
+async function openSessionFile(file) {
+  if (batchAbort) {
+    status("Wait for the batch to finish, or cancel it first.");
+    return;
+  }
+  if ($("replaceDialog").open) return;
+  commit("Adjust colour");
+  stash();
+  let parsed;
+  try {
+    if (file.size > MAX_SESSION_BYTES)
+      throw Error("A session must be 128 MB or smaller.");
+    parsed = parseSession(await file.text());
+  } catch (e) {
+    status("Could not open the session: " + e.message);
+    return;
+  }
+  if (documents.some((d) => d.edited) && !(await askDiscard("session")))
+    return;
+  if (batchAbort || $("replaceDialog").open) return;
+  document.activeElement?.blur();
+  invalidateDocumentWork();
+  for (const doc of documents) {
+    worker?.postMessage({ type: "release", documentId: doc.id });
+    for (const key of [...preparedImages.keys()])
+      if (key.startsWith(doc.id + ":")) preparedImages.delete(key);
+  }
+  documents.length = 0;
+  selectedDocuments = new Set();
+  for (const item of parsed.documents) {
+    const dirty = sessionDirty(item);
+    documents.push({
+      id: ++documentSequence,
+      revision: 0,
+      sample: false,
+      still: item.still,
+      w: item.width,
+      h: item.height,
+      name: item.name,
+      original: item.original,
+      pixels: item.pixels,
+      overrides: item.overrides,
+      edit: item.edit,
+      palette: [],
+      svgSource: item.svg
+        ? {
+            blob: new Blob([item.svg.text], { type: "image/svg+xml" }),
+            name: item.name,
+            edge: item.svg.edge,
+          }
+        : null,
+      history: new History(),
+      dirty,
+      result: null,
+      edited: dirty,
+      view: item.view,
+      exportChoices: item.export,
+      variants: {
+        key: null,
+        set: item.variant,
+        nodes: [],
+        hidden: !item.variant,
+        exportHidden: !item.variant,
+        stale: false,
+        label: item.variant ? "Variants: " + item.variant.label : "",
+        labelHidden: !item.variant,
+        note: "",
+        noteHidden: true,
+      },
+    });
+  }
+  const active = documents[parsed.active];
+  selectedDocuments = new Set([active]);
+  selectionAnchor = active;
+  unstash(active);
+  $("emptyEditor").hidden = true;
+  renderTabs();
+  documentTabs?.reveal(active.id);
+  status(
+    "Opened " +
+      file.name +
+      " (" +
+      documents.length +
+      (documents.length === 1 ? " image)." : " images)."),
+  );
 }
 let openingFiles = Promise.resolve();
 function openFiles(files) {
@@ -3237,6 +3418,11 @@ function openFiles(files) {
 $("fileInput").onchange = (e) => {
   const files = [...e.target.files];
   if (files.length) openFiles(files);
+  e.target.value = "";
+};
+$("sessionInput").onchange = (e) => {
+  const file = e.target.files?.[0];
+  if (file) openSessionFile(file);
   e.target.value = "";
 };
 $("targetHex").addEventListener("input", (e) => {
@@ -3682,7 +3868,9 @@ document.addEventListener("keydown", (e) => {
     // From a slider or checkbox Ctrl+Z is the page's undo: right after a drag it is
     // exactly what is wanted, and those controls have no undo of their own.
     if (e.altKey) return;
-    if (key === "o") $("fileInput").click();
+    if (key === "o" && e.shiftKey) $("sessionInput").click();
+    else if (key === "o") $("fileInput").click();
+    else if (key === "s" && e.shiftKey) saveSession();
     else if (key === "e") save();
     else if (key === "c" && e.shiftKey) save(true);
     else if (key === "z") restore(e.shiftKey);
@@ -4014,6 +4202,20 @@ createMenubar({
           shortcut: "Ctrl+O",
           enabled: () => !batchAbort,
           run: () => $("fileInput").click(),
+        },
+        {
+          type: "item",
+          label: "Open session…",
+          shortcut: "Ctrl+Shift+O",
+          enabled: () => !batchAbort,
+          run: () => $("sessionInput").click(),
+        },
+        {
+          type: "item",
+          label: "Save session…",
+          shortcut: "Ctrl+Shift+S",
+          enabled: () => documents.length > 0 && !batchAbort,
+          run: saveSession,
         },
         {
           type: "item",
