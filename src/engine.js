@@ -33,7 +33,9 @@ export function validateImage(w, h, data) {
     throw Error("Invalid image dimensions or pixel buffer.");
 }
 export const MAX_ROWS = 16,
-  MAX_SEEDS = 64;
+  MAX_SEEDS = 64,
+  // Clicked corners, not a freehand stroke. 128 is a shape, not a scribble.
+  MAX_POLYGON = 128;
 // How quickly a pixel's share of overlapping rows falls with its distance
 // from their samples (hue / 180 plus shade); see processEdit.
 // In sampleDistance's units, 0.12 is about 5° of hue.
@@ -98,6 +100,70 @@ export function validateParams(p) {
 // The colour map: up to MAX_ROWS rows of {id (1-127), params, seeds}, at most
 // MAX_SEEDS samples in all. Brush labels are 0 (the rows' colour matching
 // decides), -1 (kept out of every row) or a row id (forced into that row).
+// A polygon, when a row has one, limits that row only. It is not a label.
+export function validatePolygon(points, w, h) {
+  if (
+    !Array.isArray(points) ||
+    points.length < 3 ||
+    points.length > MAX_POLYGON ||
+    points.some(
+      (p) =>
+        !Number.isInteger(p?.x) ||
+        !Number.isInteger(p?.y) ||
+        p.x < 0 ||
+        p.y < 0 ||
+        p.x >= w ||
+        p.y >= h,
+    )
+  )
+    throw Error("Invalid polygon.");
+}
+// Pixel centers inside `points`, including the boundary. Even-odd, so a
+// self-crossing outline takes every other region. Vertices are image pixels.
+export function rasterPolygon(w, h, points) {
+  const mask = new Uint8Array(w * h),
+    n = points.length;
+  if (n < 3) return mask;
+  const cx = (p) => p.x + 0.5,
+    cy = (p) => p.y + 0.5,
+    mark = (x, y) => {
+      if (x >= 0 && y >= 0 && x < w && y < h) mask[y * w + x] = 1;
+    };
+  for (let i = 0; i < n; i++) mark(points[i].x, points[i].y);
+  for (let y = 0; y < h; y++) {
+    const py = y + 0.5,
+      xs = [];
+    for (let i = 0; i < n; i++) {
+      const a = points[i],
+        b = points[(i + 1) % n];
+      const y1 = cy(a),
+        y2 = cy(b),
+        x1 = cx(a),
+        x2 = cx(b);
+      if (y1 === y2) {
+        if (y1 === py) {
+          const lo = Math.min(a.x, b.x),
+            hi = Math.max(a.x, b.x);
+          for (let x = lo; x <= hi; x++) mark(x, y);
+        }
+        continue;
+      }
+      // A ray through the pixel center counts an edge when one end is
+      // strictly above it. A shared vertex then cancels instead of
+      // doubling, and the vertex itself was marked above.
+      if ((y1 > py) === (y2 > py)) continue;
+      xs.push(x1 + ((py - y1) * (x2 - x1)) / (y2 - y1));
+    }
+    xs.sort((p, q) => p - q);
+    for (let k = 0; k + 1 < xs.length; k += 2) {
+      const left = Math.ceil(xs[k] - 0.5 - 1e-8),
+        right = Math.floor(xs[k + 1] - 0.5 + 1e-8);
+      for (let x = Math.max(0, left); x <= Math.min(w - 1, right); x++)
+        mark(x, y);
+    }
+  }
+  return mask;
+}
 export function validateMap(rows, labels, active, w, h) {
   if (!Array.isArray(rows) || rows.length < 1 || rows.length > MAX_ROWS)
     throw Error("Invalid colour map.");
@@ -114,6 +180,7 @@ export function validateMap(rows, labels, active, w, h) {
     ids.add(row.id);
     validateParams(row.params);
     validateSeeds(row.seeds, w, h);
+    if (row.polygon != null) validatePolygon(row.polygon, w, h);
     samples += row.seeds.length;
   }
   if (samples > MAX_SEEDS) throw Error("Invalid colour samples.");
@@ -238,10 +305,11 @@ function sampleDistance(hsl, o, v) {
 // colour's distance to its closest sample of the same kind (sampleDistance;
 // SCORE_NONE when there is none), whatever the tolerance, so rows with
 // different tolerances compare fairly.
-export async function selectMask(image, p, seeds, overrides, check) {
+export async function selectMask(image, p, seeds, overrides, check, polygon = null) {
   const { width: w, height: h, data, ids, hsl, colours } = image,
     n = w * h,
     colourCount = hsl.length / 4;
+  if (polygon != null) validatePolygon(polygon, w, h);
   const source = sampleSources(image, seeds);
   const weight = new Float32Array(colourCount),
     score = new Float32Array(colourCount).fill(SCORE_NONE),
@@ -294,6 +362,16 @@ export async function selectMask(image, p, seeds, overrides, check) {
   for (let i = 0; i < n; i++) {
     if ((i & 16383) === 0) await check();
     if (ids[i] >= 0) mask[i] = weight[ids[i]];
+  }
+  // The polygon limits this row's colour match. Pixels outside it stay
+  // available to other rows, because this never writes a brush label.
+  // Add and subtract run afterwards, so they can still correct the result.
+  if (polygon) {
+    const inside = rasterPolygon(w, h, polygon);
+    for (let i = 0; i < n; i++) {
+      if ((i & 16383) === 0) await check();
+      if (!inside[i]) mask[i] = 0;
+    }
   }
   if (p.connected && source.length) {
     const keep = new Uint8Array(n),
@@ -481,14 +559,17 @@ export async function processImage(
   overrides,
   yieldFn = async () => {},
   cancelled = () => false,
+  polygon = null,
 ) {
   validateEdit(p, seeds, overrides, image.width, image.height);
+  if (polygon != null) validatePolygon(polygon, image.width, image.height);
   const { pixels, mask, count, opaque, changed, capped } = await editRow(
     image,
     p,
     seeds,
     overrides,
     checker(yieldFn, cancelled),
+    polygon,
   );
   return { pixels, mask, count, opaque, changed, capped };
 }
@@ -535,7 +616,14 @@ export async function processEdit(
       if ((i & 16383) === 0) await check();
       rowLabels[i] = labels[i] === row.id ? 1 : labels[i] ? -1 : 0;
     }
-    const r = await editRow(image, row.params, row.seeds, rowLabels, check);
+    const r = await editRow(
+      image,
+      row.params,
+      row.seeds,
+      rowLabels,
+      check,
+      row.polygon ?? null,
+    );
     counts.push(r.count);
     if (k === active) shown = r;
     for (let i = 0; i < n; i++) {
@@ -732,10 +820,10 @@ async function reblend(image, rows, owner, out, check) {
 // One row's selection and treatment. Besides the edited pixels it returns
 // the weight each pixel was blended with and each colour's match score, which
 // processEdit uses to settle overlaps.
-async function editRow(image, p, seeds, overrides, check) {
+async function editRow(image, p, seeds, overrides, check, polygon = null) {
   const { width: w, height: h, data, ids, colours } = image,
     n = w * h;
-  const sel = await selectMask(image, p, seeds, overrides, check),
+  const sel = await selectMask(image, p, seeds, overrides, check, polygon),
     { mask } = sel;
   const pixels = new Uint8ClampedArray(data),
     effective = new Float32Array(n),
@@ -789,8 +877,8 @@ async function editRow(image, p, seeds, overrides, check) {
   if (unmixing)
     for (let i = 0; i < n; i++) {
       if ((i & 16383) === 0) await check();
-      // Pixels whose colour matched but were excluded (connected regions,
-      // subtract brush) stay as they are.
+      // Pixels whose colour matched but were excluded (a polygon, connected
+      // regions, the subtract brush) stay as they are.
       if (
         mask[i] > 0 ||
         ids[i] < 0 ||
@@ -864,8 +952,8 @@ async function editRow(image, p, seeds, overrides, check) {
     for (let i = 0; i < n; i++) {
       if ((i & 16383) === 0) await check();
       const c = ids[i];
-      // Pixels whose colour matched but were excluded (connected regions,
-      // subtract brush) stay as they are.
+      // Pixels whose colour matched but were excluded (a polygon, connected
+      // regions, the subtract brush) stay as they are.
       if (
         c >= 0 &&
         mask[i] < 1 &&

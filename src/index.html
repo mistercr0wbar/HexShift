@@ -74,6 +74,9 @@
         />
         <path d="M16 18h6" />
       </symbol>
+      <symbol id="i-polygon" viewBox="0 0 24 24">
+        <path d="m12 3.5 8 5.2-3 11.3H7L4 8.7Z" />
+      </symbol>
       <symbol id="i-pan" viewBox="0 0 24 24">
         <path d="M12 3v18M3 12h18" />
         <path d="m9 6 3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3" />
@@ -234,7 +237,7 @@
                     class="text-button"
                     id="clear"
                     type="button"
-                    title="Clear this colour's samples and brush strokes (Esc)"
+                    title="Clear this colour's samples, polygon and brush strokes (Esc)"
                   >
                     Clear
                   </button>
@@ -278,6 +281,10 @@
                     ><input type="checkbox" id="connected" /> Only connected
                     regions</label
                   >
+                  <p id="polygonNote" class="help advanced-only" hidden>
+                    This colour is limited to its polygon. Brushes still add and
+                    remove pixels.
+                  </p>
                   <details id="refinement" class="advanced-only">
                     <summary>Refine the match</summary>
                     <p id="refinementHelp" class="help" hidden>
@@ -380,6 +387,17 @@
                   <svg class="icon" aria-hidden="true">
                     <use href="#i-brush-sub" /></svg
                   ><span class="sr-only">Exclude from all colours</span></button
+                ><button
+                  id="polygon"
+                  type="button"
+                  class="icon-button advanced-only"
+                  aria-pressed="false"
+                  aria-keyshortcuts="P"
+                  title="Polygon: click points to limit this colour. Enter or the first point closes it (P)"
+                >
+                  <svg class="icon" aria-hidden="true">
+                    <use href="#i-polygon" /></svg
+                  ><span class="sr-only">Polygon</span></button
                 ><button
                   id="pan"
                   type="button"
@@ -519,6 +537,11 @@
                   <canvas
                     id="beforeCanvas"
                     aria-label="Source image; use the image palette for keyboard colour selection"
+                  ></canvas
+                  ><canvas
+                    id="polygonBefore"
+                    class="polygon-layer"
+                    aria-hidden="true"
                   ></canvas>
                 </div>
                 <div class="canvas-label" id="beforeLabel">
@@ -532,7 +555,12 @@
                     id="resultCanvas"
                     aria-label="Recoloured image preview"
                   ></canvas
-                  ><canvas id="wipeCanvas" aria-hidden="true"></canvas>
+                  ><canvas id="wipeCanvas" aria-hidden="true"></canvas
+                  ><canvas
+                    id="polygonAfter"
+                    class="polygon-layer"
+                    aria-hidden="true"
+                  ></canvas>
                   <div id="brushCursor" hidden></div>
                 </div>
                 <div class="canvas-label">
@@ -1027,8 +1055,8 @@
                   <details id="recipePanel" class="advanced-only">
                     <summary>Repeat edits</summary>
                     <p class="help">
-                      Brush strokes and connected regions are not included. An
-                      outline on its own can be repeated.
+                      Brush strokes, connected regions and polygons are not
+                      included. An outline on its own can be repeated.
                     </p>
                     <div class="palette-actions">
                       <button
@@ -1173,7 +1201,15 @@
               </div>
               <div>
                 <dt>Esc</dt>
-                <dd>Clear this colour's selection</dd>
+                <dd>Cancel the polygon being drawn, or clear this colour's selection</dd>
+              </div>
+              <div>
+                <dt>Enter</dt>
+                <dd>Close the polygon</dd>
+              </div>
+              <div>
+                <dt>Backspace</dt>
+                <dd>Remove the last polygon point</dd>
               </div>
               <div>
                 <dt>I</dt>
@@ -1190,6 +1226,10 @@
               <div>
                 <dt>E</dt>
                 <dd>Exclude from all colours</dd>
+              </div>
+              <div>
+                <dt>P</dt>
+                <dd>Polygon: limit this colour</dd>
               </div>
               <div>
                 <dt>H</dt>

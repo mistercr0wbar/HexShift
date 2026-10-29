@@ -140,6 +140,49 @@ test("a session without framing fields means framing is off, and a later save ca
   data.documents[0].export.trim = "yes";
   assert.throws(() => parseSession(JSON.stringify(data)), /export choices/);
 });
+test("a session without a polygon still opens, and a later save can record one", () => {
+  const text = writeSession({
+      active: 0,
+      documents: [doc("one.png", [1, 2, 3, 255])],
+    }),
+    opened = parseSession(text);
+  assert.equal(opened.documents[0].edit.rows[0].polygon, undefined);
+  assert.equal(
+    JSON.parse(text).documents[0].edit.rows[0].polygon,
+    undefined,
+  );
+  const shaped = doc("one.png", [1, 2, 3, 255]);
+  shaped.edit.rows[0].polygon = [
+    { x: 0, y: 0 },
+    { x: 1, y: 0 },
+    { x: 0, y: 1 },
+  ];
+  shaped.view = view("polygon");
+  const again = parseSession(writeSession({ active: 0, documents: [shaped] }));
+  assert.deepEqual(
+    again.documents[0].edit.rows[0].polygon,
+    shaped.edit.rows[0].polygon,
+  );
+  assert.equal(again.documents[0].view.tool, "polygon");
+  const data = JSON.parse(text);
+  data.documents[0].edit.rows[0].polygon = [
+    { x: 0, y: 0 },
+    { x: 1, y: 0 },
+  ];
+  assert.throws(() => parseSession(JSON.stringify(data)), /polygon/);
+  data.documents[0].edit.rows[0].polygon = [
+    { x: 0, y: 0 },
+    { x: 9, y: 0 },
+    { x: 0, y: 1 },
+  ];
+  assert.throws(() => parseSession(JSON.stringify(data)), /polygon/);
+  data.documents[0].edit.rows[0].polygon = [
+    { x: 0.5, y: 0 },
+    { x: 1, y: 0 },
+    { x: 0, y: 1 },
+  ];
+  assert.throws(() => parseSession(JSON.stringify(data)), /polygon/);
+});
 test("a recipe is not a session, and a session is not a recipe", () => {
   const session = writeSession({
     active: 0,

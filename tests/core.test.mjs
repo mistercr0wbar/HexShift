@@ -12,7 +12,16 @@ import {
   anchorRemap,
   toHex,
 } from "../src/colour.js";
-import { prepare, processImage, validateImage, unmix } from "../src/engine.js";
+import {
+  MAX_POLYGON,
+  prepare,
+  processEdit,
+  processImage,
+  rasterPolygon,
+  validateImage,
+  validatePolygon,
+  unmix,
+} from "../src/engine.js";
 import { History } from "../src/history.js";
 import { inspectRaster, dimensions } from "../src/import.js";
 import { outputName, losslessWebP, losslessPNG } from "../src/export.js";
@@ -431,4 +440,221 @@ test("reference PNG decoder preserves every RGBA byte without canvas alpha round
       .raw()
       .toBuffer();
   assert.deepEqual([...decoded], [...pixels]);
+});
+function referenceInside(x, y, points) {
+  const px = x + 0.5,
+    py = y + 0.5,
+    n = points.length;
+  let inside = false;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const ax = points[j].x + 0.5,
+      ay = points[j].y + 0.5,
+      bx = points[i].x + 0.5,
+      by = points[i].y + 0.5,
+      dx = bx - ax,
+      dy = by - ay,
+      len2 = dx * dx + dy * dy;
+    if (len2 === 0) {
+      if (px === ax && py === ay) return true;
+    } else {
+      const t = ((px - ax) * dx + (py - ay) * dy) / len2;
+      if (t >= -1e-9 && t <= 1 + 1e-9) {
+        const qx = ax + t * dx,
+          qy = ay + t * dy;
+        if ((px - qx) ** 2 + (py - qy) ** 2 < 1e-10) return true;
+      }
+    }
+    if ((ay > py) !== (by > py) && px < ax + ((py - ay) * dx) / dy)
+      inside = !inside;
+  }
+  return inside;
+}
+test("a polygon covers its boundary and matches even-odd pixel centers", () => {
+  const rect = [
+    { x: 1, y: 1 },
+    { x: 4, y: 1 },
+    { x: 4, y: 3 },
+    { x: 1, y: 3 },
+  ];
+  const mask = rasterPolygon(6, 5, rect);
+  for (let y = 0; y < 5; y++)
+    for (let x = 0; x < 6; x++) {
+      const on = x >= 1 && x <= 4 && y >= 1 && y <= 3;
+      assert.equal(mask[y * 6 + x], on ? 1 : 0, x + "," + y);
+    }
+  const triangle = [
+    { x: 0, y: 0 },
+    { x: 4, y: 0 },
+    { x: 0, y: 4 },
+  ];
+  const tri = rasterPolygon(6, 6, triangle);
+  assert.equal(tri[0], 1);
+  assert.equal(tri[2 * 6 + 2], 1);
+  assert.equal(tri[1 * 6 + 1], 1);
+  assert.equal(tri[2 * 6 + 3], 0);
+  assert.equal(tri[4 * 6 + 4], 0);
+  const shapes = [
+    rect,
+    triangle,
+    [
+      { x: 0, y: 0 },
+      { x: 2, y: 0 },
+      { x: 2, y: 1 },
+      { x: 1, y: 1 },
+      { x: 1, y: 2 },
+      { x: 0, y: 2 },
+    ],
+    [
+      { x: 0, y: 0 },
+      { x: 3, y: 3 },
+      { x: 0, y: 3 },
+      { x: 3, y: 0 },
+    ],
+  ];
+  for (const points of shapes) {
+    const got = rasterPolygon(6, 6, points);
+    for (let y = 0; y < 6; y++)
+      for (let x = 0; x < 6; x++)
+        assert.equal(
+          got[y * 6 + x],
+          referenceInside(x, y, points) ? 1 : 0,
+          x + "," + y,
+        );
+  }
+  assert.throws(() => validatePolygon(rect.slice(0, 2), 6, 5), /polygon/);
+  assert.throws(
+    () =>
+      validatePolygon(
+        Array.from({ length: MAX_POLYGON + 1 }, (_, i) => ({
+          x: i % 6,
+          y: 0,
+        })),
+        6,
+        5,
+      ),
+    /polygon/,
+  );
+});
+test("a polygon limits one row, leaves other colours alone, and brushes still correct it", async () => {
+  const w = 4,
+    h = 2,
+    red = [220, 30, 30],
+    blue = [30, 60, 220],
+    green = [0, 255, 0],
+    yellow = [255, 255, 0],
+    // R R B R
+    // R R B B
+    layout = [red, red, blue, red, red, red, blue, blue],
+    data = new Uint8ClampedArray(w * h * 4);
+  layout.forEach((rgb, i) => data.set([...rgb, 255], i * 4));
+  const image = await prepare(w, h, data),
+    polygon = [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 1, y: 1 },
+      { x: 0, y: 1 },
+    ],
+    redRow = {
+      id: 1,
+      seeds: [{ x: 0, y: 0 }],
+      polygon,
+      params: { ...defaults(), mode: "flat", soft: 0, target: "#00FF00" },
+    },
+    blueRow = {
+      id: 2,
+      seeds: [{ x: 2, y: 0 }],
+      params: { ...defaults(), mode: "flat", soft: 0, target: "#FFFF00" },
+    },
+    labels = new Int8Array(w * h),
+    rgb = (pixels, x, y) => [
+      ...pixels.slice((y * w + x) * 4, (y * w + x) * 4 + 3),
+    ];
+  const out = await processEdit(image, [redRow, blueRow], labels, 0);
+  assert.deepEqual([...labels], [0, 0, 0, 0, 0, 0, 0, 0]);
+  for (const [x, y] of [
+    [0, 0],
+    [1, 0],
+    [0, 1],
+    [1, 1],
+  ])
+    assert.deepEqual(rgb(out.pixels, x, y), green, "inside " + x + "," + y);
+  assert.deepEqual(rgb(out.pixels, 3, 0), red);
+  assert.deepEqual(rgb(out.pixels, 2, 0), yellow);
+  assert.deepEqual(rgb(out.pixels, 2, 1), yellow);
+  assert.deepEqual(rgb(out.pixels, 3, 1), yellow);
+  const open = await processEdit(
+    image,
+    [{ ...redRow, polygon: undefined }, blueRow],
+    new Int8Array(w * h),
+    0,
+  );
+  assert.deepEqual(rgb(open.pixels, 3, 0), green);
+  const covered = await processEdit(
+    image,
+    [
+      {
+        ...redRow,
+        polygon: [
+          { x: 0, y: 0 },
+          { x: 3, y: 0 },
+          { x: 3, y: 1 },
+          { x: 0, y: 1 },
+        ],
+      },
+      blueRow,
+    ],
+    new Int8Array(w * h),
+    0,
+  );
+  assert.deepEqual(covered.pixels, open.pixels);
+  const added = new Int8Array(w * h);
+  added[3] = 1;
+  const forced = await processEdit(image, [redRow, blueRow], added, 0);
+  assert.deepEqual(rgb(forced.pixels, 3, 0), green);
+  assert.deepEqual([...added], [0, 0, 0, 1, 0, 0, 0, 0]);
+  const subtracted = new Int8Array(w * h);
+  subtracted[0] = -1;
+  const kept = await processEdit(image, [redRow, blueRow], subtracted, 0);
+  assert.deepEqual(rgb(kept.pixels, 0, 0), red);
+  assert.deepEqual(rgb(kept.pixels, 1, 0), green);
+  assert.deepEqual(rgb(kept.pixels, 2, 0), yellow);
+  const grid = new Uint8ClampedArray(9 * 4);
+  for (let i = 0; i < 9; i++) grid.set([220, 30, 30, 255], i * 4);
+  const gim = await prepare(3, 3, grid),
+    clipped = await processEdit(
+      gim,
+      [
+        {
+          id: 1,
+          seeds: [{ x: 0, y: 0 }],
+          polygon: [
+            { x: 0, y: 0 },
+            { x: 0, y: 2 },
+            { x: 0, y: 1 },
+          ],
+          params: {
+            ...defaults(),
+            mode: "flat",
+            soft: 0,
+            connected: true,
+            target: "#00FF00",
+          },
+        },
+      ],
+      new Int8Array(9),
+      0,
+    ),
+    cell = (x, y) => [...clipped.pixels.slice((y * 3 + x) * 4, (y * 3 + x) * 4 + 3)];
+  assert.deepEqual(cell(0, 0), green);
+  assert.deepEqual(cell(0, 2), green);
+  assert.deepEqual(cell(1, 0), red);
+  await assert.rejects(
+    processEdit(
+      image,
+      [{ ...redRow, polygon: [{ x: 0, y: 0 }] }],
+      new Int8Array(w * h),
+      0,
+    ),
+    /polygon/,
+  );
 });

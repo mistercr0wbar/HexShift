@@ -292,6 +292,37 @@ test("recipes: brush strokes and connected regions are flagged, never kept", () 
     0,
   );
 });
+test("recipes omit a polygon and mark the repeat approximate", () => {
+  const data = strip([255, 0, 0], [0, 0, 255]),
+    rows = [row(1, data, 2, 0, 0, "#00FF00")];
+  rows[0].polygon = [
+    { x: 0, y: 0 },
+    { x: 1, y: 0 },
+    { x: 0, y: 0 },
+  ];
+  const step = recipeStep(rows, data, 2, new Int8Array(2));
+  assert.equal(step.approximate, true);
+  assert.equal(step.rows[0].polygon, undefined);
+  const saved = JSON.parse(writeRecipe([step]));
+  assert.equal("polygon" in saved.steps[0].rows[0], false);
+  assert.equal("approximate" in saved.steps[0], false);
+  const back = parseRecipe(writeRecipe([step]));
+  assert.equal(back[0].rows[0].polygon, undefined);
+  const empty = recipeStep(
+    [
+      {
+        id: 1,
+        params: defaults(),
+        seeds: [],
+        polygon: rows[0].polygon,
+      },
+    ],
+    data,
+    2,
+  );
+  assert.equal(empty.rows.length, 0);
+  assert.equal(empty.approximate, true);
+});
 test("recipes are parsed safely: format, version, size, counts and ranges", () => {
   const good = JSON.parse(
     writeRecipe([

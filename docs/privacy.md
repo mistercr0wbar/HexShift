@@ -1,6 +1,6 @@
 # Hex Shift privacy
 
-Updated 29 October 2026 for version 3.9.0 (browser and Windows).
+Updated 29 October 2026 for version 3.10.0 (browser and Windows).
 
 Images are processed on your device. Images, selections, edits and undo history
 stay in memory and are lost when the page closes or reloads, unless you save a
@@ -13,7 +13,9 @@ Their undo history shares a 96 MB budget, with background history trimmed first.
 Tab order, images and batch work are not saved automatically. **Save session**
 writes the open images and their edits into a file you choose. That file
 contains the pictures, selections, colour maps, outlines, variant colours and
-export framing (trim, padding and scaling). A session saved by 3.8.0 has no
+export framing (trim, padding and scaling). A colour can also keep a polygon
+that limits it to part of the picture. A session with no polygon field has no
+polygon, so an older session still opens. A session saved by 3.8.0 has no
 framing fields, which means framing is off.
 It does not contain undo history, and it is not the layout, theme or mode
 setting. It stays only where you saved it. Export remains the way to save one
