@@ -1,6 +1,6 @@
 // The three defects found in the 3.5.0 release. Each one failed on the
 // shipped page before the repair.
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./test.mjs";
 import { ensureHeart } from "./fixture.mjs";
 import { readFile } from "node:fs/promises";
 import sharp from "sharp";

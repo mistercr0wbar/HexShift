@@ -1,7 +1,7 @@
 // The workspace: layouts and panels, the menu bar, the outline in the viewer, the
 // update check shown in the page, and the things that must hold still while you drag.
-import { test, expect } from "@playwright/test";
-import { ensureHeart } from "./fixture.mjs";
+import { test, expect } from "./test.mjs";
+import { ensureHeart, rememberAdvanced } from "./fixture.mjs";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import sharp from "sharp";
@@ -90,6 +90,7 @@ for (const [name, selector, from, to] of [
   test(`dragging the ${name} slider moves nothing`, async ({ page }) => {
     await pick(page);
     await openPanel(page, "outline");
+    await openPanel(page, "adjust");
     await page.locator("#outline").check();
     await settled(page);
     // Fit view, so the canvas size is the fit's answer to the stage.
@@ -131,10 +132,13 @@ for (const [width, height, preset, collapsed] of [
     browser,
     baseURL,
   }) => {
-    const page = await browser.newPage({
+    // The full editor is what has to fit. A brand-new profile would hide Adjust.
+    const context = await browser.newContext({
       viewport: { width, height },
       baseURL,
     });
+    await rememberAdvanced(context);
+    const page = await context.newPage();
     await page.goto("/");
     await ready(page);
     await expect(page.locator("#main")).toHaveAttribute("data-preset", preset);
@@ -155,18 +159,28 @@ for (const [width, height, preset, collapsed] of [
     for (const [scroll, client] of [...state.stacks, ...state.bodies])
       expect(scroll).toBeLessThanOrEqual(client + 1);
     expect(state.page[0]).toBeLessThanOrEqual(state.page[1]);
-    // Panels that cannot all fit start collapsed, Swatches first, then Outline (a
-    // click opens them). How many depends on the window's height, and a little on
-    // the fonts, so this checks the order and a floor, not an exact set.
-    expect(["", "swatches", "swatches,outline"]).toContain(
-      state.collapsed.join(","),
-    );
-    expect(state.collapsed.length).toBeGreaterThanOrEqual(collapsed.length);
-    // The sliders that sat below the fold are right there.
+    // Adjust starts folded. Panels that still cannot fit fold after it: Swatches,
+    // then Outline. How many depends on the window's height, and a little on the
+    // fonts, so this checks the order and a floor, not an exact set.
+    expect([
+      "adjust",
+      "adjust,swatches",
+      "adjust,swatches,outline",
+    ]).toContain(state.collapsed.join(","));
+    for (const id of collapsed) expect(state.collapsed).toContain(id);
+    // Opening Adjust and the refinement block must not scroll the page. The
+    // sliders that used to sit below the fold are right there.
+    await openPanel(page, "adjust");
+    await page.locator("#refinement summary").click();
     for (const id of ["dh", "ds", "dl", "hueTol", "feather"])
       await expect(page.locator("#" + id)).toBeInViewport();
     await expect(page.locator("#export")).toBeInViewport();
-    await page.close();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await context.close();
   });
 
 test("columns resize with their handles and the arrow keys", async ({
@@ -211,7 +225,7 @@ test("panels collapse by their headers, and the layout follows the window", asyn
   await exportToggle.click();
   await expect(exportToggle).toHaveAttribute("aria-expanded", "false");
   await expect(page.locator("#size")).toBeHidden();
-  // The Reset original button stays in the header of a collapsed panel.
+  // Reset image edits lives in Selection, so folding Export leaves it.
   await expect(page.locator("#reset")).toBeVisible();
   await exportToggle.click();
   await expect(page.locator("#size")).toBeVisible();
@@ -575,11 +589,11 @@ test("the menu bar opens with the mouse, switches by hover and closes with Escap
   await expect(top(page, "File")).toHaveAttribute("aria-expanded", "false");
   // Items that cannot be used are greyed but still there.
   await expect(item(page, "Undo")).toHaveAttribute("aria-disabled", "true");
-  await expect(item(page, "Apply, then build on it")).toHaveAttribute(
+  await expect(item(page, "Bake current colours")).toHaveAttribute(
     "aria-disabled",
     "true",
   );
-  await expect(item(page, "Reset original")).not.toHaveAttribute(
+  await expect(item(page, "Reset image edits")).not.toHaveAttribute(
     "aria-disabled",
     "true",
   );
@@ -837,7 +851,7 @@ test("the outline is drawn behind the artwork, follows colour and undo, and matc
   // Recolouring only recolours the stroke.
   await page.locator("#outlineHex").fill("#FF00FF");
   await expect.poll(() => layerGreens(page)).toBe(0);
-  await expect(page.locator("#outlineWidthValue")).toHaveText("10%");
+  await expect(page.locator("#outlineWidthValue")).toHaveText("10% · 12.8 px");
   // Undo takes the outline back out, one change at a time: width, colour, then on.
   await page.locator("#outlineWidth").fill("12");
   await page.locator("#undo").click();
@@ -988,7 +1002,7 @@ test("recipes carry the outline, and ones without it still open", async ({
   await expect(page.locator("#outline")).toBeChecked();
 });
 
-test("outline settings carry to the next image, and Reset original keeps them", async ({
+test("outline settings carry to the next image, and Reset image edits keeps them", async ({
   page,
 }) => {
   await openPanel(page, "outline");
@@ -1073,6 +1087,7 @@ test("nothing spills sideways when the text runs wide, at any window size or at 
     bypassCSP: true,
     viewport: { width: 1280, height: 720 },
   });
+  await rememberAdvanced(context);
   const page = await context.newPage();
   await page.route(
     (url) => url.pathname === "/",
@@ -1135,6 +1150,7 @@ test("Cancel appears only after a long wait, in its own place", async ({
   baseURL,
 }) => {
   const context = await browser.newContext();
+  await rememberAdvanced(context);
   // Holds every edit back for a second, so the wait is long on purpose.
   await context.addInitScript(() => {
     const Real = window.Worker;
@@ -1436,4 +1452,151 @@ test("a tall dock keeps only the height its panels use, and artwork bounds stay 
   await ready(page);
   await expect(page.locator(".artwork-bounds").first()).toBeHidden();
   await context.close();
+});
+
+test("undo names the next action, and a hand adjustment can return to the target", async ({
+  page,
+}) => {
+  await pick(page);
+  await expect(page.locator("#undo")).toHaveAttribute(
+    "aria-label",
+    "Undo Pick colour",
+  );
+  await top(page, "Edit").click();
+  await expect(item(page, "Undo Pick colour")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await openPanel(page, "adjust");
+  await page.locator("#dh").fill("15");
+  await settled(page);
+  await expect(page.locator("#targetText")).toHaveText(
+    "Adjusted by hand. Return to target to follow the colour again.",
+  );
+  await expect(page.locator("#returnTarget")).toBeVisible();
+  await page.locator("#returnTarget").click();
+  await settled(page);
+  await expect(page.locator("#returnTarget")).toBeHidden();
+  await expect(page.locator("#targetText")).toContainText("Requested");
+});
+
+test("clear selection keeps exclusions, and reset all edits turns the outline off", async ({
+  page,
+}) => {
+  await pick(page);
+  const box = await page.locator("#resultCanvas").boundingBox();
+  await page.locator("#brushAdd").click();
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await settled(page);
+  await page.locator("#matchAuto").click();
+  await expect(page.locator("#undo")).toHaveAttribute(
+    "aria-label",
+    "Undo Match automatically",
+  );
+  await page.locator("#brushSubtract").click();
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await settled(page);
+  await page.locator("#clear").click();
+  await expect(page.locator("#undo")).toHaveAttribute(
+    "aria-label",
+    "Undo Clear selection",
+  );
+  await page.locator("#clearExclusions").click();
+  await expect(page.locator("#undo")).toHaveAttribute(
+    "aria-label",
+    "Undo Clear all exclusions",
+  );
+  await openPanel(page, "outline");
+  await page.locator("#outline").check();
+  await page.locator("#resetAll").click();
+  await settled(page);
+  await expect(page.locator("#outline")).not.toBeChecked();
+  await page.locator("#undo").click();
+  await expect(page.locator("#outline")).toBeChecked();
+});
+
+test("softness explains itself while it is focused", async ({ page }) => {
+  await page.locator("#refinement summary").click();
+  await page.locator("#soft").focus();
+  await expect(page.locator("#refinementHelp")).toBeVisible();
+  await page.locator("#hueTol").focus();
+  await expect(page.locator("#refinementHelp")).toBeHidden();
+});
+
+test("switching mode keeps the edit and the arrangement, and reset layout keeps the mode", async ({
+  page,
+}) => {
+  await pick(page);
+  const stored = await page.evaluate(() => localStorage.getItem("hexshift-layout"));
+  await openView(page);
+  await page.getByRole("menuitemradio", { name: "Simple", exact: true }).click();
+  await expect(page.locator(".app")).toHaveAttribute("data-experience", "simple");
+  await expect(page.locator("#brushAdd")).toBeHidden();
+  await expect(page.locator("#editState")).toHaveText("Pending edit");
+  expect(await page.evaluate(() => localStorage.getItem("hexshift-layout"))).toBe(
+    stored,
+  );
+  expect(await page.evaluate(() => localStorage.getItem("hexshift-mode"))).toBe(
+    "simple",
+  );
+  await openView(page);
+  await page.getByRole("menuitem", { name: "Layout", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Reset layout", exact: true }).click();
+  expect(await page.evaluate(() => localStorage.getItem("hexshift-mode"))).toBe(
+    "simple",
+  );
+  await expect(page.locator(".app")).toHaveAttribute("data-experience", "simple");
+});
+
+test("a new profile opens in Simple, and an existing layout stays Advanced", async ({
+  browser,
+  baseURL,
+}) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.goto(baseURL + "/");
+  await expect(page.locator(".app")).toHaveAttribute("data-experience", "simple");
+  await expect(page.locator("#modeAsk")).toBeVisible();
+  await expect(page.locator("#firstUse")).toBeVisible();
+  await expect(page.locator("#brushAdd")).toBeHidden();
+  await expect(page.locator("#recipePanel")).toBeHidden();
+  await expect(page.locator("#advancedHeld")).toBeHidden();
+  await page.locator("#showAdvanced").click();
+  await expect(page.locator(".app")).toHaveAttribute(
+    "data-experience",
+    "advanced",
+  );
+  await expect(page.locator("#brushAdd")).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem("hexshift-mode"))).toBe(
+    null,
+  );
+  await page.reload();
+  await expect(page.locator(".app")).toHaveAttribute("data-experience", "simple");
+  await expect(page.locator("#modeAsk")).toBeVisible();
+  await expect(page.locator("#firstUse")).toBeHidden();
+  await page.locator("#keepAdvanced").click();
+  expect(await page.evaluate(() => localStorage.getItem("hexshift-mode"))).toBe(
+    "advanced",
+  );
+  await expect(page.locator("#modeAsk")).toBeHidden();
+  await page.reload();
+  await expect(page.locator(".app")).toHaveAttribute(
+    "data-experience",
+    "advanced",
+  );
+  await expect(page.locator("#modeAsk")).toBeHidden();
+  await context.close();
+
+  const returning = await browser.newContext();
+  await returning.addInitScript(() => {
+    localStorage.setItem("hexshift-layout", "{");
+  });
+  const again = await returning.newPage();
+  await again.goto(baseURL + "/");
+  await expect(again.locator(".app")).toHaveAttribute(
+    "data-experience",
+    "advanced",
+  );
+  await expect(again.locator("#modeAsk")).toBeHidden();
+  await expect(again.locator("#firstUse")).toBeHidden();
+  await expect(again.locator("#brushAdd")).toBeVisible();
+  await returning.close();
 });

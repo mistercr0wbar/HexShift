@@ -1,8 +1,8 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./test.mjs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import sample from "../../src/sample.js";
-import { ensureHeart } from "./fixture.mjs";
+import { ensureHeart, rememberAdvanced } from "./fixture.mjs";
 import sharp from "sharp";
 import AxeBuilder from "@axe-core/playwright";
 import { THEMES, MODIFIERS, resolveTheme } from "../../src/themes.js";
@@ -179,6 +179,8 @@ test("lossless WebP export decodes to the exact PNG pixel values", async ({
 });
 test("shift lands on the target in both colour models", async ({ page }) => {
   await pick(page);
+  // Adjust starts folded. The colour model lives in that panel.
+  await openPanel(page, "adjust");
   for (const model of ["oklch", "hsl"]) {
     await choose(page, "model", model);
     await page.locator("#targetHex").fill("#5865F2");
@@ -337,7 +339,7 @@ test("SVGs draw at the chosen size and redraw only after confirmation", async ({
       ),
     );
   await expect(page.locator("#fileDims")).toHaveText("512 × 256");
-  await expect(page.locator("#svgSizeGroup")).toBeVisible();
+  await expect(page.locator("#sourceProps")).toBeVisible();
   await page.locator("#svgSize").selectOption("256");
   await expect(page.locator("#fileDims")).toHaveText("256 × 128");
   await expect(page.locator("#status")).toContainText(
@@ -363,7 +365,7 @@ test("SVGs draw at the chosen size and redraw only after confirmation", async ({
     buffer: Buffer.from(sample.split(",")[1], "base64"),
   });
   await expect(page.locator("#fileDims")).toHaveText("128 × 128");
-  await expect(page.locator("#svgSizeGroup")).toBeHidden();
+  await expect(page.locator("#sourceProps")).toBeHidden();
 });
 test("colour names, rgb() and the screen picker set the target", async ({
   page,
@@ -405,8 +407,9 @@ test("colour names, rgb() and the screen picker set the target", async ({
   );
   await page.locator("#eyeDropper").click();
   await expect(page.locator("#status")).toHaveText("No colour was picked.");
-  const context = await browser.newContext(),
-    plain = await context.newPage();
+  const context = await browser.newContext();
+  await rememberAdvanced(context);
+  const plain = await context.newPage();
   await plain.addInitScript(() => delete window.EyeDropper);
   await plain.goto("/");
   await ready(plain);
@@ -635,6 +638,9 @@ test("map all colours, then save a recipe, apply it and batch it into a ZIP", as
   const rows = page.locator("#colourMap .map-select");
   await page.locator("#mapAll").click();
   await expect(rows).toHaveCount(2);
+  await expect(page.locator("#mapAll")).toHaveText(
+    "Replace map with detected colours",
+  );
   await expect(rows.first()).toContainText("unchanged");
   await expect(page.locator("#editState")).toHaveText("No pending edit");
   await page.locator("#targetHex").fill("#5865F2");
@@ -746,6 +752,7 @@ test("responsive workspace, keyboard palette and theme persist without image sto
     "hexshift-colours",
     "hexshift-introduced",
     "hexshift-layout",
+    "hexshift-mode",
     "hexshift-theme",
   ]);
 });
@@ -773,6 +780,7 @@ test("network and content security policy block external resources and script in
 });
 test("worker fallback remains editable", async ({ browser, baseURL }) => {
   const context = await browser.newContext();
+  await rememberAdvanced(context);
   await context.addInitScript(() => {
     window.Worker = class {
       constructor() {
@@ -789,6 +797,7 @@ test("worker fallback remains editable", async ({ browser, baseURL }) => {
 });
 test("portable HTML opens without a server", async ({ browser }) => {
   const context = await browser.newContext();
+  await rememberAdvanced(context);
   const page = await context.newPage();
   await page.goto("file:///" + resolve("HexShift.html").replaceAll("\\", "/"));
   await ready(page);
@@ -1033,6 +1042,7 @@ test("on touch screens controls are finger-sized and two fingers pinch to zoom",
     hasTouch: true,
     isMobile: true,
   });
+  await rememberAdvanced(context);
   const page = await context.newPage();
   await page.goto("/");
   await ensureHeart(page);
@@ -1156,7 +1166,10 @@ test("themes and modifiers apply, persist in the one theme setting and pass acce
       Object.keys(localStorage).sort(),
       localStorage.getItem("hexshift-theme"),
     ]),
-  ).toEqual([["hexshift-introduced", "hexshift-theme"], "night:nord"]);
+  ).toEqual([
+    ["hexshift-introduced", "hexshift-mode", "hexshift-theme"],
+    "night:nord",
+  ]);
   await page.reload();
   await ready(page);
   expect(await token(page, "--surface")).toBe("#21262f");
@@ -1336,6 +1349,7 @@ test("closing repeated imports releases fallback pixel buffers", async ({
   );
   test.setTimeout(90000);
   const context = await browser.newContext();
+  await rememberAdvanced(context);
   await context.addInitScript(() => {
     window.Worker = class {
       constructor() {

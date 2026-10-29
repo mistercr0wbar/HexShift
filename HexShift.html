@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-fhOKe5ka/4y7F7qmm5LfTJUkIEsp7a+74Pz2AR4vX/Y='; style-src 'sha256-pp6xWIeS6k3dDHrXUzHHflcR/SX9FcgHiVZai1w04Tc='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-KyYEILjxwy08ghGW7OWJ3lGCB75AW/PCLgfQR9ia4Aw='; style-src 'sha256-hM53KM69A+bkJMUdHGRJ/9pA8zC2+MNDD9ivSiHjxoI='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta
       name="theme-color"
@@ -450,6 +450,28 @@ summary::marker {
   /* A column that may shrink, so a wide top bar wraps instead of widening the page. */
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
+}
+/* Simple hides the tools that are not the recolour path. The dock tree stays. */
+.app[data-experience="simple"] .advanced-only,
+.app[data-experience="simple"] .panel-tab[data-tab="adjust"] {
+  display: none !important;
+}
+.mode-ask {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--ground);
+}
+.mode-ask p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.mode-ask[hidden] {
+  display: none;
 }
 .topbar {
   display: flex;
@@ -1183,7 +1205,15 @@ summary::marker {
   display: flex;
   align-items: center;
   gap: 6px;
-  min-height: 1.4em;
+  /* One line, including Return to target, so a fine slider does not move the page. */
+  height: 24px;
+  overflow: hidden;
+}
+#returnTarget {
+  flex: none;
+  min-height: 0;
+  height: 18px;
+  padding: 0 6px;
 }
 #targetText {
   flex: 1;
@@ -1381,6 +1411,25 @@ summary::marker {
   min-height: 0;
   overflow: hidden;
   background: var(--ground);
+}
+.source-props {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 8px 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 12px;
+}
+.source-props[hidden] {
+  display: none;
+}
+.source-props .help {
+  margin: 0;
+  flex-basis: 100%;
 }
 .stage-tools {
   position: absolute;
@@ -2694,12 +2743,38 @@ dialog details {
                     class="text-button"
                     id="clear"
                     type="button"
-                    title="Clear the selection (Esc)"
+                    title="Clear this colour's samples and brush strokes (Esc)"
                   >
                     Clear
                   </button>
                 </div>
                 <div class="panel-body" id="selectionBody">
+                  <div id="modeAsk" class="mode-ask" hidden>
+                    <p>
+                      This is Simple: open, pick, recolour, outline, export.
+                      Advanced adds brushes, fine adjustments, variants and
+                      repeat.
+                    </p>
+                    <div class="palette-actions">
+                      <button id="showAdvanced" class="text-button" type="button">
+                        Look at Advanced</button
+                      ><button id="keepSimple" class="text-button" type="button">
+                        Use Simple</button
+                      ><button
+                        id="keepAdvanced"
+                        class="text-button"
+                        type="button"
+                      >
+                        Use Advanced
+                      </button>
+                    </div>
+                  </div>
+                  <p id="advancedHeld" class="readout" hidden>
+                    An advanced edit is still on this image.
+                    <button id="openAdvanced" class="text-button" type="button">
+                      Open Advanced
+                    </button>
+                  </p>
                   <div id="seeds" class="seed-list">
                     <span class="muted">Nothing picked yet</span>
                   </div>
@@ -2708,10 +2783,43 @@ dialog details {
                     <div id="palette" class="swatches"></div>
                   </div>
                   <div id="selectionSliders" class="slider-grid"></div>
-                  <label class="check"
+                  <label class="check advanced-only"
                     ><input type="checkbox" id="connected" /> Only connected
                     regions</label
                   >
+                  <details id="refinement" class="advanced-only">
+                    <summary>Refine the match</summary>
+                    <p id="refinementHelp" class="help" hidden>
+                      Softness widens which colours match. Feather blends the
+                      edge of the selection.
+                    </p>
+                    <div id="refinementSliders" class="slider-grid"></div>
+                  </details>
+                  <div class="palette-actions">
+                    <button
+                      id="matchAuto"
+                      class="text-button advanced-only"
+                      type="button"
+                      title="Return this colour's brushed pixels to automatic matching"
+                    >
+                      Match automatically</button
+                    ><button
+                      id="clearExclusions"
+                      class="text-button advanced-only"
+                      type="button"
+                      title="Remove pixels excluded from every colour"
+                    >
+                      Clear all exclusions</button
+                    ><button id="reset" class="text-button" type="button">
+                      Reset image edits</button
+                    ><button
+                      id="resetAll"
+                      class="text-button advanced-only"
+                      type="button"
+                    >
+                      Reset all edits
+                    </button>
+                  </div>
                   <p id="coverage" class="readout">Open an image to begin.</p>
                 </div>
               </section>
@@ -2747,22 +2855,22 @@ dialog details {
                 >
                   <svg class="icon" aria-hidden="true">
                     <use href="#i-sample" /></svg
-                  ><span class="sr-only">Replace sample</span></button
+                  ><span class="sr-only">Pick colour</span></button
                 ><button
                   id="addSample"
                   type="button"
                   class="icon-button"
                   aria-pressed="false"
                   aria-keyshortcuts="A"
-                  title="Add sample: click to add another colour to the selection (A, or Shift-click)"
+                  title="Add another colour: click to add it to this selection (A, or Shift-click)"
                 >
                   <svg class="icon" aria-hidden="true">
                     <use href="#i-sample-add" /></svg
-                  ><span class="sr-only">Add sample</span></button
+                  ><span class="sr-only">Add another colour</span></button
                 ><button
                   id="brushAdd"
                   type="button"
-                  class="icon-button"
+                  class="icon-button advanced-only"
                   aria-pressed="false"
                   aria-keyshortcuts="B"
                   title="Brush: paint pixels into the selection (B)"
@@ -2773,14 +2881,14 @@ dialog details {
                 ><button
                   id="brushSubtract"
                   type="button"
-                  class="icon-button"
+                  class="icon-button advanced-only"
                   aria-pressed="false"
                   aria-keyshortcuts="E"
-                  title="Erase brush: paint pixels out of the selection (E)"
+                  title="Exclude from all colours: paint pixels no colour will claim (E)"
                 >
                   <svg class="icon" aria-hidden="true">
                     <use href="#i-brush-sub" /></svg
-                  ><span class="sr-only">Brush: subtract</span></button
+                  ><span class="sr-only">Exclude from all colours</span></button
                 ><button
                   id="pan"
                   type="button"
@@ -2794,7 +2902,7 @@ dialog details {
                     <use href="#i-pan" />
                   </svg>
                 </button>
-                <span class="brush-size" id="brushSizeGroup" hidden>
+                <span class="brush-size advanced-only" id="brushSizeGroup" hidden>
                   <label for="brushSize">Brush</label>
                   <input
                     id="brushSize"
@@ -2884,6 +2992,19 @@ dialog details {
                   </svg></button
                 ><span id="zoomReadout">100%</span>
               </div>
+            </div>
+            <div id="sourceProps" class="source-props" hidden>
+              <label for="svgSize">SVG drawn at</label>
+              <select id="svgSize">
+                <option value="256">256 px</option>
+                <option value="512" selected>512 px</option>
+                <option value="1024">1024 px</option>
+                <option value="2048">2048 px</option>
+              </select>
+              <p class="help">
+                Redrawing starts again from the SVG file, so your edits are
+                cleared.
+              </p>
             </div>
             <div class="first-use" id="firstUse" hidden>
               <p>
@@ -2999,11 +3120,15 @@ dialog details {
             <button
               id="apply"
               class="button"
-              title="Bake the map into the image so the next change builds on it (Ctrl/Cmd Enter)"
+              title="Bake the current colours into the image so the next change builds on them (Ctrl/Cmd Enter). Export does not need this."
               disabled
             >
-              Apply, then build on it
+              Bake current colours
             </button>
+            <p id="bakeNote" class="help">
+              Export saves the picture as it looks. Baking is only so the next
+              change builds on these colours.
+            </p>
           </section>
         </div>
         <div
@@ -3099,6 +3224,13 @@ dialog details {
                   </div>
                   <p id="targetResult" class="readout">
                     <span id="targetText">Pick a source colour to begin.</span
+                    ><button
+                      id="returnTarget"
+                      class="text-button"
+                      type="button"
+                      hidden
+                    >
+                      Return to target</button
                     ><span
                       id="capWarning"
                       class="cap-mark"
@@ -3109,18 +3241,18 @@ dialog details {
                       >⚠</span
                     >
                   </p>
-                  <label class="check" id="protectLabel"
+                  <label class="check advanced-only" id="protectLabel"
                     ><input type="checkbox" id="protect" checked /> Protect
                     highlights and shadows</label
                   >
-                  <label class="check" id="cleanEdgesLabel" hidden
+                  <label class="check advanced-only" id="cleanEdgesLabel" hidden
                     ><input type="checkbox" id="cleanEdges" checked /> Clean
                     edges (remove the colour from blended edges)</label
                   >
                 </div>
               </section>
               <section
-                class="panel"
+                class="panel advanced-only"
                 data-panel="adjust"
                 data-tabgroup="colour"
                 id="adjustPanel"
@@ -3203,14 +3335,14 @@ dialog details {
                     <button id="openPalette" class="text-button" type="button">
                       Open palette…</button
                     ><button id="savePalette" class="text-button" type="button">
-                      Save as .gpl
+                      Export palette file…
                     </button>
                     <button
                       id="saveMyPalette"
                       class="text-button"
                       type="button"
                     >
-                      Save as palette…
+                      Keep in My palettes…
                     </button>
                     <button
                       id="removeMyPalette"
@@ -3233,19 +3365,19 @@ dialog details {
                   </div>
                   <button
                     id="makeVariants"
-                    class="button full"
+                    class="button full advanced-only"
                     type="button"
                     title="Click a colour to use it. Skin tones map your selection's light and shadow shades onto each tone."
                     disabled
                   >
                     Make a variant for each colour
                   </button>
-                  <p id="variantsLabel" class="readout" hidden></p>
-                  <p id="variantsNote" class="readout" hidden></p>
-                  <div id="variants" class="variants" hidden></div>
+                  <p id="variantsLabel" class="readout advanced-only" hidden></p>
+                  <p id="variantsNote" class="readout advanced-only" hidden></p>
+                  <div id="variants" class="variants advanced-only" hidden></div>
                   <button
                     id="exportVariants"
-                    class="button full"
+                    class="button full advanced-only"
                     type="button"
                     hidden
                   >
@@ -3335,9 +3467,6 @@ dialog details {
                       >Export
                     </button>
                   </h2>
-                  <button id="reset" class="text-button" type="button">
-                    Reset original
-                  </button>
                 </div>
                 <div class="panel-body" id="exportBody">
                   <div class="field-grid">
@@ -3354,15 +3483,6 @@ dialog details {
                         value="512"
                         inputmode="numeric"
                       />
-                    </div>
-                    <div id="svgSizeGroup" class="field-row" hidden>
-                      <label for="svgSize">SVG drawn at</label
-                      ><select id="svgSize">
-                        <option value="256">256 px</option>
-                        <option value="512" selected>512 px</option>
-                        <option value="1024">1024 px</option>
-                        <option value="2048">2048 px</option>
-                      </select>
                     </div>
                     <label for="format">Format</label
                     ><select id="format">
@@ -3386,13 +3506,23 @@ dialog details {
                   <button id="copy" class="button full" disabled>
                     Copy PNG to clipboard
                   </button>
-                  <details id="recipePanel">
-                    <summary>Recipes and batch</summary>
+                  <details id="recipePanel" class="advanced-only">
+                    <summary>Repeat edits</summary>
                     <p class="help">
-                      A recipe repeats your colour changes on other images. It
-                      keeps colours, not places, so brush strokes and
-                      connected-region limits are left out.
+                      Brush strokes and connected regions are not included. An
+                      outline on its own can be repeated.
                     </p>
+                    <div class="palette-actions">
+                      <button
+                        id="repeatSelected"
+                        class="text-button"
+                        type="button"
+                      >
+                        Selected tabs</button
+                      ><button id="repeatAll" class="text-button" type="button">
+                        All tabs
+                      </button>
+                    </div>
                     <div class="palette-actions">
                       <button id="saveRecipe" class="text-button" type="button">
                         Save recipe</button
@@ -3416,7 +3546,7 @@ dialog details {
                       type="button"
                       disabled
                     >
-                      Apply to many images…
+                      Files to a ZIP…
                     </button>
                     <input
                       id="batchInput"
@@ -3521,19 +3651,19 @@ dialog details {
               </div>
               <div>
                 <dt>Ctrl Enter</dt>
-                <dd>Apply, then build on it</dd>
+                <dd>Bake current colours</dd>
               </div>
               <div>
                 <dt>Esc</dt>
-                <dd>Clear the selection</dd>
+                <dd>Clear this colour's selection</dd>
               </div>
               <div>
                 <dt>I</dt>
-                <dd>Pick: replace the sample</dd>
+                <dd>Pick colour</dd>
               </div>
               <div>
                 <dt>A</dt>
-                <dd>Add a sample (or Shift-click)</dd>
+                <dd>Add another colour (or Shift-click)</dd>
               </div>
               <div>
                 <dt>B</dt>
@@ -3541,7 +3671,7 @@ dialog details {
               </div>
               <div>
                 <dt>E</dt>
-                <dd>Erase brush: take out of the selection</dd>
+                <dd>Exclude from all colours</dd>
               </div>
               <div>
                 <dt>H</dt>
@@ -8360,10 +8490,13 @@ dialog details {
     return { widthPct, colour };
   }
   function writeRecipe(steps, outline2 = null) {
-    const clean = cleanOutline(outline2), data = {
+    const clean = cleanOutline(outline2), rows = steps.map((s) => ({ rows: s.rows }));
+    if (!rows.length && !clean)
+      throw Error("A recipe needs a colour change or an outline.");
+    const data = {
       format: "hexshift-recipe",
-      version: clean ? 2 : 1,
-      steps: steps.map((s) => ({ rows: s.rows }))
+      version: !rows.length ? 3 : clean ? 2 : 1,
+      steps: rows
     };
     if (clean) data.outline = clean;
     return JSON.stringify(data, null, 2) + "\n";
@@ -8380,9 +8513,13 @@ dialog details {
     }
     if (data?.format !== "hexshift-recipe")
       throw Error("This is not a Hex Shift recipe.");
-    if (data.version !== 1 && data.version !== 2)
+    if (data.version !== 1 && data.version !== 2 && data.version !== 3)
       throw Error("This recipe needs a newer version of Hex Shift.");
-    if (!Array.isArray(data.steps) || !data.steps.length || data.steps.length > MAX_STEPS)
+    const outline2 = data.version === 1 ? null : cleanOutline(data.outline);
+    if (data.version === 3 && !outline2)
+      throw Error("An outline-only recipe needs an outline.");
+    const outlineOnly = (data.version === 2 || data.version === 3) && outline2 && Array.isArray(data.steps) && data.steps.length === 0;
+    if (!Array.isArray(data.steps) || data.steps.length > MAX_STEPS || !outlineOnly && !data.steps.length)
       throw Error("A recipe has 1 to 32 steps.");
     const steps = data.steps.map((step) => {
       if (!Array.isArray(step?.rows) || !step.rows.length || step.rows.length > MAX_ROWS)
@@ -8403,10 +8540,7 @@ dialog details {
         throw Error("A recipe step can have at most 64 samples.");
       return { rows, approximate: false };
     });
-    return {
-      steps,
-      outline: data.version === 2 ? cleanOutline(data.outline) : null
-    };
+    return { steps, outline: data.version === 1 ? null : outline2 };
   }
   async function replay(width, height, data, steps, yieldFn = async () => {
   }, cancelled = () => false) {
@@ -9058,7 +9192,7 @@ dialog details {
       v: 2,
       mode: "auto",
       locked: false,
-      collapsed: [],
+      collapsed: ["adjust"],
       touched: [],
       hidden: [],
       regions: stacksToRegions({
@@ -11694,7 +11828,7 @@ dialog details {
   // src/app.js
   var $ = (id) => document.getElementById(id);
   var pause = makePause();
-  var VERSION = "3.6.0";
+  var VERSION = "3.7.0";
   var w = 0;
   var h = 0;
   var name = "";
@@ -11829,10 +11963,30 @@ dialog details {
     if (input) input.checked = true;
   }
   var cancelTimer = 0;
+  var undoCommand;
+  var redoCommand;
+  var bakeCommand;
+  var resetCommand;
+  var resetAllCommand;
+  var mapCommand;
+  var experience = "advanced";
+  var modeAsk = false;
+  function historyName(entries2, fallback) {
+    const label2 = entries2.at(-1)?.label;
+    return label2 ? fallback + " " + label2 : fallback;
+  }
   function buttons() {
     const available = !!pixels;
     $("undo").disabled = !history.undoEntries.length || !!batchAbort;
     $("redo").disabled = !history.redoEntries.length || !!batchAbort;
+    if (undoCommand) {
+      undoCommand.label = historyName(history.undoEntries, "Undo");
+      redoCommand.label = historyName(history.redoEntries, "Redo");
+      $("undo").setAttribute("aria-label", undoCommand.label);
+      $("undo").title = undoCommand.label + " (Ctrl/Cmd Z)";
+      $("redo").setAttribute("aria-label", redoCommand.label);
+      $("redo").title = redoCommand.label + " (Ctrl/Cmd Shift Z)";
+    }
     $("apply").disabled = !available || !result?.changed;
     $("copy").disabled = !available;
     $("export").disabled = !available;
@@ -11852,6 +12006,8 @@ dialog details {
       $("cancel").classList.remove("shown");
     }
     $("batch").disabled = !available || !!batchAbort;
+    $("repeatSelected").disabled = !available || !!batchAbort || selectedDocuments.size === 0;
+    $("repeatAll").disabled = !available || !!batchAbort;
     $("editState").textContent = result?.changed ? "Pending edit" : "No pending edit";
     $("editState").classList.toggle("pending", !!result?.changed);
     if (activeDocument) {
@@ -11948,7 +12104,7 @@ dialog details {
     $("wipeControl").hidden = doc.view.mode !== "wipe";
     $("compare").hidden = doc.view.mode === "result";
     setTool(doc.view.tool);
-    $("svgSizeGroup").hidden = !svgSource;
+    $("sourceProps").hidden = !svgSource;
     if (svgSource) $("svgSize").value = String(svgSource.edge);
     $("fileName").textContent = name;
     $("fileDims").textContent = w + " \xD7 " + h + (doc.still ? " \xB7 first frame" : "");
@@ -12072,7 +12228,7 @@ dialog details {
         $("fileName").textContent = "No images open";
         $("fileDims").textContent = "";
         $("emptyEditor").hidden = false;
-        $("svgSizeGroup").hidden = true;
+        $("sourceProps").hidden = true;
         $("coverage").textContent = "Open an image to begin.";
         $("resultNote").textContent = "";
         $("sizeReadout").replaceChildren();
@@ -12149,11 +12305,21 @@ dialog details {
     makeSlider("fineControls", ...args);
   for (const args of [
     ["hueTol", "Hue tolerance", 0, 180, "degrees"],
-    ["shadeTol", "Shade range", 0, 100, "percent"],
+    ["shadeTol", "Shade range", 0, 100, "percent"]
+  ])
+    makeSlider("selectionSliders", ...args);
+  for (const args of [
     ["soft", "Colour-match softness", 0, 100, "percent", "Softness"],
     ["feather", "Spatial feather", 0, 8, "pixels", "Feather"]
   ])
-    makeSlider("selectionSliders", ...args);
+    makeSlider("refinementSliders", ...args);
+  $("refinementSliders").addEventListener("focusin", () => {
+    $("refinementHelp").hidden = false;
+  });
+  $("refinementSliders").addEventListener("focusout", (e) => {
+    if (!$("refinementSliders").contains(e.relatedTarget))
+      $("refinementHelp").hidden = true;
+  });
   function swatch(hex3, label2, fn) {
     const button2 = document.createElement("button");
     button2.type = "button";
@@ -12251,7 +12417,23 @@ dialog details {
       "Colour " + (k + 1) + ": " + text2.textContent + (count.textContent ? " \xB7 " + count.textContent : "")
     );
   }
+  function mapButtonLabel() {
+    if (!pixels || !edit) return "Map all colours";
+    let brushed = false;
+    if (overrides) {
+      for (let i = 0; i < overrides.length; i++)
+        if (overrides[i] !== 0) {
+          brushed = true;
+          break;
+        }
+    }
+    const populated = edit.rows.length > 1 || edit.steps.length || edit.rows.some((row) => row.seeds.length) || brushed;
+    return populated ? "Replace map with detected colours" : "Map all colours";
+  }
   function renderMap() {
+    const label2 = mapButtonLabel();
+    $("mapAll").textContent = label2;
+    if (mapCommand) mapCommand.label = label2;
     if (!pixels) return;
     const box = $("colourMap"), shape = edit.rows.map((r) => r.id).join(",") + (edit.rows.length > 1);
     if (box.dataset.shape !== shape) {
@@ -12469,6 +12651,7 @@ dialog details {
     $("targetColour").style.backgroundColor = params.target;
     if (document.activeElement !== $("targetHex"))
       $("targetHex").value = params.target;
+    $("returnTarget").hidden = !(params.manual && params.mode === "shift");
   }
   function sync() {
     for (const key of [
@@ -12493,6 +12676,7 @@ dialog details {
     syncOutline();
     renderSeeds();
     renderMap();
+    refreshAdvancedHeld();
     buttons();
   }
   function setTarget(hex3) {
@@ -12700,7 +12884,7 @@ dialog details {
     $("resultNote").textContent = m.changed ? m.changed.toLocaleString() + " px changed" : "";
     if (seeds.length) {
       const sd = seeds.at(-1), o = (sd.y * w + sd.x) * 4;
-      $("targetText").textContent = params.mode === "transparent" ? "Selected pixels become transparent." : (params.manual && params.mode === "shift" ? "Manual shift" : params.ramp && params.mode === "shift" ? "Tone " + params.ramp.join(" \xB7 ") : "Requested " + params.target) + " \xB7 achieved " + toHex(...m.pixels.subarray(o, o + 3));
+      $("targetText").textContent = params.manual && params.mode === "shift" ? "Adjusted by hand. Return to target to follow the colour again." : params.mode === "transparent" ? "Selected pixels become transparent." : (params.ramp && params.mode === "shift" ? "Tone " + params.ramp.join(" \xB7 ") : "Requested " + params.target) + " \xB7 achieved " + toHex(...m.pixels.subarray(o, o + 3));
     } else $("targetText").textContent = "Pick a source colour to begin.";
     $("targetText").title = $("targetText").textContent;
     $("capWarning").hidden = !(m.capped && params.mode === "shift");
@@ -12830,7 +13014,7 @@ dialog details {
       name = String(fileName || "image").slice(0, 200);
       svgSource = decoded.svg ? { blob, name, edge } : null;
       activeDocument.still = decoded.still;
-      $("svgSizeGroup").hidden = !svgSource;
+      $("sourceProps").hidden = !svgSource;
       original = decoded.pixels;
       pixels = original.slice();
       overrides = new Int8Array(w * h);
@@ -12909,7 +13093,7 @@ dialog details {
     }
   }
   function reset() {
-    action("Reset original", () => {
+    action("Reset image edits", () => {
       pixels = original.slice();
       overrides = new Int8Array(w * h);
       edit = freshEdit(void 0, edit.outline);
@@ -12917,7 +13101,18 @@ dialog details {
       dirty = false;
       prepareCurrent();
     });
-    status("Original restored. Undo is available.");
+    status("Image edits restored. The outline stays. Undo is available.");
+  }
+  function resetAll() {
+    action("Reset all edits", () => {
+      pixels = original.slice();
+      overrides = new Int8Array(w * h);
+      edit = freshEdit();
+      activate();
+      dirty = false;
+      prepareCurrent();
+    });
+    status("All edits restored, including the outline. Undo is available.");
   }
   async function save(copy = false) {
     if (batchAbort || !pixels) return;
@@ -13124,9 +13319,9 @@ dialog details {
     layout();
   }
   function outlineControls() {
-    const pct = edit.outline.widthPct, px = w ? outlineRadius(w, h, pct) : 0;
-    $("outlineWidthValue").textContent = pct + "%";
-    $("outlineWidthValue").title = w ? Math.round(px * 10) / 10 + " px at this image's size" : "";
+    const pct = edit.outline.widthPct, px = w ? outlineRadius(w, h, pct) : 0, shown = Math.round(px * 10) / 10;
+    $("outlineWidthValue").textContent = w ? pct + "% \xB7 " + shown + " px" : pct + "%";
+    $("outlineWidthValue").title = w ? shown + " px at this image's size" : "";
     renderPreview();
     scheduleReadout();
     scheduleOutline();
@@ -13663,8 +13858,14 @@ dialog details {
     if (preview) steps.push(recipeStep(edit.rows, pixels, w, overrides));
     return { steps: steps.filter((s) => s.rows.length), preview };
   }
+  var SPATIAL_NOTE = "Brush strokes and connected regions are not included.";
+  function noteSpatial() {
+    $("batchNote").textContent = SPATIAL_NOTE;
+    status(SPATIAL_NOTE);
+  }
   async function saveRecipe() {
     if (!pixels || batchAbort) return;
+    noteSpatial();
     let steps;
     try {
       ({ steps } = await currentSteps());
@@ -13672,24 +13873,25 @@ dialog details {
       status("Could not save the recipe: " + e.message);
       return;
     }
-    if (!steps.length) {
-      status("Nothing to save yet. Change a colour first.");
+    const { on, widthPct, colour } = edit.outline, outline2 = on ? { widthPct, colour } : null;
+    if (!steps.length && !outline2) {
+      status("Nothing to save yet. Change a colour or add an outline first.");
       return;
     }
     const filename = safeStem(name) + "-recipe.json";
-    const { on, widthPct, colour } = edit.outline;
     download(
-      new Blob([writeRecipe(steps, on ? { widthPct, colour } : null)], {
+      new Blob([writeRecipe(steps, outline2)], {
         type: "application/json"
       }),
       filename
     );
     status(
-      "Prepared " + filename + " (" + steps.length + (steps.length === 1 ? " step). " : " steps). ") + (steps.some((s) => s.approximate) ? "Brush strokes and connected-region limits are not part of it. " : "") + "Choose where to save it."
+      "Prepared " + filename + " (" + (steps.length ? steps.length + (steps.length === 1 ? " step). " : " steps). ") : "outline only). ") + SPATIAL_NOTE + " Choose where to save it."
     );
   }
   async function applyRecipe(file) {
     if (!pixels || batchAbort) return;
+    noteSpatial();
     const doc = activeDocument, request = imageId;
     try {
       if (file.size > MAX_RECIPE_BYTES)
@@ -13747,7 +13949,7 @@ dialog details {
     buttons();
   }
   function batchProgress(text2) {
-    $("batchNote").textContent = text2;
+    $("batchNote").textContent = SPATIAL_NOTE + " " + text2;
     status(text2);
   }
   function cancelBatch() {
@@ -13776,6 +13978,7 @@ dialog details {
   }
   async function applyToDocuments(all = false) {
     if (!pixels || batchAbort) return;
+    noteSpatial();
     const source = activeDocument, targets = documents.filter((d) => all || selectedDocuments.has(d));
     if (!targets.length) {
       status("Select at least one tab with Ctrl-click or Shift-click.");
@@ -13890,6 +14093,7 @@ dialog details {
   }
   async function runBatch(list) {
     if (batchAbort) return;
+    noteSpatial();
     const run = ++batchRun, cancelled = () => run !== batchRun;
     try {
       if (list.length > MAX_BATCH)
@@ -13897,8 +14101,10 @@ dialog details {
       beginBatch();
       const { steps } = await currentSteps();
       if (cancelled()) return;
-      if (!steps.length) {
-        status("Nothing to apply yet. Change a colour first, then run a batch.");
+      if (!steps.length && !edit.outline.on) {
+        status(
+          "Nothing to apply yet. Change a colour or add an outline first, then run a batch."
+        );
         return;
       }
       const settings = finishSettings(), edge = Number($("svgSize").value), files = [], errors = [];
@@ -13942,7 +14148,7 @@ dialog details {
       const blob = await zip(files), filename = "hexshift-batch.zip", done = list.length - errors.length;
       if (cancelled()) return;
       download(blob, filename);
-      $("batchNote").textContent = "Done: " + done + " of " + list.length + (list.length === 1 ? " image" : " images") + (errors.length ? ". errors.txt in the ZIP lists the others." : ".");
+      $("batchNote").textContent = SPATIAL_NOTE + " Done: " + done + " of " + list.length + (list.length === 1 ? " image" : " images") + (errors.length ? ". errors.txt in the ZIP lists the others." : ".");
       status(
         "Prepared " + filename + " (" + formatBytes(blob.size) + "). Choose where to save it."
       );
@@ -13952,6 +14158,8 @@ dialog details {
       if (run === batchRun) endBatch();
     }
   }
+  $("repeatSelected").onclick = () => applyToDocuments(false);
+  $("repeatAll").onclick = () => applyToDocuments(true);
   $("batch").onclick = () => $("batchInput").click();
   $("batchInput").onchange = (e) => {
     const list = [...e.target.files];
@@ -14323,8 +14531,22 @@ dialog details {
     const id = edit.rows[edit.active].id;
     seeds.length = 0;
     for (let i = 0; i < overrides.length; i++)
-      if (overrides[i] === id || overrides[i] === -1) overrides[i] = 0;
+      if (overrides[i] === id) overrides[i] = 0;
   });
+  $("clearExclusions").onclick = () => action("Clear all exclusions", () => {
+    for (let i = 0; i < overrides.length; i++)
+      if (overrides[i] === -1) overrides[i] = 0;
+  });
+  $("matchAuto").onclick = () => action("Match automatically", () => {
+    const id = edit.rows[edit.active].id;
+    for (let i = 0; i < overrides.length; i++)
+      if (overrides[i] === id) overrides[i] = 0;
+  });
+  $("returnTarget").onclick = () => action("Return to target", () => {
+    params.manual = false;
+    targetDeltas();
+  });
+  $("resetAll").onclick = resetAll;
   $("replaceSample").onclick = () => {
     addSample = false;
     setTool("pick");
@@ -14385,6 +14607,10 @@ dialog details {
     $("firstUse").hidden = true;
     layout();
   };
+  $("showAdvanced").onclick = () => chooseExperience("advanced", false);
+  $("keepSimple").onclick = () => chooseExperience("simple", true);
+  $("keepAdvanced").onclick = () => chooseExperience("advanced", true);
+  $("openAdvanced").onclick = () => chooseExperience("advanced", true);
   picker = createPicker({
     store: colourStore,
     recent: () => recent,
@@ -14492,6 +14718,63 @@ dialog details {
       e.stopPropagation();
     }
   });
+  function readExperience() {
+    let mode, layout2, colours;
+    try {
+      mode = localStorage.getItem("hexshift-mode");
+      layout2 = localStorage.getItem("hexshift-layout");
+      colours = localStorage.getItem("hexshift-colours");
+    } catch {
+      experience = "advanced";
+      modeAsk = false;
+      return;
+    }
+    if (mode === "simple" || mode === "advanced") {
+      experience = mode;
+      modeAsk = false;
+      return;
+    }
+    if (layout2 != null || colours != null) {
+      experience = "advanced";
+      modeAsk = false;
+      return;
+    }
+    experience = "simple";
+    modeAsk = true;
+  }
+  function advancedOnImage() {
+    if (!pixels || !edit) return false;
+    const base = defaults();
+    if (overrides) {
+      for (let i = 0; i < overrides.length; i++)
+        if (overrides[i] !== 0) return true;
+    }
+    for (const row of edit.rows) {
+      const p = row.params;
+      if (p.connected || p.manual || p.ramp || p.soft !== base.soft || p.feather !== base.feather || p.protect !== base.protect || p.cleanEdges !== base.cleanEdges || p.model !== base.model)
+        return true;
+    }
+    return false;
+  }
+  function refreshAdvancedHeld() {
+    $("advancedHeld").hidden = !(experience === "simple" && advancedOnImage());
+  }
+  function applyExperience() {
+    document.querySelector(".app").dataset.experience = experience;
+    $("modeAsk").hidden = !modeAsk;
+    refreshAdvancedHeld();
+  }
+  function chooseExperience(next, persist) {
+    experience = next === "simple" ? "simple" : "advanced";
+    modeAsk = false;
+    if (persist) {
+      try {
+        localStorage.setItem("hexshift-mode", experience);
+      } catch {
+      }
+    }
+    applyExperience();
+  }
   (function introduce() {
     const tip = $("firstUse");
     let seen = false;
@@ -14512,6 +14795,8 @@ dialog details {
     } catch {
     }
   })();
+  readExperience();
+  applyExperience();
   theme();
   document.addEventListener("keydown", (e) => {
     if (e.key === "F1" && !e.ctrlKey && !e.altKey && !e.shiftKey) {
@@ -14772,6 +15057,47 @@ dialog details {
   });
   updates?.request();
   var have = () => !!pixels && !batchAbort;
+  var advancedMenu = () => experience !== "simple";
+  undoCommand = {
+    type: "item",
+    label: "Undo",
+    shortcut: "Ctrl+Z",
+    enabled: () => !$("undo").disabled,
+    run: () => restore(false)
+  };
+  redoCommand = {
+    type: "item",
+    label: "Redo",
+    shortcut: "Ctrl+Shift+Z",
+    enabled: () => !$("redo").disabled,
+    run: () => restore(true)
+  };
+  bakeCommand = {
+    type: "item",
+    label: "Bake current colours",
+    shortcut: "Ctrl+Enter",
+    enabled: () => !$("apply").disabled,
+    run: apply3
+  };
+  resetCommand = {
+    type: "item",
+    label: "Reset image edits",
+    enabled: have,
+    run: reset
+  };
+  resetAllCommand = {
+    type: "item",
+    label: "Reset all edits",
+    enabled: have,
+    hidden: () => experience === "simple",
+    run: resetAll
+  };
+  mapCommand = {
+    type: "item",
+    label: mapButtonLabel(),
+    enabled: have,
+    run: mapAll
+  };
   var press = (id, value) => $(id).querySelector(`input[value="${value}"]`).click();
   var radio = (group, label2, value) => ({
     type: "radio",
@@ -14819,29 +15145,39 @@ dialog details {
             label: "Save palette (.gpl)\u2026",
             run: () => $("savePalette").click()
           },
-          { type: "item", label: "Save recipe\u2026", enabled: have, run: saveRecipe },
+          {
+            type: "item",
+            label: "Save recipe\u2026",
+            enabled: have,
+            hidden: () => !advancedMenu(),
+            run: saveRecipe
+          },
           {
             type: "item",
             label: "Apply recipe\u2026",
             enabled: have,
+            hidden: () => !advancedMenu(),
             run: () => $("recipeInput").click()
           },
           {
             type: "item",
             label: "Batch from files\u2026",
             enabled: have,
+            hidden: () => !advancedMenu(),
             run: () => $("batchInput").click()
           },
           {
             type: "item",
             label: "Apply to selected tabs",
             enabled: () => have() && selectedDocuments.size > 0,
+            hidden: () => !advancedMenu(),
             run: () => applyToDocuments(false)
           },
           {
             type: "item",
             label: "Apply to all tabs",
             enabled: have,
+            hidden: () => !advancedMenu(),
             run: () => applyToDocuments(true)
           },
           {
@@ -14866,29 +15202,12 @@ dialog details {
         label: "Edit",
         mnemonic: "e",
         items: [
-          {
-            type: "item",
-            label: "Undo",
-            shortcut: "Ctrl+Z",
-            enabled: () => !$("undo").disabled,
-            run: () => restore(false)
-          },
-          {
-            type: "item",
-            label: "Redo",
-            shortcut: "Ctrl+Shift+Z",
-            enabled: () => !$("redo").disabled,
-            run: () => restore(true)
-          },
+          undoCommand,
+          redoCommand,
           { type: "separator" },
-          {
-            type: "item",
-            label: "Apply, then build on it",
-            shortcut: "Ctrl+Enter",
-            enabled: () => !$("apply").disabled,
-            run: apply3
-          },
-          { type: "item", label: "Reset original", enabled: have, run: reset },
+          bakeCommand,
+          resetCommand,
+          resetAllCommand,
           {
             type: "item",
             label: "Clear selection",
@@ -14903,7 +15222,7 @@ dialog details {
             enabled: () => have() && !$("addRow").disabled,
             run: addRow
           },
-          { type: "item", label: "Map all colours", enabled: have, run: mapAll },
+          mapCommand,
           { type: "separator" },
           {
             type: "item",
@@ -14976,6 +15295,19 @@ dialog details {
               showArtworkBounds = !showArtworkBounds;
               layout();
             }
+          },
+          { type: "separator" },
+          {
+            type: "radio",
+            label: "Simple",
+            checked: () => experience === "simple",
+            run: () => chooseExperience("simple", true)
+          },
+          {
+            type: "radio",
+            label: "Advanced",
+            checked: () => experience === "advanced",
+            run: () => chooseExperience("advanced", true)
           },
           { type: "separator" },
           {
@@ -15099,12 +15431,14 @@ dialog details {
             type: "item",
             label: "Make a variant for each colour",
             enabled: () => !$("makeVariants").disabled,
+            hidden: () => !advancedMenu(),
             run: makeVariants
           },
           {
             type: "item",
             label: "Export all variants (ZIP)",
             enabled: () => !$("exportVariants").hidden,
+            hidden: () => !advancedMenu(),
             run: exportVariants
           }
         ]
@@ -15430,6 +15764,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 Original C# port and code by Christian Winnerlein (CodesInChaos), public domain, https://github.com/CodesInChaos/Chaos.NaCl . Poly1305 by Andrew M. (floodyberry), MIT or public domain. Curve25519, Ed25519, Salsa20 and HSalsa20 from SUPERCOP ref10 by Dan Bernstein, public domain (http://bench.cr.yp.to/supercop.html). SHA512 by Christian Winnerlein, public domain.</pre></template>
     <template id="release-notes"><pre># Hex Shift 3
+
+**New in 3.7.0:** Simple and Advanced. A new profile opens in Simple: open, pick, tolerance and shade, the colour map, Shift, Flat or Transparent, outline, and export. It shows Advanced once and asks which to use next time. The answer is kept on this device as `hexshift-mode`. Reset layout does not clear it. A profile that already has a layout or saved colours stays in Advanced. Switching mode does not change the picture, the colour map, or the saved arrangement. An advanced edit already on the image stays on while Simple is showing, and one control opens Advanced. Adjust starts folded. The names say what they do: Pick colour, Add another colour, Exclude from all colours, Bake current colours (export does not need it), Reset image edits, and Reset all edits, which also turns the outline off. Clear selection clears the current colour only. Clear all exclusions clears pixels excluded from every colour. Match automatically returns a brushed region to matching. Outline width shows percent and pixels. SVG drawn at sits with the image and still warns that redrawing clears edits. When a fine slider has left the target, the line says so, and Return to target follows the colour again. Softness and feather sit under Refine the match. Repeat edits covers selected tabs, all tabs, or files to a ZIP, and says that brush strokes and connected regions are not included. An outline on its own can be repeated (recipe version 3). Older recipe files still open. Undo and Redo name the next action.
 
 **New in 3.6.0:** The editor opens blank. The getting-started tip is shown once, on a brand-new profile, and an update does not show it again. While it is showing, the picture fits below it. A bottom dock keeps only the height its panels are using, and a panel made shorter than its contents scrolls inside itself. The picture fits to its painted pixels; **View → Artwork bounds** draws that rectangle for the session, does not export it, and does not save a setting. Slider tracks stay a readable length, and the tool strip wraps instead of covering the picture. The magnifier follows the pointer to both edges of the image. Panels can sit beside a neighbour or share a tab strip: drag onto the middle to group them, or onto an edge to place beside; the **…** menu adds Place left, Place right, Place above, Place below, and Move into tabs. **View → Layout** undoes and redoes those arrangement changes for the session. The arrangement itself is still kept on this device as `hexshift-layout`.
 

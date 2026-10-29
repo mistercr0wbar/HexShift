@@ -214,10 +214,27 @@ function setChoice(id, value) {
   if (input) input.checked = true;
 }
 let cancelTimer = 0;
+// Menu items are the same objects the menu builds from, so a label change is
+// visible the next time that menu opens. Empty history stays "Undo" / "Redo".
+let undoCommand, redoCommand, bakeCommand, resetCommand, resetAllCommand, mapCommand;
+let experience = "advanced";
+let modeAsk = false;
+function historyName(entries, fallback) {
+  const label = entries.at(-1)?.label;
+  return label ? fallback + " " + label : fallback;
+}
 function buttons() {
   const available = !!pixels;
   $("undo").disabled = !history.undoEntries.length || !!batchAbort;
   $("redo").disabled = !history.redoEntries.length || !!batchAbort;
+  if (undoCommand) {
+    undoCommand.label = historyName(history.undoEntries, "Undo");
+    redoCommand.label = historyName(history.redoEntries, "Redo");
+    $("undo").setAttribute("aria-label", undoCommand.label);
+    $("undo").title = undoCommand.label + " (Ctrl/Cmd Z)";
+    $("redo").setAttribute("aria-label", redoCommand.label);
+    $("redo").title = redoCommand.label + " (Ctrl/Cmd Shift Z)";
+  }
   // Apply keeps the state of the last result while the next is on its way, so it
   // does not flicker during a drag; clicking it waits for the newest result.
   $("apply").disabled = !available || !result?.changed;
@@ -242,6 +259,8 @@ function buttons() {
     $("cancel").classList.remove("shown");
   }
   $("batch").disabled = !available || !!batchAbort;
+  $("repeatSelected").disabled = !available || !!batchAbort || selectedDocuments.size === 0;
+  $("repeatAll").disabled = !available || !!batchAbort;
   $("editState").textContent = result?.changed
     ? "Pending edit"
     : "No pending edit";
@@ -348,7 +367,7 @@ function unstash(doc) {
   $("wipeControl").hidden = doc.view.mode !== "wipe";
   $("compare").hidden = doc.view.mode === "result";
   setTool(doc.view.tool);
-  $("svgSizeGroup").hidden = !svgSource;
+  $("sourceProps").hidden = !svgSource;
   if (svgSource) $("svgSize").value = String(svgSource.edge);
   $("fileName").textContent = name;
   $("fileDims").textContent =
@@ -477,7 +496,7 @@ async function closeDocument(id) {
       $("fileName").textContent = "No images open";
       $("fileDims").textContent = "";
       $("emptyEditor").hidden = false;
-      $("svgSizeGroup").hidden = true;
+      $("sourceProps").hidden = true;
       $("coverage").textContent = "Open an image to begin.";
       $("resultNote").textContent = "";
       $("sizeReadout").replaceChildren();
@@ -561,10 +580,20 @@ for (const args of [
 for (const args of [
   ["hueTol", "Hue tolerance", 0, 180, "degrees"],
   ["shadeTol", "Shade range", 0, 100, "percent"],
+])
+  makeSlider("selectionSliders", ...args);
+for (const args of [
   ["soft", "Colour-match softness", 0, 100, "percent", "Softness"],
   ["feather", "Spatial feather", 0, 8, "pixels", "Feather"],
 ])
-  makeSlider("selectionSliders", ...args);
+  makeSlider("refinementSliders", ...args);
+$("refinementSliders").addEventListener("focusin", () => {
+  $("refinementHelp").hidden = false;
+});
+$("refinementSliders").addEventListener("focusout", (e) => {
+  if (!$("refinementSliders").contains(e.relatedTarget))
+    $("refinementHelp").hidden = true;
+});
 function swatch(hex, label, fn) {
   const button = document.createElement("button");
   button.type = "button";
@@ -699,7 +728,26 @@ function paintMapRow(item, row, k) {
       (count.textContent ? " · " + count.textContent : ""),
   );
 }
+function mapButtonLabel() {
+  if (!pixels || !edit) return "Map all colours";
+  let brushed = false;
+  if (overrides)
+    for (let i = 0; i < overrides.length; i++)
+      if (overrides[i] !== 0) {
+        brushed = true;
+        break;
+      }
+  const populated =
+    edit.rows.length > 1 ||
+    edit.steps.length ||
+    edit.rows.some((row) => row.seeds.length) ||
+    brushed;
+  return populated ? "Replace map with detected colours" : "Map all colours";
+}
 function renderMap() {
+  const label = mapButtonLabel();
+  $("mapAll").textContent = label;
+  if (mapCommand) mapCommand.label = label;
   if (!pixels) return;
   const box = $("colourMap"),
     shape = edit.rows.map((r) => r.id).join(",") + (edit.rows.length > 1);
@@ -954,6 +1002,7 @@ function syncTarget() {
   $("targetColour").style.backgroundColor = params.target;
   if (document.activeElement !== $("targetHex"))
     $("targetHex").value = params.target;
+  $("returnTarget").hidden = !(params.manual && params.mode === "shift");
 }
 function sync() {
   for (const key of [
@@ -978,6 +1027,7 @@ function sync() {
   syncOutline();
   renderSeeds();
   renderMap();
+  refreshAdvancedHeld();
   buttons();
 }
 function setTarget(hex) {
@@ -1214,15 +1264,15 @@ function receive(m) {
     const sd = seeds.at(-1),
       o = (sd.y * w + sd.x) * 4;
     $("targetText").textContent =
-      params.mode === "transparent"
-        ? "Selected pixels become transparent."
-        : (params.manual && params.mode === "shift"
-            ? "Manual shift"
-            : params.ramp && params.mode === "shift"
+      params.manual && params.mode === "shift"
+        ? "Adjusted by hand. Return to target to follow the colour again."
+        : params.mode === "transparent"
+          ? "Selected pixels become transparent."
+          : (params.ramp && params.mode === "shift"
               ? "Tone " + params.ramp.join(" · ")
               : "Requested " + params.target) +
-          " · achieved " +
-          toHex(...m.pixels.subarray(o, o + 3));
+            " · achieved " +
+            toHex(...m.pixels.subarray(o, o + 3));
   } else $("targetText").textContent = "Pick a source colour to begin.";
   // The line is one line; the full text is the tooltip when it is cut short.
   $("targetText").title = $("targetText").textContent;
@@ -1364,7 +1414,7 @@ async function openBlob(blob, fileName, isSample = false, redraw = false) {
     name = String(fileName || "image").slice(0, 200);
     svgSource = decoded.svg ? { blob, name, edge } : null;
     activeDocument.still = decoded.still;
-    $("svgSizeGroup").hidden = !svgSource;
+    $("sourceProps").hidden = !svgSource;
     original = decoded.pixels;
     pixels = original.slice();
     overrides = new Int8Array(w * h);
@@ -1450,7 +1500,7 @@ async function apply() {
   }
 }
 function reset() {
-  action("Reset original", () => {
+  action("Reset image edits", () => {
     pixels = original.slice();
     overrides = new Int8Array(w * h);
     // The image goes back to the original; the outline is a finishing choice and stays.
@@ -1459,7 +1509,18 @@ function reset() {
     dirty = false;
     prepareCurrent();
   });
-  status("Original restored. Undo is available.");
+  status("Image edits restored. The outline stays. Undo is available.");
+}
+function resetAll() {
+  action("Reset all edits", () => {
+    pixels = original.slice();
+    overrides = new Int8Array(w * h);
+    edit = freshEdit();
+    activate();
+    dirty = false;
+    prepareCurrent();
+  });
+  status("All edits restored, including the outline. Undo is available.");
 }
 async function save(copy = false) {
   if (batchAbort || !pixels) return;
@@ -1737,11 +1798,10 @@ function syncOutline() {
 }
 function outlineControls() {
   const pct = edit.outline.widthPct,
-    px = w ? outlineRadius(w, h, pct) : 0;
-  $("outlineWidthValue").textContent = pct + "%";
-  $("outlineWidthValue").title = w
-    ? Math.round(px * 10) / 10 + " px at this image's size"
-    : "";
+    px = w ? outlineRadius(w, h, pct) : 0,
+    shown = Math.round(px * 10) / 10;
+  $("outlineWidthValue").textContent = w ? pct + "% · " + shown + " px" : pct + "%";
+  $("outlineWidthValue").title = w ? shown + " px at this image's size" : "";
   renderPreview();
   scheduleReadout();
   scheduleOutline();
@@ -2398,8 +2458,15 @@ async function currentSteps() {
   if (preview) steps.push(recipeStep(edit.rows, pixels, w, overrides));
   return { steps: steps.filter((s) => s.rows.length), preview };
 }
+const SPATIAL_NOTE =
+  "Brush strokes and connected regions are not included.";
+function noteSpatial() {
+  $("batchNote").textContent = SPATIAL_NOTE;
+  status(SPATIAL_NOTE);
+}
 async function saveRecipe() {
   if (!pixels || batchAbort) return;
+  noteSpatial();
   let steps;
   try {
     ({ steps } = await currentSteps());
@@ -2407,14 +2474,15 @@ async function saveRecipe() {
     status("Could not save the recipe: " + e.message);
     return;
   }
-  if (!steps.length) {
-    status("Nothing to save yet. Change a colour first.");
+  const { on, widthPct, colour } = edit.outline,
+    outline = on ? { widthPct, colour } : null;
+  if (!steps.length && !outline) {
+    status("Nothing to save yet. Change a colour or add an outline first.");
     return;
   }
   const filename = safeStem(name) + "-recipe.json";
-  const { on, widthPct, colour } = edit.outline;
   download(
-    new Blob([writeRecipe(steps, on ? { widthPct, colour } : null)], {
+    new Blob([writeRecipe(steps, outline)], {
       type: "application/json",
     }),
     filename,
@@ -2423,17 +2491,17 @@ async function saveRecipe() {
     "Prepared " +
       filename +
       " (" +
-      steps.length +
-      (steps.length === 1 ? " step). " : " steps). ") +
-      (steps.some((s) => s.approximate)
-        ? "Brush strokes and connected-region limits are not part of it. "
-        : "") +
-      "Choose where to save it.",
+      (steps.length
+        ? steps.length + (steps.length === 1 ? " step). " : " steps). ")
+        : "outline only). ") +
+      SPATIAL_NOTE +
+      " Choose where to save it.",
   );
 }
 // Applies a recipe on top of the current preview, as one undoable change.
 async function applyRecipe(file) {
   if (!pixels || batchAbort) return;
+  noteSpatial();
   const doc = activeDocument,
     request = imageId;
   try {
@@ -2505,7 +2573,7 @@ function beginBatch() {
   buttons();
 }
 function batchProgress(text) {
-  $("batchNote").textContent = text;
+  $("batchNote").textContent = SPATIAL_NOTE + " " + text;
   status(text);
 }
 function cancelBatch() {
@@ -2536,6 +2604,7 @@ function documentSteps(doc, preview) {
 }
 async function applyToDocuments(all = false) {
   if (!pixels || batchAbort) return;
+  noteSpatial();
   const source = activeDocument,
     targets = documents.filter((d) => all || selectedDocuments.has(d));
   if (!targets.length) {
@@ -2678,6 +2747,7 @@ async function exportDocuments() {
 }
 async function runBatch(list) {
   if (batchAbort) return;
+  noteSpatial();
   const run = ++batchRun,
     cancelled = () => run !== batchRun;
   try {
@@ -2686,8 +2756,10 @@ async function runBatch(list) {
     beginBatch();
     const { steps } = await currentSteps();
     if (cancelled()) return;
-    if (!steps.length) {
-      status("Nothing to apply yet. Change a colour first, then run a batch.");
+    if (!steps.length && !edit.outline.on) {
+      status(
+        "Nothing to apply yet. Change a colour or add an outline first, then run a batch.",
+      );
       return;
     }
     const settings = finishSettings(),
@@ -2738,7 +2810,8 @@ async function runBatch(list) {
     if (cancelled()) return;
     download(blob, filename);
     $("batchNote").textContent =
-      "Done: " +
+      SPATIAL_NOTE +
+      " Done: " +
       done +
       " of " +
       list.length +
@@ -2757,6 +2830,8 @@ async function runBatch(list) {
     if (run === batchRun) endBatch();
   }
 }
+$("repeatSelected").onclick = () => applyToDocuments(false);
+$("repeatAll").onclick = () => applyToDocuments(true);
 $("batch").onclick = () => $("batchInput").click();
 $("batchInput").onchange = (e) => {
   const list = [...e.target.files];
@@ -3222,7 +3297,7 @@ $("model").onchange = (e) =>
     params.manual = false;
     targetDeltas();
   });
-// Clears the active colour's samples and brush strokes, and subtract strokes.
+// Clear selection is this colour only. Exclusions (-1) are every colour's.
 $("addRow").onclick = addRow;
 $("mapAll").onclick = mapAll;
 $("clear").onclick = () =>
@@ -3230,8 +3305,25 @@ $("clear").onclick = () =>
     const id = edit.rows[edit.active].id;
     seeds.length = 0;
     for (let i = 0; i < overrides.length; i++)
-      if (overrides[i] === id || overrides[i] === -1) overrides[i] = 0;
+      if (overrides[i] === id) overrides[i] = 0;
   });
+$("clearExclusions").onclick = () =>
+  action("Clear all exclusions", () => {
+    for (let i = 0; i < overrides.length; i++)
+      if (overrides[i] === -1) overrides[i] = 0;
+  });
+$("matchAuto").onclick = () =>
+  action("Match automatically", () => {
+    const id = edit.rows[edit.active].id;
+    for (let i = 0; i < overrides.length; i++)
+      if (overrides[i] === id) overrides[i] = 0;
+  });
+$("returnTarget").onclick = () =>
+  action("Return to target", () => {
+    params.manual = false;
+    targetDeltas();
+  });
+$("resetAll").onclick = resetAll;
 $("replaceSample").onclick = () => {
   addSample = false;
   setTool("pick");
@@ -3305,6 +3397,10 @@ $("dismissTip").onclick = () => {
   $("firstUse").hidden = true;
   layout();
 };
+$("showAdvanced").onclick = () => chooseExperience("advanced", false);
+$("keepSimple").onclick = () => chooseExperience("simple", true);
+$("keepAdvanced").onclick = () => chooseExperience("advanced", true);
+$("openAdvanced").onclick = () => chooseExperience("advanced", true);
 picker = createPicker({
   store: colourStore,
   recent: () => recent,
@@ -3429,6 +3525,73 @@ $("themeMenu").addEventListener("keydown", (e) => {
     e.stopPropagation();
   }
 });
+// Simple or Advanced. Checked before theme() writes hexshift-theme, which does
+// not count. A stored choice wins. A layout or saved colours stays Advanced.
+// A new profile opens in Simple and is asked; not answering stores nothing.
+function readExperience() {
+  let mode, layout, colours;
+  try {
+    mode = localStorage.getItem("hexshift-mode");
+    layout = localStorage.getItem("hexshift-layout");
+    colours = localStorage.getItem("hexshift-colours");
+  } catch {
+    experience = "advanced";
+    modeAsk = false;
+    return;
+  }
+  if (mode === "simple" || mode === "advanced") {
+    experience = mode;
+    modeAsk = false;
+    return;
+  }
+  if (layout != null || colours != null) {
+    experience = "advanced";
+    modeAsk = false;
+    return;
+  }
+  experience = "simple";
+  modeAsk = true;
+}
+function advancedOnImage() {
+  if (!pixels || !edit) return false;
+  const base = defaults();
+  if (overrides)
+    for (let i = 0; i < overrides.length; i++)
+      if (overrides[i] !== 0) return true;
+  for (const row of edit.rows) {
+    const p = row.params;
+    if (
+      p.connected ||
+      p.manual ||
+      p.ramp ||
+      p.soft !== base.soft ||
+      p.feather !== base.feather ||
+      p.protect !== base.protect ||
+      p.cleanEdges !== base.cleanEdges ||
+      p.model !== base.model
+    )
+      return true;
+  }
+  return false;
+}
+function refreshAdvancedHeld() {
+  $("advancedHeld").hidden = !(experience === "simple" && advancedOnImage());
+}
+function applyExperience() {
+  document.querySelector(".app").dataset.experience = experience;
+  $("modeAsk").hidden = !modeAsk;
+  refreshAdvancedHeld();
+}
+function chooseExperience(next, persist) {
+  experience = next === "simple" ? "simple" : "advanced";
+  modeAsk = false;
+  if (persist) {
+    try {
+      localStorage.setItem("hexshift-mode", experience);
+    } catch {}
+  }
+  applyExperience();
+}
 // A brand-new profile sees the tip once. Anyone who already has a theme,
 // layout or colours, and every later launch, does not. Checked before theme()
 // writes, so this launch cannot look like a returning one.
@@ -3451,6 +3614,8 @@ $("themeMenu").addEventListener("keydown", (e) => {
     localStorage.setItem("hexshift-introduced", "1");
   } catch {}
 })();
+readExperience();
+applyExperience();
 theme();
 document.addEventListener("keydown", (e) => {
   if (e.key === "F1" && !e.ctrlKey && !e.altKey && !e.shiftKey) {
@@ -3786,6 +3951,47 @@ updates?.request();
 // ---- The menu bar ----
 // Each item runs the same handler as the control or key it mirrors.
 const have = () => !!pixels && !batchAbort;
+const advancedMenu = () => experience !== "simple";
+undoCommand = {
+  type: "item",
+  label: "Undo",
+  shortcut: "Ctrl+Z",
+  enabled: () => !$("undo").disabled,
+  run: () => restore(false),
+};
+redoCommand = {
+  type: "item",
+  label: "Redo",
+  shortcut: "Ctrl+Shift+Z",
+  enabled: () => !$("redo").disabled,
+  run: () => restore(true),
+};
+bakeCommand = {
+  type: "item",
+  label: "Bake current colours",
+  shortcut: "Ctrl+Enter",
+  enabled: () => !$("apply").disabled,
+  run: apply,
+};
+resetCommand = {
+  type: "item",
+  label: "Reset image edits",
+  enabled: have,
+  run: reset,
+};
+resetAllCommand = {
+  type: "item",
+  label: "Reset all edits",
+  enabled: have,
+  hidden: () => experience === "simple",
+  run: resetAll,
+};
+mapCommand = {
+  type: "item",
+  label: mapButtonLabel(),
+  enabled: have,
+  run: mapAll,
+};
 const press = (id, value) =>
   $(id).querySelector(`input[value="${value}"]`).click();
 const radio = (group, label, value) => ({
@@ -3834,29 +4040,39 @@ createMenubar({
           label: "Save palette (.gpl)…",
           run: () => $("savePalette").click(),
         },
-        { type: "item", label: "Save recipe…", enabled: have, run: saveRecipe },
+        {
+          type: "item",
+          label: "Save recipe…",
+          enabled: have,
+          hidden: () => !advancedMenu(),
+          run: saveRecipe,
+        },
         {
           type: "item",
           label: "Apply recipe…",
           enabled: have,
+          hidden: () => !advancedMenu(),
           run: () => $("recipeInput").click(),
         },
         {
           type: "item",
           label: "Batch from files…",
           enabled: have,
+          hidden: () => !advancedMenu(),
           run: () => $("batchInput").click(),
         },
         {
           type: "item",
           label: "Apply to selected tabs",
           enabled: () => have() && selectedDocuments.size > 0,
+          hidden: () => !advancedMenu(),
           run: () => applyToDocuments(false),
         },
         {
           type: "item",
           label: "Apply to all tabs",
           enabled: have,
+          hidden: () => !advancedMenu(),
           run: () => applyToDocuments(true),
         },
         {
@@ -3881,29 +4097,12 @@ createMenubar({
       label: "Edit",
       mnemonic: "e",
       items: [
-        {
-          type: "item",
-          label: "Undo",
-          shortcut: "Ctrl+Z",
-          enabled: () => !$("undo").disabled,
-          run: () => restore(false),
-        },
-        {
-          type: "item",
-          label: "Redo",
-          shortcut: "Ctrl+Shift+Z",
-          enabled: () => !$("redo").disabled,
-          run: () => restore(true),
-        },
+        undoCommand,
+        redoCommand,
         { type: "separator" },
-        {
-          type: "item",
-          label: "Apply, then build on it",
-          shortcut: "Ctrl+Enter",
-          enabled: () => !$("apply").disabled,
-          run: apply,
-        },
-        { type: "item", label: "Reset original", enabled: have, run: reset },
+        bakeCommand,
+        resetCommand,
+        resetAllCommand,
         {
           type: "item",
           label: "Clear selection",
@@ -3918,7 +4117,7 @@ createMenubar({
           enabled: () => have() && !$("addRow").disabled,
           run: addRow,
         },
-        { type: "item", label: "Map all colours", enabled: have, run: mapAll },
+        mapCommand,
         { type: "separator" },
         {
           type: "item",
@@ -3991,6 +4190,19 @@ createMenubar({
             showArtworkBounds = !showArtworkBounds;
             layout();
           },
+        },
+        { type: "separator" },
+        {
+          type: "radio",
+          label: "Simple",
+          checked: () => experience === "simple",
+          run: () => chooseExperience("simple", true),
+        },
+        {
+          type: "radio",
+          label: "Advanced",
+          checked: () => experience === "advanced",
+          run: () => chooseExperience("advanced", true),
         },
         { type: "separator" },
         {
@@ -4116,12 +4328,14 @@ createMenubar({
           type: "item",
           label: "Make a variant for each colour",
           enabled: () => !$("makeVariants").disabled,
+          hidden: () => !advancedMenu(),
           run: makeVariants,
         },
         {
           type: "item",
           label: "Export all variants (ZIP)",
           enabled: () => !$("exportVariants").hidden,
+          hidden: () => !advancedMenu(),
           run: exportVariants,
         },
       ],

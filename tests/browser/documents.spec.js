@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./test.mjs";
 import { readFile } from "node:fs/promises";
 import sharp from "sharp";
 import AxeBuilder from "@axe-core/playwright";

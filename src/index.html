@@ -228,12 +228,38 @@
                     class="text-button"
                     id="clear"
                     type="button"
-                    title="Clear the selection (Esc)"
+                    title="Clear this colour's samples and brush strokes (Esc)"
                   >
                     Clear
                   </button>
                 </div>
                 <div class="panel-body" id="selectionBody">
+                  <div id="modeAsk" class="mode-ask" hidden>
+                    <p>
+                      This is Simple: open, pick, recolour, outline, export.
+                      Advanced adds brushes, fine adjustments, variants and
+                      repeat.
+                    </p>
+                    <div class="palette-actions">
+                      <button id="showAdvanced" class="text-button" type="button">
+                        Look at Advanced</button
+                      ><button id="keepSimple" class="text-button" type="button">
+                        Use Simple</button
+                      ><button
+                        id="keepAdvanced"
+                        class="text-button"
+                        type="button"
+                      >
+                        Use Advanced
+                      </button>
+                    </div>
+                  </div>
+                  <p id="advancedHeld" class="readout" hidden>
+                    An advanced edit is still on this image.
+                    <button id="openAdvanced" class="text-button" type="button">
+                      Open Advanced
+                    </button>
+                  </p>
                   <div id="seeds" class="seed-list">
                     <span class="muted">Nothing picked yet</span>
                   </div>
@@ -242,10 +268,43 @@
                     <div id="palette" class="swatches"></div>
                   </div>
                   <div id="selectionSliders" class="slider-grid"></div>
-                  <label class="check"
+                  <label class="check advanced-only"
                     ><input type="checkbox" id="connected" /> Only connected
                     regions</label
                   >
+                  <details id="refinement" class="advanced-only">
+                    <summary>Refine the match</summary>
+                    <p id="refinementHelp" class="help" hidden>
+                      Softness widens which colours match. Feather blends the
+                      edge of the selection.
+                    </p>
+                    <div id="refinementSliders" class="slider-grid"></div>
+                  </details>
+                  <div class="palette-actions">
+                    <button
+                      id="matchAuto"
+                      class="text-button advanced-only"
+                      type="button"
+                      title="Return this colour's brushed pixels to automatic matching"
+                    >
+                      Match automatically</button
+                    ><button
+                      id="clearExclusions"
+                      class="text-button advanced-only"
+                      type="button"
+                      title="Remove pixels excluded from every colour"
+                    >
+                      Clear all exclusions</button
+                    ><button id="reset" class="text-button" type="button">
+                      Reset image edits</button
+                    ><button
+                      id="resetAll"
+                      class="text-button advanced-only"
+                      type="button"
+                    >
+                      Reset all edits
+                    </button>
+                  </div>
                   <p id="coverage" class="readout">Open an image to begin.</p>
                 </div>
               </section>
@@ -281,22 +340,22 @@
                 >
                   <svg class="icon" aria-hidden="true">
                     <use href="#i-sample" /></svg
-                  ><span class="sr-only">Replace sample</span></button
+                  ><span class="sr-only">Pick colour</span></button
                 ><button
                   id="addSample"
                   type="button"
                   class="icon-button"
                   aria-pressed="false"
                   aria-keyshortcuts="A"
-                  title="Add sample: click to add another colour to the selection (A, or Shift-click)"
+                  title="Add another colour: click to add it to this selection (A, or Shift-click)"
                 >
                   <svg class="icon" aria-hidden="true">
                     <use href="#i-sample-add" /></svg
-                  ><span class="sr-only">Add sample</span></button
+                  ><span class="sr-only">Add another colour</span></button
                 ><button
                   id="brushAdd"
                   type="button"
-                  class="icon-button"
+                  class="icon-button advanced-only"
                   aria-pressed="false"
                   aria-keyshortcuts="B"
                   title="Brush: paint pixels into the selection (B)"
@@ -307,14 +366,14 @@
                 ><button
                   id="brushSubtract"
                   type="button"
-                  class="icon-button"
+                  class="icon-button advanced-only"
                   aria-pressed="false"
                   aria-keyshortcuts="E"
-                  title="Erase brush: paint pixels out of the selection (E)"
+                  title="Exclude from all colours: paint pixels no colour will claim (E)"
                 >
                   <svg class="icon" aria-hidden="true">
                     <use href="#i-brush-sub" /></svg
-                  ><span class="sr-only">Brush: subtract</span></button
+                  ><span class="sr-only">Exclude from all colours</span></button
                 ><button
                   id="pan"
                   type="button"
@@ -328,7 +387,7 @@
                     <use href="#i-pan" />
                   </svg>
                 </button>
-                <span class="brush-size" id="brushSizeGroup" hidden>
+                <span class="brush-size advanced-only" id="brushSizeGroup" hidden>
                   <label for="brushSize">Brush</label>
                   <input
                     id="brushSize"
@@ -418,6 +477,19 @@
                   </svg></button
                 ><span id="zoomReadout">100%</span>
               </div>
+            </div>
+            <div id="sourceProps" class="source-props" hidden>
+              <label for="svgSize">SVG drawn at</label>
+              <select id="svgSize">
+                <option value="256">256 px</option>
+                <option value="512" selected>512 px</option>
+                <option value="1024">1024 px</option>
+                <option value="2048">2048 px</option>
+              </select>
+              <p class="help">
+                Redrawing starts again from the SVG file, so your edits are
+                cleared.
+              </p>
             </div>
             <div class="first-use" id="firstUse" hidden>
               <p>
@@ -533,11 +605,15 @@
             <button
               id="apply"
               class="button"
-              title="Bake the map into the image so the next change builds on it (Ctrl/Cmd Enter)"
+              title="Bake the current colours into the image so the next change builds on them (Ctrl/Cmd Enter). Export does not need this."
               disabled
             >
-              Apply, then build on it
+              Bake current colours
             </button>
+            <p id="bakeNote" class="help">
+              Export saves the picture as it looks. Baking is only so the next
+              change builds on these colours.
+            </p>
           </section>
         </div>
         <div
@@ -633,6 +709,13 @@
                   </div>
                   <p id="targetResult" class="readout">
                     <span id="targetText">Pick a source colour to begin.</span
+                    ><button
+                      id="returnTarget"
+                      class="text-button"
+                      type="button"
+                      hidden
+                    >
+                      Return to target</button
                     ><span
                       id="capWarning"
                       class="cap-mark"
@@ -643,18 +726,18 @@
                       >⚠</span
                     >
                   </p>
-                  <label class="check" id="protectLabel"
+                  <label class="check advanced-only" id="protectLabel"
                     ><input type="checkbox" id="protect" checked /> Protect
                     highlights and shadows</label
                   >
-                  <label class="check" id="cleanEdgesLabel" hidden
+                  <label class="check advanced-only" id="cleanEdgesLabel" hidden
                     ><input type="checkbox" id="cleanEdges" checked /> Clean
                     edges (remove the colour from blended edges)</label
                   >
                 </div>
               </section>
               <section
-                class="panel"
+                class="panel advanced-only"
                 data-panel="adjust"
                 data-tabgroup="colour"
                 id="adjustPanel"
@@ -737,14 +820,14 @@
                     <button id="openPalette" class="text-button" type="button">
                       Open palette…</button
                     ><button id="savePalette" class="text-button" type="button">
-                      Save as .gpl
+                      Export palette file…
                     </button>
                     <button
                       id="saveMyPalette"
                       class="text-button"
                       type="button"
                     >
-                      Save as palette…
+                      Keep in My palettes…
                     </button>
                     <button
                       id="removeMyPalette"
@@ -767,19 +850,19 @@
                   </div>
                   <button
                     id="makeVariants"
-                    class="button full"
+                    class="button full advanced-only"
                     type="button"
                     title="Click a colour to use it. Skin tones map your selection's light and shadow shades onto each tone."
                     disabled
                   >
                     Make a variant for each colour
                   </button>
-                  <p id="variantsLabel" class="readout" hidden></p>
-                  <p id="variantsNote" class="readout" hidden></p>
-                  <div id="variants" class="variants" hidden></div>
+                  <p id="variantsLabel" class="readout advanced-only" hidden></p>
+                  <p id="variantsNote" class="readout advanced-only" hidden></p>
+                  <div id="variants" class="variants advanced-only" hidden></div>
                   <button
                     id="exportVariants"
-                    class="button full"
+                    class="button full advanced-only"
                     type="button"
                     hidden
                   >
@@ -869,9 +952,6 @@
                       >Export
                     </button>
                   </h2>
-                  <button id="reset" class="text-button" type="button">
-                    Reset original
-                  </button>
                 </div>
                 <div class="panel-body" id="exportBody">
                   <div class="field-grid">
@@ -888,15 +968,6 @@
                         value="512"
                         inputmode="numeric"
                       />
-                    </div>
-                    <div id="svgSizeGroup" class="field-row" hidden>
-                      <label for="svgSize">SVG drawn at</label
-                      ><select id="svgSize">
-                        <option value="256">256 px</option>
-                        <option value="512" selected>512 px</option>
-                        <option value="1024">1024 px</option>
-                        <option value="2048">2048 px</option>
-                      </select>
                     </div>
                     <label for="format">Format</label
                     ><select id="format">
@@ -920,13 +991,23 @@
                   <button id="copy" class="button full" disabled>
                     Copy PNG to clipboard
                   </button>
-                  <details id="recipePanel">
-                    <summary>Recipes and batch</summary>
+                  <details id="recipePanel" class="advanced-only">
+                    <summary>Repeat edits</summary>
                     <p class="help">
-                      A recipe repeats your colour changes on other images. It
-                      keeps colours, not places, so brush strokes and
-                      connected-region limits are left out.
+                      Brush strokes and connected regions are not included. An
+                      outline on its own can be repeated.
                     </p>
+                    <div class="palette-actions">
+                      <button
+                        id="repeatSelected"
+                        class="text-button"
+                        type="button"
+                      >
+                        Selected tabs</button
+                      ><button id="repeatAll" class="text-button" type="button">
+                        All tabs
+                      </button>
+                    </div>
                     <div class="palette-actions">
                       <button id="saveRecipe" class="text-button" type="button">
                         Save recipe</button
@@ -950,7 +1031,7 @@
                       type="button"
                       disabled
                     >
-                      Apply to many images…
+                      Files to a ZIP…
                     </button>
                     <input
                       id="batchInput"
@@ -1055,19 +1136,19 @@
               </div>
               <div>
                 <dt>Ctrl Enter</dt>
-                <dd>Apply, then build on it</dd>
+                <dd>Bake current colours</dd>
               </div>
               <div>
                 <dt>Esc</dt>
-                <dd>Clear the selection</dd>
+                <dd>Clear this colour's selection</dd>
               </div>
               <div>
                 <dt>I</dt>
-                <dd>Pick: replace the sample</dd>
+                <dd>Pick colour</dd>
               </div>
               <div>
                 <dt>A</dt>
-                <dd>Add a sample (or Shift-click)</dd>
+                <dd>Add another colour (or Shift-click)</dd>
               </div>
               <div>
                 <dt>B</dt>
@@ -1075,7 +1156,7 @@
               </div>
               <div>
                 <dt>E</dt>
-                <dd>Erase brush: take out of the selection</dd>
+                <dd>Exclude from all colours</dd>
               </div>
               <div>
                 <dt>H</dt>
