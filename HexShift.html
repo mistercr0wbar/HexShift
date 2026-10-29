@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-O0XD/NqUgIK3wbCwjh/FI14RFKjUJGpdjGsFsRwX+JE='; style-src 'sha256-CrJVCbwZTUbK42tk145JYZkptYxbJWjQcrkDrrLD9vg='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-GqERL8GF6fzMDeiHlJYnFFQmTGigPpr4nMxER+2AOo8='; style-src 'sha256-CrJVCbwZTUbK42tk145JYZkptYxbJWjQcrkDrrLD9vg='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta
       name="theme-color"
@@ -2922,7 +2922,8 @@ dialog details {
                   >
                   <p id="polygonNote" class="help advanced-only" hidden>
                     A polygon limits the colour you picked. It does not choose
-                    that colour. Brushes still add and remove pixels.
+                    that colour. Drag a point to move it. Brushes still add and
+                    remove pixels.
                   </p>
                   <details id="refinement" class="advanced-only">
                     <summary>Refine the match</summary>
@@ -3032,7 +3033,7 @@ dialog details {
                   class="icon-button advanced-only"
                   aria-pressed="false"
                   aria-keyshortcuts="P"
-                  title="Polygon: click points to limit this colour. Enter or the first point closes it (P)"
+                  title="Polygon: click points to limit this colour. Drag a point to move it. Enter or the first point closes it (P)"
                 >
                   <svg class="icon" aria-hidden="true">
                     <use href="#i-polygon" /></svg
@@ -3867,6 +3868,10 @@ dialog details {
               <div>
                 <dt>Backspace</dt>
                 <dd>Remove the last polygon point</dd>
+              </div>
+              <div>
+                <dt>Drag</dt>
+                <dd>Move a polygon point</dd>
               </div>
               <div>
                 <dt>I</dt>
@@ -12725,7 +12730,7 @@ dialog details {
   // src/app.js
   var $ = (id) => document.getElementById(id);
   var pause = makePause();
-  var VERSION = "3.13.0";
+  var VERSION = "3.14.0";
   var w = 0;
   var h = 0;
   var name = "";
@@ -12781,6 +12786,7 @@ dialog details {
   var polygonDraft = null;
   var polygonPointer = null;
   var polygonEpoch = 0;
+  var polygonHold = null;
   function closeSlop(pointerType) {
     return pointerType === "touch" ? 12 : 8;
   }
@@ -15518,6 +15524,7 @@ dialog details {
   };
   function startPinch(space2, e) {
     const brushing = drag && !drag.pan && (tool === "add" || tool === "subtract");
+    if (drag?.grab) cancelGrab(drag);
     if (drag) drag.pickDisqualified = true;
     drag = null;
     if (brushing) commit("Brush selection");
@@ -15539,7 +15546,9 @@ dialog details {
   function dropDraft() {
     polygonEpoch++;
     polygonPointer = null;
-    if (!polygonDraft) return;
+    const held = polygonHold;
+    polygonHold = null;
+    if (!polygonDraft && !held) return;
     polygonDraft = null;
     paintPolygon();
   }
@@ -15548,7 +15557,7 @@ dialog details {
       const ctx = canvas.getContext("2d");
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
-    const committed = edit?.rows?.[edit.active]?.polygon, draft = polygonDraft;
+    const committed = polygonHold?.points ?? edit?.rows?.[edit.active]?.polygon, draft = polygonDraft;
     if (!w || !h || !committed?.length && !draft?.length) return;
     for (const canvas of [polygonBefore, polygonAfter]) {
       if (canvas.width !== w || canvas.height !== h) {
@@ -15558,11 +15567,14 @@ dialog details {
       const ctx = canvas.getContext("2d");
       ctx.clearRect(0, 0, w, h);
       if (committed?.length >= 3)
-        strokePoly(ctx, committed, true, "rgba(110, 240, 255, 0.95)");
+        strokePoly(ctx, committed, true, "rgba(110, 240, 255, 0.95)", {
+          grab: polygonHold ? polygonHold.index : -1
+        });
       if (draft?.length)
         strokePoly(ctx, draft, false, "rgba(232, 128, 46, 0.95)", {
           close: polygonPointer?.close,
-          pointer: polygonPointer
+          pointer: drag?.grab ? null : polygonPointer,
+          grab: drag?.grab?.source === "draft" ? drag.grab.index : -1
         });
     }
   }
@@ -15596,16 +15608,17 @@ dialog details {
     }
     points.forEach((p, i) => {
       const closing = i === 0 && !closed && extra.close;
+      const grabbed = extra.grab === i;
       ctx.beginPath();
       ctx.arc(
         p.x + 0.5,
         p.y + 0.5,
-        px(closing ? 7 : i === 0 && !closed ? 4.5 : 2.75),
+        px(closing || grabbed ? 7 : i === 0 && !closed ? 4.5 : 2.75),
         0,
         Math.PI * 2
       );
       ctx.fill();
-      if (closing) {
+      if (closing || grabbed) {
         ctx.lineWidth = px(1.5);
         ctx.strokeStyle = "#fff";
         ctx.stroke();
@@ -15672,6 +15685,94 @@ dialog details {
       x: r.left + (p.x + 0.5) / canvas.width * r.width,
       y: r.top + (p.y + 0.5) / canvas.height * r.height
     };
+  }
+  function grabTarget(canvas, clientX, clientY, pointerType) {
+    if (tool !== "polygon" || !canvas?.width) return null;
+    const points = polygonDraft?.length ? polygonDraft : edit?.rows?.[edit.active]?.polygon;
+    if (!points?.length) return null;
+    if (!polygonDraft?.length && points.length < 3) return null;
+    const slop = closeSlop(pointerType || "mouse");
+    let best = null;
+    let bestD = slop;
+    points.forEach((p, index) => {
+      const at = vertexClient(canvas, p);
+      const d = Math.hypot(clientX - at.x, clientY - at.y);
+      if (d > bestD) return;
+      bestD = d;
+      best = {
+        source: polygonDraft?.length ? "draft" : "committed",
+        index,
+        point: { x: p.x, y: p.y }
+      };
+    });
+    return best;
+  }
+  function imagePoint(e, canvas) {
+    const r = canvas.getBoundingClientRect();
+    if (!r.width || !r.height || !w || !h) return null;
+    return {
+      x: clamp(Math.floor((e.clientX - r.left) / r.width * w), 0, w - 1),
+      y: clamp(Math.floor((e.clientY - r.top) / r.height * h), 0, h - 1)
+    };
+  }
+  function moveGrabbed(grab, next) {
+    if (!next) return;
+    if (grab.source === "draft") {
+      const p2 = polygonDraft?.[grab.index];
+      if (!p2 || p2.x === next.x && p2.y === next.y) return;
+      polygonDraft[grab.index] = { x: next.x, y: next.y };
+      paintPolygon();
+      return;
+    }
+    const held = polygonHold;
+    if (!held || held.index !== grab.index) return;
+    const p = held.points[held.index];
+    if (!p || p.x === next.x && p.y === next.y) return;
+    held.points[held.index] = { x: next.x, y: next.y };
+    paintPolygon();
+  }
+  function cancelGrab(d) {
+    if (!d?.grab) return;
+    if (d.grab.source === "draft" && polygonDraft?.[d.grab.index] && d.polygonEpoch === polygonEpoch)
+      polygonDraft[d.grab.index] = { x: d.grab.from.x, y: d.grab.from.y };
+    polygonHold = null;
+    d.grab = null;
+    d.suppress = true;
+    paintPolygon();
+  }
+  function finishGrab(d, e, canvas) {
+    const grab = d.grab;
+    const stale = tool !== "polygon" || d.polygonEpoch !== polygonEpoch;
+    const under = point(e, canvas);
+    const onPoint = under && under.x === grab.from.x && under.y === grab.from.y;
+    if (grab.source === "draft") {
+      if (stale || !polygonDraft?.[grab.index]) return;
+      const now = polygonDraft[grab.index];
+      const changed = now.x !== grab.from.x || now.y !== grab.from.y;
+      if (changed) {
+        status("Moved polygon point " + (grab.index + 1) + ".");
+        return;
+      }
+      return "click";
+    }
+    const held = polygonHold;
+    polygonHold = null;
+    if (stale || !held) {
+      paintPolygon();
+      return;
+    }
+    const before2 = edit.rows[edit.active]?.polygon;
+    const same = before2?.length === held.points.length && before2.every((p, i) => p.x === held.points[i].x && p.y === held.points[i].y);
+    if (same) {
+      paintPolygon();
+      if (onPoint) return;
+      return "click";
+    }
+    const points = held.points.map((p) => ({ x: p.x, y: p.y }));
+    action("Move polygon point", () => {
+      edit.rows[edit.active].polygon = points;
+    });
+    status("Moved a polygon point. It still limits this colour.");
   }
   function followPolygon(e, canvas) {
     const wasClose = polygonPointer?.close;
@@ -15758,6 +15859,28 @@ dialog details {
         polygonEpoch,
         toolAtDown: tool
       };
+      if (!pan && tool === "polygon") {
+        const hit = grabTarget(c, e.clientX, e.clientY, drag.pointerType);
+        if (hit) {
+          drag.grab = {
+            source: hit.source,
+            index: hit.index,
+            from: hit.point
+          };
+          if (hit.source === "committed")
+            polygonHold = {
+              index: hit.index,
+              points: edit.rows[edit.active].polygon.map((p2) => ({
+                x: p2.x,
+                y: p2.y
+              }))
+            };
+          before.parentElement.style.cursor = after.parentElement.style.cursor = "grabbing";
+          polygonPointer = null;
+          paintPolygon();
+          status("Drag to move this point.");
+        }
+      }
       if (!pan && (tool === "add" || tool === "subtract")) {
         begin();
         brush(p.x, p.y);
@@ -15781,8 +15904,16 @@ dialog details {
         cursor.style.top = e.clientY - r.top + "px";
         cursor.style.width = cursor.style.height = Number($("brushSize").value) * zoom + "px";
       }
-      if (drag?.pointer === e.pointerId && drag.pan) {
-      } else followPolygon(e, c);
+      if (drag?.pointer === e.pointerId && drag.grab && !drag.pan) {
+        moveGrabbed(drag.grab, imagePoint(e, c));
+      } else if (drag?.pointer === e.pointerId && drag.pan) {
+      } else {
+        followPolygon(e, c);
+        if (tool === "polygon" && !drag) {
+          const hit = grabTarget(c, e.clientX, e.clientY, e.pointerType || "mouse");
+          before.parentElement.style.cursor = after.parentElement.style.cursor = hit ? "grab" : "crosshair";
+        }
+      }
       if (!drag || drag.pointer !== e.pointerId) return;
       const dist = Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY);
       if (tool === "pick" && !drag.pan) {
@@ -15806,6 +15937,13 @@ dialog details {
       if (!drag || drag.pointer !== e.pointerId) return;
       const d = drag;
       drag = null;
+      if (d.suppress) return;
+      if (d.grab) {
+        const fell = finishGrab(d, e, c);
+        if (tool === "polygon")
+          before.parentElement.style.cursor = after.parentElement.style.cursor = "crosshair";
+        if (fell !== "click") return;
+      }
       if ((tool === "add" || tool === "subtract") && !d.pan) {
         commit("Brush selection");
         return;
@@ -15833,6 +15971,7 @@ dialog details {
     const abandonDrag = (e) => {
       if (!drag || drag.pointer !== e.pointerId) return;
       const brushing = !drag.pan && (tool === "add" || tool === "subtract");
+      if (drag.grab) cancelGrab(drag);
       drag = null;
       if (brushing) commit("Brush selection");
     };
@@ -16137,7 +16276,7 @@ dialog details {
   $("polygon").onclick = () => {
     setTool("polygon");
     status(
-      "Polygon: click points on the image. It limits the colour you picked, and it does not choose that colour. Enter or the first point closes it. Escape cancels the draft."
+      "Polygon: click points on the image. It limits the colour you picked, and it does not choose that colour. Drag a point to move it. Enter or the first point closes it. Escape cancels the draft."
     );
   };
   $("brushSize").oninput = (e) => $("brushSizeValue").textContent = e.target.value + " px";
@@ -16560,6 +16699,18 @@ dialog details {
     if (polygonDraft?.length && key === "backspace") {
       e.preventDefault();
       popPolygonPoint();
+      return;
+    }
+    if (polygonHold && key === "escape") {
+      e.preventDefault();
+      polygonHold = null;
+      if (drag) {
+        drag.suppress = true;
+        drag.grab = null;
+      }
+      before.parentElement.style.cursor = after.parentElement.style.cursor = "crosshair";
+      paintPolygon();
+      status("Left the polygon point where it was.");
       return;
     }
     if (polygonDraft?.length && key === "escape") {
@@ -17500,6 +17651,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 Original C# port and code by Christian Winnerlein (CodesInChaos), public domain, https://github.com/CodesInChaos/Chaos.NaCl . Poly1305 by Andrew M. (floodyberry), MIT or public domain. Curve25519, Ed25519, Salsa20 and HSalsa20 from SUPERCOP ref10 by Dan Bernstein, public domain (http://bench.cr.yp.to/supercop.html). SHA512 by Christian Winnerlein, public domain.</pre></template>
     <template id="release-notes"><pre># Hex Shift 3
+
+**New in 3.14.0:** A polygon point can be dragged. The pointer changes when it is over a point, and the point follows the pointer. Letting go records one undo. Escape while dragging a finished point puts that point back. A click on the first point of a polygon you are still drawing still closes it. Backspace and Escape still cancel only the unfinished polygon.
 
 **New in 3.13.0:** An image that is larger than Hex Shift can edit, but no larger than 16,777,216 pixels, 16,384 pixels on a side and 16 MiB, can be downscaled while it is decoded. Hex Shift shows the original size and the size it would open, with Smooth selected and Nearest available. That choice is not the export scaling. It asks first, and it does not open the file if you cancel or if this browser cannot resize during decoding. Animated images, GIF and SVG are not offered this. Files to ZIP still reports an oversized file and does not ask. The edited image is still at most 4,194,304 pixels and 8,192 pixels on a side.
 
