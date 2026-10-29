@@ -39,7 +39,20 @@ The Windows report of an unexpected Advanced state was not reproduced against th
 
 ## 3.13.0 — Explicit, bounded import downscaling
 
-- State: not started.
+- Scope: an edited image stays at most 4,194,304 pixels and 8,192 pixels on a side. A static PNG, JPEG, or WebP above that, and within 16,777,216 pixels, 16,384 pixels on a side, and 16 MiB, can be downscaled while it is decoded. The dialog shows the oriented size and the proposed size. Smooth is selected. Nearest is available. That choice is not export scaling. Cancel leaves the file unopened and does not list a failure. A browser that cannot return the proposed size is told so, and the file is not opened at full size. Animated PNG, animated WebP, and GIF are not offered this; an animated image that already fits still opens as its first frame. Files to ZIP reports each oversized file and does not ask. The scale is `min(1, 8192/w, 8192/h, sqrt(4194304/(w*h)))`, rounded down, and a side is kept at least one pixel.
+- State: **implemented**. Not verified. Not released.
+- Commit: the implementation is the parent of this note, rebased onto the 3.12.0 squash `787a0d3e4909df0454982af61d0af741fe8eaf6d`. The release commit does not exist yet.
+- Tests, 29 October 2026, this machine, Node v24.20.0:
+  - `npm test`: 114 passed, 0 failed.
+  - `npm audit --audit-level=low`: 0 vulnerabilities.
+  - `npm run build`: portable HTML 637 KiB, shell `146cbe8a5f493454`. A second build produced the same shell.
+  - `tests/browser/downscale.spec.js` on Chromium, Firefox, and WebKit, `HEXSHIFT_PORT=4185`: 33 passed. That covers the side-only and pixel-count offers, Smooth and Nearest, export scaling left alone, transparency, a one-pixel side, EXIF orientation 6, cancel, keyboard confirmation, a narrow window and 200% zoom, mixed success and failure, a redraw that supersedes an open offer, Files to ZIP, an in-limit APNG labelled as the first frame, and a resize probe or result that does not match the proposal.
+  - Full Playwright suite, `HEXSHIFT_PORT=4185`, 3 workers: 378 passed, 8 skipped, 1 failed. The skips are the existing Firefox and WebKit skips. The failure was WebKit `Cancel appears only after a long wait, in its own place`: `#cancel` stayed hidden for the 800 ms the test allows. That timer is unchanged in this version. Rerun alone on WebKit: 1 passed. The other 378 were not rerun after that.
+- Memory, same day, Playwright Chromium, Firefox, and WebKit on this machine. Windows was not measured. A solid 4096×4096 PNG (233,653 bytes) opened at 2048×2048, and a solid 16384×1024 PNG (222,127 bytes) opened at 8192×512. Peak extra RSS, including the browser, was 413,816–514,908 KiB: Chromium 503,928 and 470,016 KiB, and on a second run 510,436 and 514,908 KiB; Firefox 454,176 and 413,816 KiB; WebKit 476,980 and 489,112 KiB. Chromium's page JS heap went from 3,551,918 to 161,812,137 bytes, and from 3,588,310 to 166,471,175 bytes. Closing the page returned the next measurement to the idle baseline. The ceilings were not reduced. This does not separate codec scratch from Hex Shift's own copies, and it is not a Windows measurement.
+- Manual evidence: `docs/manual-tests.md` is not in this repository, and that checklist was not run by hand. `HostTests.exe verify-release` was not run, so this is not `RELEASE CHECK PASSED`.
+- Blockers: none in the editor code. Publication still needs the pull request, checks, windows-app, the tag, and approval of the protected `release` environment.
+- Artifact hashes: local portable shell `146cbe8a5f493454`. Nothing published.
+- Release URL: none.
 
 ## Animation prototype
 

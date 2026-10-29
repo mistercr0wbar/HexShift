@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-d+sTOm2nbS4mEj4wB9QIiFHZBRxZyEnbyDEcAGo5wlI='; style-src 'sha256-xq0S2E8sq1pwczuQmWi5AZpagTVkQIih0HJaQV/JZqI='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-O0XD/NqUgIK3wbCwjh/FI14RFKjUJGpdjGsFsRwX+JE='; style-src 'sha256-CrJVCbwZTUbK42tk145JYZkptYxbJWjQcrkDrrLD9vg='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta
       name="theme-color"
@@ -2287,6 +2287,13 @@ dialog details {
   font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
   font-size: 12px;
 }
+#downscaleDialog label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
@@ -3904,8 +3911,11 @@ dialog details {
             </dl>
             <p>
               On touch screens, pinch to zoom and drag with two fingers to pan.
-              Opens PNG, JPEG, WebP, GIF and static SVG up to 4 megapixels;
-              animated files open as stills. Static SVG supports shapes, paths,
+              Opens PNG, JPEG, WebP, GIF and static SVG. An edited image is at
+              most 4 megapixels and 8,192 pixels on a side. A larger static PNG,
+              JPEG or WebP, up to 16 megapixels, can be downscaled while
+              decoding after you confirm. Animated files that already fit open
+              as stills. Static SVG supports shapes, paths,
               text, gradients, clips, masks, blend modes, filter effects, reused
               shapes and the files Illustrator, Inkscape, Sketch and Figma
               export; active content, external resources and embedded images are
@@ -3921,6 +3931,26 @@ dialog details {
       </footer>
     </div>
     <div id="dropOverlay" hidden>Drop an image to open it</div>
+    <dialog
+      id="downscaleDialog"
+      aria-labelledby="downscaleTitle"
+      aria-describedby="downscaleText"
+    >
+      <form method="dialog">
+        <h2 id="downscaleTitle">Downscale this image?</h2>
+        <p id="downscaleText"></p>
+        <label for="downscaleQuality"
+          >Sampling<select id="downscaleQuality">
+            <option value="smooth" selected>Smooth</option>
+            <option value="nearest">Nearest neighbour</option>
+          </select></label
+        >
+        <div class="dialog-actions">
+          <button class="button" value="cancel" autofocus>Cancel</button
+          ><button class="button primary" value="continue">Downscale</button>
+        </div>
+      </form>
+    </dialog>
     <dialog
       id="recipeDialog"
       aria-labelledby="recipeDialogTitle"
@@ -7273,12 +7303,93 @@ dialog details {
   var purify_default = createDOMPurify();
 
   // src/import.js
+  var WORKING_SIDE = 8192;
+  var SOURCE_SIDE = 16384;
+  var SOURCE_PIXELS = 16777216;
+  var SOURCE_BYTES = 16 * 1024 * 1024;
+  var WORKING_LIMIT = "Image too large. Use at most 4,194,304 pixels and 8,192 pixels on either side.";
+  var SOURCE_LIMIT = "Image too large to downscale. Use at most 16,777,216 pixels, 16,384 pixels on either side, and 16 MiB.";
+  var RESIZE_UNAVAILABLE = "This browser cannot downscale an image while decoding it. Hex Shift did not open it at full size. Use at most 4,194,304 pixels and 8,192 pixels on either side.";
+  var ANIMATED_LIMIT = "Animated images are not downscaled. Use at most 4,194,304 pixels and 8,192 pixels on either side.";
   function dimensions(w2, h2) {
-    if (!Number.isInteger(w2) || !Number.isInteger(h2) || w2 < 1 || h2 < 1 || w2 > 8192 || h2 > 8192 || w2 * h2 > MAX_PIXELS)
-      throw Error(
-        "Image too large. Use at most 4,194,304 pixels and 8,192 pixels on either side."
-      );
+    if (!Number.isInteger(w2) || !Number.isInteger(h2) || w2 < 1 || h2 < 1 || w2 > WORKING_SIDE || h2 > WORKING_SIDE || w2 * h2 > MAX_PIXELS)
+      throw Error(WORKING_LIMIT);
     return { width: w2, height: h2 };
+  }
+  function sourceDimensions(w2, h2) {
+    if (!Number.isInteger(w2) || !Number.isInteger(h2) || w2 < 1 || h2 < 1 || w2 > SOURCE_SIDE || h2 > SOURCE_SIDE || w2 * h2 > SOURCE_PIXELS)
+      throw Error(SOURCE_LIMIT);
+    return { width: w2, height: h2 };
+  }
+  function fitsWorking(w2, h2) {
+    return Number.isInteger(w2) && Number.isInteger(h2) && w2 >= 1 && h2 >= 1 && w2 <= WORKING_SIDE && h2 <= WORKING_SIDE && w2 * h2 <= MAX_PIXELS;
+  }
+  function fitDimensions(w2, h2) {
+    sourceDimensions(w2, h2);
+    const scale = Math.min(
+      1,
+      WORKING_SIDE / w2,
+      WORKING_SIDE / h2,
+      Math.sqrt(MAX_PIXELS / (w2 * h2))
+    );
+    return dimensions(
+      Math.max(1, Math.floor(w2 * scale)),
+      Math.max(1, Math.floor(h2 * scale))
+    );
+  }
+  function orientationFromTiff(bytes) {
+    if (!bytes || bytes.length < 8) return 1;
+    const le = bytes[0] === 73 && bytes[1] === 73;
+    if (!le && !(bytes[0] === 77 && bytes[1] === 77)) return 1;
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), u16 = (o) => view.getUint16(o, le), u32 = (o) => view.getUint32(o, le);
+    if (u16(2) !== 42) return 1;
+    let ifd = u32(4);
+    if (ifd + 2 > view.byteLength) return 1;
+    const count = u16(ifd);
+    ifd += 2;
+    for (let i = 0; i < count; i++) {
+      const entry = ifd + i * 12;
+      if (entry + 12 > view.byteLength) return 1;
+      if (u16(entry) === 274) {
+        const value = u16(entry + 8);
+        return value >= 1 && value <= 8 ? value : 1;
+      }
+    }
+    return 1;
+  }
+  function orientationFromExif(bytes) {
+    if (!bytes) return 1;
+    let tiff = bytes;
+    if (bytes.length >= 6 && String.fromCharCode(...bytes.subarray(0, 4)) === "Exif")
+      tiff = bytes.subarray(6);
+    return orientationFromTiff(tiff);
+  }
+  function orient(w2, h2, orientation) {
+    return orientation >= 5 ? { width: h2, height: w2 } : { width: w2, height: h2 };
+  }
+  function withinSource(w2, h2) {
+    return Number.isInteger(w2) && Number.isInteger(h2) && w2 >= 1 && h2 >= 1 && w2 <= SOURCE_SIDE && h2 <= SOURCE_SIDE && w2 * h2 <= SOURCE_PIXELS;
+  }
+  function describeRaster(width, height, type, orientation, animated) {
+    if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1)
+      throw Error(SOURCE_LIMIT);
+    const oriented = orient(width, height, orientation);
+    if (!fitsWorking(oriented.width, oriented.height) && (animated || type === "image/gif"))
+      throw Error(ANIMATED_LIMIT);
+    if (!withinSource(width, height) || !withinSource(oriented.width, oriented.height))
+      throw Error(SOURCE_LIMIT);
+    const downscale = type === "image/png" || type === "image/jpeg" || type === "image/webp";
+    const within = fitsWorking(oriented.width, oriented.height);
+    return {
+      width,
+      height,
+      orientedWidth: oriented.width,
+      orientedHeight: oriented.height,
+      type,
+      still: !!animated,
+      animated: !!animated,
+      proposal: within || !downscale ? null : fitDimensions(oriented.width, oriented.height)
+    };
   }
   function inspectRaster(bytes) {
     const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), text2 = (i, n) => String.fromCharCode(...bytes.subarray(i, i + n));
@@ -7289,21 +7400,31 @@ dialog details {
       need(0, 33);
       if (v.getUint32(8) !== 13 || text2(12, 4) !== "IHDR")
         throw Error("Invalid PNG header.");
-      return {
-        ...dimensions(v.getUint32(16), v.getUint32(20)),
-        type: "image/png"
-      };
+      const width = v.getUint32(16), height = v.getUint32(20);
+      let i = 8, animated = false, orientation = 1;
+      while (i + 8 <= bytes.length) {
+        const len = v.getUint32(i), kind = text2(i + 4, 4), data = i + 8;
+        need(data, len + 4);
+        if (kind === "acTL") animated = true;
+        if (kind === "eXIf")
+          orientation = orientationFromTiff(bytes.subarray(data, data + len));
+        if (kind === "IEND") break;
+        i = data + len + 4;
+      }
+      return describeRaster(width, height, "image/png", orientation, animated);
     }
     if (["GIF87a", "GIF89a"].includes(text2(0, 6))) {
       need(0, 13);
-      return {
-        ...dimensions(v.getUint16(6, true), v.getUint16(8, true)),
-        type: "image/gif",
-        still: true
-      };
+      return describeRaster(
+        v.getUint16(6, true),
+        v.getUint16(8, true),
+        "image/gif",
+        1,
+        true
+      );
     }
     if (bytes[0] === 255 && bytes[1] === 216) {
-      let i = 2;
+      let i = 2, width = 0, height = 0, orientation = 1, found = false;
       while (i < bytes.length) {
         need(i, 2);
         if (bytes[i++] !== 255) throw Error("Invalid JPEG marker.");
@@ -7315,6 +7436,8 @@ dialog details {
         const len = v.getUint16(i);
         if (len < 2) throw Error("Invalid JPEG segment.");
         need(i, len);
+        if (marker === 225 && len >= 8 && text2(i + 2, 4) === "Exif")
+          orientation = orientationFromExif(bytes.subarray(i + 2, i + len));
         if ([
           192,
           193,
@@ -7331,55 +7454,52 @@ dialog details {
           207
         ].includes(marker)) {
           if (len < 8) throw Error("Invalid JPEG dimensions.");
-          return {
-            ...dimensions(v.getUint16(i + 5), v.getUint16(i + 3)),
-            type: "image/jpeg"
-          };
+          height = v.getUint16(i + 3);
+          width = v.getUint16(i + 5);
+          found = true;
         }
         i += len;
       }
-      throw Error("JPEG dimensions could not be read.");
+      if (!found) throw Error("JPEG dimensions could not be read.");
+      return describeRaster(width, height, "image/jpeg", orientation, false);
     }
     if (text2(0, 4) === "RIFF" && text2(8, 4) === "WEBP") {
       need(0, 20);
       if (v.getUint32(4, true) + 8 !== bytes.length)
         throw Error("Invalid WebP container length.");
-      let i = 12;
+      let i = 12, width = 0, height = 0, found = false, animated = false, orientation = 1;
       while (i + 8 <= bytes.length) {
         const kind = text2(i, 4), len = v.getUint32(i + 4, true), o = i + 8;
         need(o, len);
         if (kind === "VP8X") {
           if (len !== 10) throw Error("Invalid WebP header.");
-          const w2 = 1 + bytes[o + 4] + (bytes[o + 5] << 8) + (bytes[o + 6] << 16), h2 = 1 + bytes[o + 7] + (bytes[o + 8] << 8) + (bytes[o + 9] << 16);
-          return {
-            ...dimensions(w2, h2),
-            type: "image/webp",
-            still: !!(bytes[o] & 2)
-          };
-        }
-        if (kind === "VP8 ") {
+          width = 1 + bytes[o + 4] + (bytes[o + 5] << 8) + (bytes[o + 6] << 16);
+          height = 1 + bytes[o + 7] + (bytes[o + 8] << 8) + (bytes[o + 9] << 16);
+          animated = !!(bytes[o] & 2);
+          found = true;
+        } else if (kind === "VP8 " && !found) {
           need(o, 10);
           if (text2(o + 3, 3) !== "\x9D*")
             throw Error("Invalid WebP frame.");
-          return {
-            ...dimensions(
-              v.getUint16(o + 6, true) & 16383,
-              v.getUint16(o + 8, true) & 16383
-            ),
-            type: "image/webp"
-          };
-        }
-        if (kind === "VP8L") {
+          width = v.getUint16(o + 6, true) & 16383;
+          height = v.getUint16(o + 8, true) & 16383;
+          found = true;
+        } else if (kind === "VP8L" && !found) {
           need(o, 5);
           if (bytes[o] !== 47) throw Error("Invalid WebP frame.");
           const b = v.getUint32(o + 1, true);
-          return {
-            ...dimensions((b & 16383) + 1, (b >>> 14 & 16383) + 1),
-            type: "image/webp"
-          };
-        }
+          width = (b & 16383) + 1;
+          height = (b >>> 14 & 16383) + 1;
+          found = true;
+        } else if (kind === "EXIF")
+          orientation = orientationFromExif(bytes.subarray(o, o + len));
         i = o + len + (len & 1);
       }
+      if (!found)
+        throw Error(
+          "Choose a PNG, JPEG, WebP, GIF, or supported static SVG. The file contents must match the format."
+        );
+      return describeRaster(width, height, "image/webp", orientation, animated);
     }
     throw Error(
       "Choose a PNG, JPEG, WebP, GIF, or supported static SVG. The file contents must match the format."
@@ -7899,9 +8019,9 @@ dialog details {
       type: "image/svg+xml"
     };
   }
-  async function decodeBlob(blob, signal, { svgEdge = 512 } = {}) {
+  async function headerInfo(blob, signal, svgEdge) {
     if (!(blob instanceof Blob) || !blob.size) throw Error("The file is empty.");
-    if (blob.size > 16 * 1024 * 1024)
+    if (blob.size > SOURCE_BYTES)
       throw Error("Image files must be 16 MiB or smaller.");
     const bytes = new Uint8Array(await blob.arrayBuffer());
     signal?.throwIfAborted();
@@ -7909,14 +8029,64 @@ dialog details {
     const svg2 = /^(?:<\?xml\s[^?]*\?>\s*)?(?:<!--[\s\S]*?-->\s*)*<svg(?:\s|>)/i.test(
       prefix
     ) || prefix.startsWith("<");
-    let info = svg2 ? guardSvg(new TextDecoder("utf-8", { fatal: true }).decode(bytes), svgEdge) : inspectRaster(bytes);
-    const source = info.blob || new Blob([bytes], { type: info.type });
+    const info = svg2 ? guardSvg(new TextDecoder("utf-8", { fatal: true }).decode(bytes), svgEdge) : inspectRaster(bytes);
+    return { info, source: info.blob || new Blob([bytes], { type: info.type }) };
+  }
+  async function inspectBlob(blob, svgEdge = 512) {
+    const { info } = await headerInfo(blob, void 0, svgEdge);
+    return info;
+  }
+  var resizeProbe;
+  async function resizeDecodingAvailable() {
+    if (resizeProbe != null) return resizeProbe;
+    if (typeof createImageBitmap !== "function" || typeof document === "undefined") {
+      resizeProbe = false;
+      return false;
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = 2;
+    canvas.height = 2;
+    let bitmap;
+    try {
+      bitmap = await createImageBitmap(canvas, {
+        resizeWidth: 1,
+        resizeHeight: 1,
+        resizeQuality: "high"
+      });
+      resizeProbe = bitmap.width === 1 && bitmap.height === 1;
+    } catch {
+      resizeProbe = false;
+    } finally {
+      bitmap?.close?.();
+    }
+    return resizeProbe;
+  }
+  async function decodeBlob(blob, signal, { svgEdge = 512, resize: resize2 = null } = {}) {
+    const { info, source } = await headerInfo(blob, signal, svgEdge);
+    if (info.proposal && resize2 !== "smooth" && resize2 !== "nearest")
+      throw Error(WORKING_LIMIT);
     let bitmap, url;
     try {
       signal?.throwIfAborted();
-      if (typeof createImageBitmap === "function" && info.type !== "image/svg+xml")
+      if (info.proposal) {
+        if (typeof createImageBitmap !== "function") throw Error(RESIZE_UNAVAILABLE);
+        try {
+          bitmap = await createImageBitmap(source, {
+            resizeWidth: info.proposal.width,
+            resizeHeight: info.proposal.height,
+            resizeQuality: resize2 === "nearest" ? "pixelated" : "high",
+            imageOrientation: "from-image"
+          });
+        } catch (e) {
+          if (e?.name === "AbortError") throw e;
+          throw Error(RESIZE_UNAVAILABLE);
+        }
+        signal?.throwIfAborted();
+        if (bitmap.width !== info.proposal.width || bitmap.height !== info.proposal.height)
+          throw Error(RESIZE_UNAVAILABLE);
+      } else if (typeof createImageBitmap === "function" && info.type !== "image/svg+xml") {
         bitmap = await createImageBitmap(source);
-      else {
+      } else {
         url = URL.createObjectURL(source);
         bitmap = await new Promise((resolve, reject) => {
           const im = new Image();
@@ -7939,7 +8109,8 @@ dialog details {
       signal?.throwIfAborted();
       const w2 = bitmap.width || bitmap.naturalWidth, h2 = bitmap.height || bitmap.naturalHeight;
       dimensions(w2, h2);
-      if (!(w2 === info.width && h2 === info.height || info.type === "image/jpeg" && w2 === info.height && h2 === info.width))
+      const orientedW = info.orientedWidth || info.width, orientedH = info.orientedHeight || info.height;
+      if (!info.proposal && !(w2 === orientedW && h2 === orientedH || w2 === info.width && h2 === info.height || info.type === "image/jpeg" && w2 === info.height && h2 === info.width))
         throw Error("Decoded dimensions do not match the file header.");
       const canvas = document.createElement("canvas");
       canvas.width = w2;
@@ -7954,7 +8125,10 @@ dialog details {
         height: h2,
         pixels: pixels2,
         still: info.still,
-        svg: info.type === "image/svg+xml"
+        svg: info.type === "image/svg+xml",
+        downscaled: !!info.proposal,
+        sourceWidth: orientedW,
+        sourceHeight: orientedH
       };
     } finally {
       bitmap?.close?.();
@@ -12551,7 +12725,7 @@ dialog details {
   // src/app.js
   var $ = (id) => document.getElementById(id);
   var pause = makePause();
-  var VERSION = "3.12.0";
+  var VERSION = "3.13.0";
   var w = 0;
   var h = 0;
   var name = "";
@@ -13735,6 +13909,36 @@ dialog details {
     if (epoch !== importEpoch) return;
     renderImportNotice(failures);
   }
+  function askDownscale(info, signal) {
+    const dialog = $("downscaleDialog"), quality = $("downscaleQuality");
+    $("downscaleText").textContent = info.orientedWidth + " \xD7 " + info.orientedHeight + " is larger than Hex Shift can edit. It can open at " + info.proposal.width + " \xD7 " + info.proposal.height + ". Smooth keeps gradients. Nearest keeps hard pixel edges. Export scaling is unchanged.";
+    quality.value = "smooth";
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish3 = (value) => {
+        if (settled) return;
+        settled = true;
+        signal?.removeEventListener("abort", onAbort);
+        resolve(value);
+      };
+      const onClose = () => finish3(
+        dialog.returnValue === "continue" && quality.value === "nearest" ? "nearest" : dialog.returnValue === "continue" ? "smooth" : null
+      );
+      const onAbort = () => {
+        if (dialog.open) dialog.close("cancel");
+        else finish3(null);
+      };
+      if (dialog.open) dialog.close("cancel");
+      dialog.addEventListener("close", onClose, { once: true });
+      signal?.addEventListener("abort", onAbort);
+      if (signal?.aborted) {
+        dialog.removeEventListener("close", onClose);
+        finish3(null);
+        return;
+      }
+      dialog.showModal();
+    });
+  }
   async function openBlob(blob, fileName, isSample = false, redraw = false) {
     if (batchAbort) {
       status("Wait for the batch to finish, or cancel it first.");
@@ -13754,7 +13958,26 @@ dialog details {
     importAbort = controller;
     status(redraw ? "Redrawing SVG\u2026" : "Checking image\u2026");
     try {
-      const edge = Number($("svgSize").value), decoded = await decodeBlob(blob, controller.signal, { svgEdge: edge });
+      const edge = Number($("svgSize").value);
+      let resize2 = null;
+      if (!redraw) {
+        const info = await inspectBlob(blob, edge);
+        if (ticket !== importId) return openStop();
+        if (info.proposal) {
+          if (!await resizeDecodingAvailable()) throw Error(RESIZE_UNAVAILABLE);
+          if (ticket !== importId) return openStop();
+          resize2 = await askDownscale(info, controller.signal);
+          if (ticket !== importId) return openStop();
+          if (!resize2) {
+            status("Left " + String(fileName || "image") + " unopened.");
+            return openStop();
+          }
+        }
+      }
+      const decoded = await decodeBlob(blob, controller.signal, {
+        svgEdge: edge,
+        resize: resize2
+      });
       if (ticket !== importId) return openStop();
       if (batchAbort || $("replaceDialog").open) return openStop();
       replaceSample = !isSample && !redraw && activeDocument?.sample && !currentHasEdits();
@@ -13846,7 +14069,7 @@ dialog details {
       renderTabs();
       documentTabs?.reveal(activeDocument.id);
       status(
-        isSample ? "Sample ready. Pick a colour to get started." : redraw ? "Redrew " + name + " at " + edge + " px." : "Opened " + name + (decoded.still ? " as a still image." : ".")
+        isSample ? "Sample ready. Pick a colour to get started." : redraw ? "Redrew " + name + " at " + edge + " px." : decoded.downscaled ? "Opened " + name + " at " + w + " \xD7 " + h + ", down from " + decoded.sourceWidth + " \xD7 " + decoded.sourceHeight + "." : "Opened " + name + (decoded.still ? " as a still image." : ".")
       );
       return openOk();
     } catch (e) {
@@ -17277,6 +17500,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 Original C# port and code by Christian Winnerlein (CodesInChaos), public domain, https://github.com/CodesInChaos/Chaos.NaCl . Poly1305 by Andrew M. (floodyberry), MIT or public domain. Curve25519, Ed25519, Salsa20 and HSalsa20 from SUPERCOP ref10 by Dan Bernstein, public domain (http://bench.cr.yp.to/supercop.html). SHA512 by Christian Winnerlein, public domain.</pre></template>
     <template id="release-notes"><pre># Hex Shift 3
+
+**New in 3.13.0:** An image that is larger than Hex Shift can edit, but no larger than 16,777,216 pixels, 16,384 pixels on a side and 16 MiB, can be downscaled while it is decoded. Hex Shift shows the original size and the size it would open, with Smooth selected and Nearest available. That choice is not the export scaling. It asks first, and it does not open the file if you cancel or if this browser cannot resize during decoding. Animated images, GIF and SVG are not offered this. Files to ZIP still reports an oversized file and does not ask. The edited image is still at most 4,194,304 pixels and 8,192 pixels on a side.
 
 **New in 3.12.0:** A polygon stays on the colour you picked. It does not choose that colour. While you draw, a line follows the pointer from the last point, and the first point highlights when the pointer is close enough to close: 8 pixels for a mouse or pen, 12 for a finger. Enter, Backspace and Escape work as before. Escape drops only the unfinished polygon. Closing it is one undo. Saving or repeating a recipe asks when a sampled colour left out brush strokes, a connected region, or a polygon, and names which. A recipe that records none of those applies without that question. An older recipe that does not say asks, and does not claim the repeat is exact. Cancelling the question changes nothing. Applying a recipe keeps the picture you already edited and warns about the recipe, not about that picture. Repeating onto the same tab bakes it once and does not warn. An outline on its own still repeats.
 

@@ -1278,8 +1278,11 @@
             </dl>
             <p>
               On touch screens, pinch to zoom and drag with two fingers to pan.
-              Opens PNG, JPEG, WebP, GIF and static SVG up to 4 megapixels;
-              animated files open as stills. Static SVG supports shapes, paths,
+              Opens PNG, JPEG, WebP, GIF and static SVG. An edited image is at
+              most 4 megapixels and 8,192 pixels on a side. A larger static PNG,
+              JPEG or WebP, up to 16 megapixels, can be downscaled while
+              decoding after you confirm. Animated files that already fit open
+              as stills. Static SVG supports shapes, paths,
               text, gradients, clips, masks, blend modes, filter effects, reused
               shapes and the files Illustrator, Inkscape, Sketch and Figma
               export; active content, external resources and embedded images are
@@ -1295,6 +1298,26 @@
       </footer>
     </div>
     <div id="dropOverlay" hidden>Drop an image to open it</div>
+    <dialog
+      id="downscaleDialog"
+      aria-labelledby="downscaleTitle"
+      aria-describedby="downscaleText"
+    >
+      <form method="dialog">
+        <h2 id="downscaleTitle">Downscale this image?</h2>
+        <p id="downscaleText"></p>
+        <label for="downscaleQuality"
+          >Sampling<select id="downscaleQuality">
+            <option value="smooth" selected>Smooth</option>
+            <option value="nearest">Nearest neighbour</option>
+          </select></label
+        >
+        <div class="dialog-actions">
+          <button class="button" value="cancel" autofocus>Cancel</button
+          ><button class="button primary" value="continue">Downscale</button>
+        </div>
+      </form>
+    </dialog>
     <dialog
       id="recipeDialog"
       aria-labelledby="recipeDialogTitle"

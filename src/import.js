@@ -1,19 +1,149 @@
 import DOMPurify from "dompurify";
 import { MAX_PIXELS } from "./engine.js";
+// Edited images stay inside the working limits. A static PNG, JPEG or WebP
+// may be larger than that, up to the source ceilings, and is downscaled only
+// after the person agrees.
+export const WORKING_SIDE = 8192,
+  SOURCE_SIDE = 16384,
+  SOURCE_PIXELS = 16777216,
+  SOURCE_BYTES = 16 * 1024 * 1024;
+export const WORKING_LIMIT =
+  "Image too large. Use at most 4,194,304 pixels and 8,192 pixels on either side.";
+export const SOURCE_LIMIT =
+  "Image too large to downscale. Use at most 16,777,216 pixels, 16,384 pixels on either side, and 16 MiB.";
+export const RESIZE_UNAVAILABLE =
+  "This browser cannot downscale an image while decoding it. Hex Shift did not open it at full size. Use at most 4,194,304 pixels and 8,192 pixels on either side.";
+const ANIMATED_LIMIT =
+  "Animated images are not downscaled. Use at most 4,194,304 pixels and 8,192 pixels on either side.";
 export function dimensions(w, h) {
   if (
     !Number.isInteger(w) ||
     !Number.isInteger(h) ||
     w < 1 ||
     h < 1 ||
-    w > 8192 ||
-    h > 8192 ||
+    w > WORKING_SIDE ||
+    h > WORKING_SIDE ||
     w * h > MAX_PIXELS
   )
-    throw Error(
-      "Image too large. Use at most 4,194,304 pixels and 8,192 pixels on either side.",
-    );
+    throw Error(WORKING_LIMIT);
   return { width: w, height: h };
+}
+function sourceDimensions(w, h) {
+  if (
+    !Number.isInteger(w) ||
+    !Number.isInteger(h) ||
+    w < 1 ||
+    h < 1 ||
+    w > SOURCE_SIDE ||
+    h > SOURCE_SIDE ||
+    w * h > SOURCE_PIXELS
+  )
+    throw Error(SOURCE_LIMIT);
+  return { width: w, height: h };
+}
+export function fitsWorking(w, h) {
+  return (
+    Number.isInteger(w) &&
+    Number.isInteger(h) &&
+    w >= 1 &&
+    h >= 1 &&
+    w <= WORKING_SIDE &&
+    h <= WORKING_SIDE &&
+    w * h <= MAX_PIXELS
+  );
+}
+// scale = min(1, 8192/w, 8192/h, sqrt(4194304/(w*h))), then round down.
+export function fitDimensions(w, h) {
+  sourceDimensions(w, h);
+  const scale = Math.min(
+    1,
+    WORKING_SIDE / w,
+    WORKING_SIDE / h,
+    Math.sqrt(MAX_PIXELS / (w * h)),
+  );
+  return dimensions(
+    Math.max(1, Math.floor(w * scale)),
+    Math.max(1, Math.floor(h * scale)),
+  );
+}
+function orientationFromTiff(bytes) {
+  if (!bytes || bytes.length < 8) return 1;
+  const le = bytes[0] === 0x49 && bytes[1] === 0x49;
+  if (!le && !(bytes[0] === 0x4d && bytes[1] === 0x4d)) return 1;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+    u16 = (o) => view.getUint16(o, le),
+    u32 = (o) => view.getUint32(o, le);
+  if (u16(2) !== 42) return 1;
+  let ifd = u32(4);
+  if (ifd + 2 > view.byteLength) return 1;
+  const count = u16(ifd);
+  ifd += 2;
+  for (let i = 0; i < count; i++) {
+    const entry = ifd + i * 12;
+    if (entry + 12 > view.byteLength) return 1;
+    if (u16(entry) === 0x0112) {
+      const value = u16(entry + 8);
+      return value >= 1 && value <= 8 ? value : 1;
+    }
+  }
+  return 1;
+}
+function orientationFromExif(bytes) {
+  if (!bytes) return 1;
+  let tiff = bytes;
+  if (
+    bytes.length >= 6 &&
+    String.fromCharCode(...bytes.subarray(0, 4)) === "Exif"
+  )
+    tiff = bytes.subarray(6);
+  return orientationFromTiff(tiff);
+}
+function orient(w, h, orientation) {
+  return orientation >= 5 ? { width: h, height: w } : { width: w, height: h };
+}
+function withinSource(w, h) {
+  return (
+    Number.isInteger(w) &&
+    Number.isInteger(h) &&
+    w >= 1 &&
+    h >= 1 &&
+    w <= SOURCE_SIDE &&
+    h <= SOURCE_SIDE &&
+    w * h <= SOURCE_PIXELS
+  );
+}
+function describeRaster(width, height, type, orientation, animated) {
+  if (
+    !Number.isInteger(width) ||
+    !Number.isInteger(height) ||
+    width < 1 ||
+    height < 1
+  )
+    throw Error(SOURCE_LIMIT);
+  const oriented = orient(width, height, orientation);
+  // An animation is never offered the static downscale path, including when
+  // it also exceeds the source ceiling.
+  if (
+    !fitsWorking(oriented.width, oriented.height) &&
+    (animated || type === "image/gif")
+  )
+    throw Error(ANIMATED_LIMIT);
+  if (!withinSource(width, height) || !withinSource(oriented.width, oriented.height))
+    throw Error(SOURCE_LIMIT);
+  const downscale =
+    type === "image/png" || type === "image/jpeg" || type === "image/webp";
+  const within = fitsWorking(oriented.width, oriented.height);
+  return {
+    width,
+    height,
+    orientedWidth: oriented.width,
+    orientedHeight: oriented.height,
+    type,
+    still: !!animated,
+    animated: !!animated,
+    proposal:
+      within || !downscale ? null : fitDimensions(oriented.width, oriented.height),
+  };
 }
 export function inspectRaster(bytes) {
   const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength),
@@ -25,21 +155,40 @@ export function inspectRaster(bytes) {
     need(0, 33);
     if (v.getUint32(8) !== 13 || text(12, 4) !== "IHDR")
       throw Error("Invalid PNG header.");
-    return {
-      ...dimensions(v.getUint32(16), v.getUint32(20)),
-      type: "image/png",
-    };
+    const width = v.getUint32(16),
+      height = v.getUint32(20);
+    let i = 8,
+      animated = false,
+      orientation = 1;
+    while (i + 8 <= bytes.length) {
+      const len = v.getUint32(i),
+        kind = text(i + 4, 4),
+        data = i + 8;
+      need(data, len + 4);
+      if (kind === "acTL") animated = true;
+      if (kind === "eXIf")
+        orientation = orientationFromTiff(bytes.subarray(data, data + len));
+      if (kind === "IEND") break;
+      i = data + len + 4;
+    }
+    return describeRaster(width, height, "image/png", orientation, animated);
   }
   if (["GIF87a", "GIF89a"].includes(text(0, 6))) {
     need(0, 13);
-    return {
-      ...dimensions(v.getUint16(6, true), v.getUint16(8, true)),
-      type: "image/gif",
-      still: true,
-    };
+    return describeRaster(
+      v.getUint16(6, true),
+      v.getUint16(8, true),
+      "image/gif",
+      1,
+      true,
+    );
   }
   if (bytes[0] === 255 && bytes[1] === 216) {
-    let i = 2;
+    let i = 2,
+      width = 0,
+      height = 0,
+      orientation = 1,
+      found = false;
     while (i < bytes.length) {
       need(i, 2);
       if (bytes[i++] !== 255) throw Error("Invalid JPEG marker.");
@@ -51,26 +200,33 @@ export function inspectRaster(bytes) {
       const len = v.getUint16(i);
       if (len < 2) throw Error("Invalid JPEG segment.");
       need(i, len);
+      if (marker === 225 && len >= 8 && text(i + 2, 4) === "Exif")
+        orientation = orientationFromExif(bytes.subarray(i + 2, i + len));
       if (
         [
           192, 193, 194, 195, 197, 198, 199, 201, 202, 203, 205, 206, 207,
         ].includes(marker)
       ) {
         if (len < 8) throw Error("Invalid JPEG dimensions.");
-        return {
-          ...dimensions(v.getUint16(i + 5), v.getUint16(i + 3)),
-          type: "image/jpeg",
-        };
+        height = v.getUint16(i + 3);
+        width = v.getUint16(i + 5);
+        found = true;
       }
       i += len;
     }
-    throw Error("JPEG dimensions could not be read.");
+    if (!found) throw Error("JPEG dimensions could not be read.");
+    return describeRaster(width, height, "image/jpeg", orientation, false);
   }
   if (text(0, 4) === "RIFF" && text(8, 4) === "WEBP") {
     need(0, 20);
     if (v.getUint32(4, true) + 8 !== bytes.length)
       throw Error("Invalid WebP container length.");
-    let i = 12;
+    let i = 12,
+      width = 0,
+      height = 0,
+      found = false,
+      animated = false,
+      orientation = 1;
     while (i + 8 <= bytes.length) {
       const kind = text(i, 4),
         len = v.getUint32(i + 4, true),
@@ -78,37 +234,33 @@ export function inspectRaster(bytes) {
       need(o, len);
       if (kind === "VP8X") {
         if (len !== 10) throw Error("Invalid WebP header.");
-        const w = 1 + bytes[o + 4] + (bytes[o + 5] << 8) + (bytes[o + 6] << 16),
-          h = 1 + bytes[o + 7] + (bytes[o + 8] << 8) + (bytes[o + 9] << 16);
-        return {
-          ...dimensions(w, h),
-          type: "image/webp",
-          still: !!(bytes[o] & 2),
-        };
-      }
-      if (kind === "VP8 ") {
+        width = 1 + bytes[o + 4] + (bytes[o + 5] << 8) + (bytes[o + 6] << 16);
+        height = 1 + bytes[o + 7] + (bytes[o + 8] << 8) + (bytes[o + 9] << 16);
+        animated = !!(bytes[o] & 2);
+        found = true;
+      } else if (kind === "VP8 " && !found) {
         need(o, 10);
         if (text(o + 3, 3) !== "\x9d\x01\x2a")
           throw Error("Invalid WebP frame.");
-        return {
-          ...dimensions(
-            v.getUint16(o + 6, true) & 16383,
-            v.getUint16(o + 8, true) & 16383,
-          ),
-          type: "image/webp",
-        };
-      }
-      if (kind === "VP8L") {
+        width = v.getUint16(o + 6, true) & 16383;
+        height = v.getUint16(o + 8, true) & 16383;
+        found = true;
+      } else if (kind === "VP8L" && !found) {
         need(o, 5);
         if (bytes[o] !== 47) throw Error("Invalid WebP frame.");
         const b = v.getUint32(o + 1, true);
-        return {
-          ...dimensions((b & 16383) + 1, ((b >>> 14) & 16383) + 1),
-          type: "image/webp",
-        };
-      }
+        width = (b & 16383) + 1;
+        height = ((b >>> 14) & 16383) + 1;
+        found = true;
+      } else if (kind === "EXIF")
+        orientation = orientationFromExif(bytes.subarray(o, o + len));
       i = o + len + (len & 1);
     }
+    if (!found)
+      throw Error(
+        "Choose a PNG, JPEG, WebP, GIF, or supported static SVG. The file contents must match the format.",
+      );
+    return describeRaster(width, height, "image/webp", orientation, animated);
   }
   throw Error(
     "Choose a PNG, JPEG, WebP, GIF, or supported static SVG. The file contents must match the format.",
@@ -760,9 +912,9 @@ export function guardSvg(text, edge = 512) {
     type: "image/svg+xml",
   };
 }
-export async function decodeBlob(blob, signal, { svgEdge = 512 } = {}) {
+async function headerInfo(blob, signal, svgEdge) {
   if (!(blob instanceof Blob) || !blob.size) throw Error("The file is empty.");
-  if (blob.size > 16 * 1024 * 1024)
+  if (blob.size > SOURCE_BYTES)
     throw Error("Image files must be 16 MiB or smaller.");
   const bytes = new Uint8Array(await blob.arrayBuffer());
   signal?.throwIfAborted();
@@ -774,20 +926,74 @@ export async function decodeBlob(blob, signal, { svgEdge = 512 } = {}) {
     /^(?:<\?xml\s[^?]*\?>\s*)?(?:<!--[\s\S]*?-->\s*)*<svg(?:\s|>)/i.test(
       prefix,
     ) || prefix.startsWith("<");
-  let info = svg
+  const info = svg
     ? guardSvg(new TextDecoder("utf-8", { fatal: true }).decode(bytes), svgEdge)
     : inspectRaster(bytes);
-  const source = info.blob || new Blob([bytes], { type: info.type });
+  return { info, source: info.blob || new Blob([bytes], { type: info.type }) };
+}
+export async function inspectBlob(blob, svgEdge = 512) {
+  const { info } = await headerInfo(blob, undefined, svgEdge);
+  return info;
+}
+let resizeProbe;
+export async function resizeDecodingAvailable() {
+  if (resizeProbe != null) return resizeProbe;
+  if (typeof createImageBitmap !== "function" || typeof document === "undefined") {
+    resizeProbe = false;
+    return false;
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = 2;
+  canvas.height = 2;
+  let bitmap;
+  try {
+    bitmap = await createImageBitmap(canvas, {
+      resizeWidth: 1,
+      resizeHeight: 1,
+      resizeQuality: "high",
+    });
+    resizeProbe = bitmap.width === 1 && bitmap.height === 1;
+  } catch {
+    resizeProbe = false;
+  } finally {
+    bitmap?.close?.();
+  }
+  return resizeProbe;
+}
+export async function decodeBlob(blob, signal, { svgEdge = 512, resize = null } = {}) {
+  const { info, source } = await headerInfo(blob, signal, svgEdge);
+  if (info.proposal && resize !== "smooth" && resize !== "nearest")
+    throw Error(WORKING_LIMIT);
   let bitmap, url;
   try {
     signal?.throwIfAborted();
-    // createImageBitmap is specified to take the first frame of animated images.
-    if (
+    if (info.proposal) {
+      // Resized decoding only. A full-size fallback would allocate the source.
+      if (typeof createImageBitmap !== "function") throw Error(RESIZE_UNAVAILABLE);
+      try {
+        bitmap = await createImageBitmap(source, {
+          resizeWidth: info.proposal.width,
+          resizeHeight: info.proposal.height,
+          resizeQuality: resize === "nearest" ? "pixelated" : "high",
+          imageOrientation: "from-image",
+        });
+      } catch (e) {
+        if (e?.name === "AbortError") throw e;
+        throw Error(RESIZE_UNAVAILABLE);
+      }
+      signal?.throwIfAborted();
+      if (
+        bitmap.width !== info.proposal.width ||
+        bitmap.height !== info.proposal.height
+      )
+        throw Error(RESIZE_UNAVAILABLE);
+    } else if (
       typeof createImageBitmap === "function" &&
       info.type !== "image/svg+xml"
-    )
+    ) {
+      // createImageBitmap is specified to take the first frame of animated images.
       bitmap = await createImageBitmap(source);
-    else {
+    } else {
       url = URL.createObjectURL(source);
       bitmap = await new Promise((resolve, reject) => {
         const im = new Image();
@@ -811,11 +1017,18 @@ export async function decodeBlob(blob, signal, { svgEdge = 512 } = {}) {
     const w = bitmap.width || bitmap.naturalWidth,
       h = bitmap.height || bitmap.naturalHeight;
     dimensions(w, h);
-    // EXIF orientation may swap JPEG axes; total dimensions must still agree.
-    if (!(
-      (w === info.width && h === info.height) ||
-      (info.type === "image/jpeg" && w === info.height && h === info.width)
-    ))
+    const orientedW = info.orientedWidth || info.width,
+      orientedH = info.orientedHeight || info.height;
+    // EXIF orientation may swap JPEG axes. A downscale must come back at the
+    // size that was requested, which was checked above.
+    if (
+      !info.proposal &&
+      !(
+        (w === orientedW && h === orientedH) ||
+        (w === info.width && h === info.height) ||
+        (info.type === "image/jpeg" && w === info.height && h === info.width)
+      )
+    )
       throw Error("Decoded dimensions do not match the file header.");
     const canvas = document.createElement("canvas");
     canvas.width = w;
@@ -831,6 +1044,9 @@ export async function decodeBlob(blob, signal, { svgEdge = 512 } = {}) {
       pixels,
       still: info.still,
       svg: info.type === "image/svg+xml",
+      downscaled: !!info.proposal,
+      sourceWidth: orientedW,
+      sourceHeight: orientedH,
     };
   } finally {
     bitmap?.close?.();
