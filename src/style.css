@@ -428,6 +428,28 @@ summary::marker {
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
+/* Simple hides the tools that are not the recolour path. The dock tree stays. */
+.app[data-experience="simple"] .advanced-only,
+.app[data-experience="simple"] .panel-tab[data-tab="adjust"] {
+  display: none !important;
+}
+.mode-ask {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--ground);
+}
+.mode-ask p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.mode-ask[hidden] {
+  display: none;
+}
 .topbar {
   display: flex;
   flex-wrap: wrap;
@@ -1160,7 +1182,15 @@ summary::marker {
   display: flex;
   align-items: center;
   gap: 6px;
-  min-height: 1.4em;
+  /* One line, including Return to target, so a fine slider does not move the page. */
+  height: 24px;
+  overflow: hidden;
+}
+#returnTarget {
+  flex: none;
+  min-height: 0;
+  height: 18px;
+  padding: 0 6px;
 }
 #targetText {
   flex: 1;
@@ -1358,6 +1388,25 @@ summary::marker {
   min-height: 0;
   overflow: hidden;
   background: var(--ground);
+}
+.source-props {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 8px 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 12px;
+}
+.source-props[hidden] {
+  display: none;
+}
+.source-props .help {
+  margin: 0;
+  flex-basis: 100%;
 }
 .stage-tools {
   position: absolute;

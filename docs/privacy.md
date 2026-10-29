@@ -1,6 +1,6 @@
 # Hex Shift privacy
 
-Updated 28 October 2026 for version 3.6.0 (browser and Windows).
+Updated 28 October 2026 for version 3.7.0 (browser and Windows).
 
 Images are processed on your device. Images, selections, edits and undo history
 stay in memory and are lost when the page closes or reloads. They are never
@@ -19,7 +19,13 @@ hidden, the column sizes you chose, and the order of the phone sheet's tabs. A n
 store images, selections, or edits. An unreadable arrangement is ignored and
 left as it is. Whether the getting-started tip has already been shown is kept
 as `hexshift-introduced`. A profile that already has a theme, a layout or
-saved colours does not see that tip again, including after an update. Colours you explicitly save
+saved colours does not see that tip again, including after an update. Whether
+the next launch opens in Simple or Advanced is kept as `hexshift-mode`
+(`simple` or `advanced`). Reset layout does not clear it. A profile that
+already has a layout or saved colours stays in Advanced; the theme does not
+choose the mode, because it is written on startup. A new profile is shown
+Advanced once and asked. Leaving that question unanswered stores nothing and
+asks again next launch. Colours you explicitly save
 and palettes you keep in My palettes are stored locally as `hexshift-colours`:
 up to 48 saved colours, 50 palettes of 256 colours each, and 256 KB overall.
 Only colour codes, palette names and colour labels are kept. Recent targets

@@ -141,7 +141,7 @@ export function defaultLayout() {
     v: 2,
     mode: "auto",
     locked: false,
-    collapsed: [],
+    collapsed: ["adjust"],
     touched: [],
     hidden: [],
     regions: stacksToRegions({

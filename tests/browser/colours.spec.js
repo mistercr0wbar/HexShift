@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./test.mjs";
 import AxeBuilder from "@axe-core/playwright";
 import { ensureHeart } from "./fixture.mjs";
 const settled = (page) =>

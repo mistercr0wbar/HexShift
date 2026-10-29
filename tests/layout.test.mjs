@@ -43,6 +43,7 @@ test("the default layout is valid and keeps every panel once", () => {
   assert.equal(layout.v, 2);
   assert.equal(layout.mode, "auto");
   assert.equal(layout.locked, false);
+  assert.deepEqual(layout.collapsed, ["adjust"]);
   assert.deepEqual(panelsIn(layout.regions.left), ["selection"]);
   assert.deepEqual(panelsIn(layout.regions.right), [
     "colour",

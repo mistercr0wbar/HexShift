@@ -71,9 +71,9 @@ export function recipeStep(rows, pixels, width, labels) {
   if (labels?.some((v) => v !== 0)) step.approximate = true;
   return step;
 }
-// A recipe can carry the outline too: { widthPct, colour }. Version 1 files
-// have none; a file is written as version 2 only when it has one, so recipes
-// without an outline stay readable by older versions.
+// A recipe can carry the outline too: { widthPct, colour }. Version 1 is colour
+// steps and no outline, so older copies can still read it. Version 2 is colour
+// steps plus an outline. Version 3 is an outline and no colour steps.
 export const OUTLINE_MIN = 0.5,
   OUTLINE_MAX = 15;
 function cleanOutline(source) {
@@ -92,11 +92,16 @@ function cleanOutline(source) {
 }
 export function writeRecipe(steps, outline = null) {
   const clean = cleanOutline(outline),
-    data = {
-      format: "hexshift-recipe",
-      version: clean ? 2 : 1,
-      steps: steps.map((s) => ({ rows: s.rows })),
-    };
+    rows = steps.map((s) => ({ rows: s.rows }));
+  if (!rows.length && !clean)
+    throw Error("A recipe needs a colour change or an outline.");
+  // Steps with an outline stay version 2, which older copies can read.
+  // An outline and no colour steps is version 3.
+  const data = {
+    format: "hexshift-recipe",
+    version: !rows.length ? 3 : clean ? 2 : 1,
+    steps: rows,
+  };
   if (clean) data.outline = clean;
   return JSON.stringify(data, null, 2) + "\n";
 }
@@ -117,12 +122,22 @@ export function parseRecipeFile(text) {
   }
   if (data?.format !== "hexshift-recipe")
     throw Error("This is not a Hex Shift recipe.");
-  if (data.version !== 1 && data.version !== 2)
+  if (data.version !== 1 && data.version !== 2 && data.version !== 3)
     throw Error("This recipe needs a newer version of Hex Shift.");
+  const outline = data.version === 1 ? null : cleanOutline(data.outline);
+  if (data.version === 3 && !outline)
+    throw Error("An outline-only recipe needs an outline.");
+  // Version 2 files that carry only an outline stay valid. A colour recipe
+  // still needs 1 to 32 steps.
+  const outlineOnly =
+    (data.version === 2 || data.version === 3) &&
+    outline &&
+    Array.isArray(data.steps) &&
+    data.steps.length === 0;
   if (
     !Array.isArray(data.steps) ||
-    !data.steps.length ||
-    data.steps.length > MAX_STEPS
+    data.steps.length > MAX_STEPS ||
+    (!outlineOnly && !data.steps.length)
   )
     throw Error("A recipe has 1 to 32 steps.");
   const steps = data.steps.map((step) => {
@@ -152,10 +167,7 @@ export function parseRecipeFile(text) {
       throw Error("A recipe step can have at most 64 samples.");
     return { rows, approximate: false };
   });
-  return {
-    steps,
-    outline: data.version === 2 ? cleanOutline(data.outline) : null,
-  };
+  return { steps, outline: data.version === 1 ? null : outline };
 }
 // Runs the steps on an image, each on the result of the one before.
 export async function replay(
