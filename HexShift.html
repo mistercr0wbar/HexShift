@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ueu3d35PZWFltqQeAgPGI8j2eS39b+d7GT3NTNdE6QI='; style-src 'sha256-bzNoeOFIR/l2awf2IEggTcf6Xgv82qN7vpUS79OjK3k='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-9S/w4jmlQa2pDSx2YWrmpbYutrBPHzqs48CaXXF616A='; style-src 'sha256-xq0S2E8sq1pwczuQmWi5AZpagTVkQIih0HJaQV/JZqI='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta
       name="theme-color"
@@ -472,6 +472,39 @@ summary::marker {
 }
 .mode-ask[hidden] {
   display: none;
+}
+.advanced-held {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--ground);
+  color: var(--ink);
+}
+.advanced-held[hidden] {
+  display: none;
+}
+.advanced-held p,
+.advanced-held li {
+  margin: 0;
+}
+.advanced-held ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.advanced-held li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: baseline;
+}
+.advanced-held #advancedHeldLead {
+  color: var(--muted);
 }
 .topbar {
   display: flex;
@@ -1566,6 +1599,62 @@ summary::marker {
   font-size: 14px;
   color: var(--muted);
   pointer-events: none;
+}
+.empty-editor.quiet {
+  visibility: hidden;
+}
+/* Import failures wrap here. The status bar stays one fixed line. */
+.import-notice {
+  position: absolute;
+  z-index: 4;
+  left: 12px;
+  right: 12px;
+  top: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  max-height: calc(100% - 24px);
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  pointer-events: auto;
+  box-shadow: var(--shadow);
+}
+.import-notice[hidden] {
+  display: none;
+}
+.import-notice-copy {
+  flex: 1;
+  min-width: 0;
+}
+.import-notice p,
+.import-notice li {
+  margin: 0 0 6px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.import-notice ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.import-notice li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.import-file {
+  font-weight: 600;
+}
+.viewport:has(#emptyEditor:not([hidden])) .import-notice {
+  top: 50%;
+  left: 50%;
+  right: auto;
+  width: min(36rem, calc(100% - 32px));
+  transform: translate(-50%, -50%);
 }
 .viewport {
   position: relative;
@@ -2800,12 +2889,18 @@ dialog details {
                       </button>
                     </div>
                   </div>
-                  <p id="advancedHeld" class="readout" hidden>
-                    An advanced edit is still on this image.
-                    <button id="openAdvanced" class="text-button" type="button">
-                      Open Advanced
-                    </button>
-                  </p>
+                  <div
+                    id="advancedHeld"
+                    class="advanced-held"
+                    hidden
+                    role="region"
+                    aria-labelledby="advancedHeldLead"
+                  >
+                    <p id="advancedHeldLead">
+                      Simple is hiding settings that still change this image.
+                    </p>
+                    <ul id="advancedReasons"></ul>
+                  </div>
                   <div id="seeds" class="seed-list">
                     <span class="muted">Nothing picked yet</span>
                   </div>
@@ -3068,6 +3163,22 @@ dialog details {
               </button>
             </div>
             <div id="viewport" class="viewport checker" data-view="side">
+              <div
+                id="importNotice"
+                class="import-notice"
+                hidden
+                role="region"
+                aria-labelledby="importNoticeTitle"
+                aria-live="polite"
+              >
+                <div class="import-notice-copy">
+                  <p id="importNoticeTitle">Some files could not be opened.</p>
+                  <ul id="importNoticeList"></ul>
+                </div>
+                <button id="dismissImport" class="text-button" type="button">
+                  Dismiss
+                </button>
+              </div>
               <p id="emptyEditor" class="empty-editor">Open an image to begin.</p>
               <div class="pane before">
                 <div class="canvas-space">
@@ -12336,7 +12447,7 @@ dialog details {
   // src/app.js
   var $ = (id) => document.getElementById(id);
   var pause = makePause();
-  var VERSION = "3.10.0";
+  var VERSION = "3.11.0";
   var w = 0;
   var h = 0;
   var name = "";
@@ -12482,6 +12593,15 @@ dialog details {
   var mapCommand;
   var experience = "advanced";
   var modeAsk = false;
+  var controlSync = false;
+  function sliderUnchanged(key, value, min, max) {
+    const step = key === "dh" || key === "ds" || key === "dl" ? 0.01 : 1;
+    const quantize = (n) => {
+      const clamped = clamp(Number(n) || 0, min, max);
+      return Math.round(Math.round(clamped / step) * step * 1e3) / 1e3;
+    };
+    return quantize(value) === quantize(params[key]);
+  }
   function historyName(entries2, fallback) {
     const label2 = entries2.at(-1)?.label;
     return label2 ? fallback + " " + label2 : fallback;
@@ -12799,9 +12919,12 @@ dialog details {
     range.setAttribute("aria-label", label2);
     box.append(lab, range, number);
     $(parent).append(box);
+    let edited = false;
     const update = (value) => {
+      if (controlSync || sliderUnchanged(key, value, min, max)) return;
       begin();
       params[key] = clamp(Number(value) || 0, min, max);
+      edited = true;
       range.value = number.value = params[key];
       if (["dh", "ds", "dl"].includes(key)) {
         params.manual = true;
@@ -12814,6 +12937,8 @@ dialog details {
     number.addEventListener("input", () => update(number.value));
     for (const input of [range, number])
       input.addEventListener("change", () => {
+        if (controlSync || !edited) return;
+        edited = false;
         commit(label2);
         sync();
       });
@@ -13179,18 +13304,23 @@ dialog details {
     $("returnTarget").hidden = !(params.manual && params.mode === "shift");
   }
   function sync() {
-    for (const key of [
-      "hueTol",
-      "shadeTol",
-      "soft",
-      "feather",
-      "dh",
-      "ds",
-      "dl"
-    ]) {
-      if (document.activeElement !== $(key)) $(key).value = params[key];
-      if (document.activeElement !== $(key + "Number"))
-        $(key + "Number").value = Math.round(params[key] * 100) / 100;
+    controlSync = true;
+    try {
+      for (const key of [
+        "hueTol",
+        "shadeTol",
+        "soft",
+        "feather",
+        "dh",
+        "ds",
+        "dl"
+      ]) {
+        if (document.activeElement !== $(key)) $(key).value = params[key];
+        if (document.activeElement !== $(key + "Number"))
+          $(key + "Number").value = Math.round(params[key] * 100) / 100;
+      }
+    } finally {
+      controlSync = false;
     }
     setChoice("mode", params.mode);
     setChoice("model", params.model);
@@ -13462,18 +13592,51 @@ dialog details {
       "Open session"
     ]
   };
+  function openOk() {
+    return { ok: true, reason: "" };
+  }
+  function openStop(reason = "") {
+    return { ok: false, reason };
+  }
+  var importEpoch = 0;
+  function renderImportNotice(failures) {
+    const box = $("importNotice");
+    const list = $("importNoticeList");
+    list.replaceChildren();
+    if (!failures.length) {
+      box.hidden = true;
+      $("emptyEditor").classList.remove("quiet");
+      return;
+    }
+    for (const failure of failures) {
+      const item = document.createElement("li");
+      const file = document.createElement("span");
+      file.className = "import-file";
+      file.textContent = failure.name;
+      const why = document.createElement("span");
+      why.className = "import-reason";
+      why.textContent = failure.reason;
+      item.append(file, why);
+      list.append(item);
+    }
+    box.hidden = false;
+    $("emptyEditor").classList.toggle("quiet", !$("emptyEditor").hidden);
+  }
+  function acceptImport(epoch, failures) {
+    if (epoch !== importEpoch) return;
+    renderImportNotice(failures);
+  }
   async function openBlob(blob, fileName, isSample = false, redraw = false) {
     if (batchAbort) {
       status("Wait for the batch to finish, or cancel it first.");
-      return false;
+      return openStop("Wait for the batch to finish, or cancel it first.");
     }
-    if ($("replaceDialog").open) return false;
+    if ($("replaceDialog").open) return openStop();
     let replaceSample = !isSample && !redraw && activeDocument?.sample && !currentHasEdits();
     if (!redraw && documents.length >= MAX_DOCUMENTS && !replaceSample) {
-      status(
-        "Up to 20 image tabs can be open. Close a tab, or use Batch from files for up to 100 images."
-      );
-      return false;
+      const reason = "Up to 20 image tabs can be open. Close a tab, or use Batch from files for up to 100 images.";
+      status(reason);
+      return openStop(reason);
     }
     const ticket = ++importId;
     const redrawDoc = activeDocument;
@@ -13483,16 +13646,15 @@ dialog details {
     status(redraw ? "Redrawing SVG\u2026" : "Checking image\u2026");
     try {
       const edge = Number($("svgSize").value), decoded = await decodeBlob(blob, controller.signal, { svgEdge: edge });
-      if (ticket !== importId) return false;
-      if (batchAbort || $("replaceDialog").open) return false;
+      if (ticket !== importId) return openStop();
+      if (batchAbort || $("replaceDialog").open) return openStop();
       replaceSample = !isSample && !redraw && activeDocument?.sample && !currentHasEdits();
       if (!redraw && documents.length >= MAX_DOCUMENTS && !replaceSample) {
-        status(
-          "Up to 20 image tabs can be open. Close a tab, or use Batch from files for up to 100 images."
-        );
-        return false;
+        const reason = "Up to 20 image tabs can be open. Close a tab, or use Batch from files for up to 100 images.";
+        status(reason);
+        return openStop(reason);
       }
-      if (redraw && activeDocument !== redrawDoc) return false;
+      if (redraw && activeDocument !== redrawDoc) return openStop();
       if (redraw && pixels && currentHasEdits()) {
         const dialog = $("replaceDialog");
         if (dialog.open) {
@@ -13502,7 +13664,7 @@ dialog details {
           dialog.close("cancel");
           await closed;
         }
-        if (ticket !== importId) return false;
+        if (ticket !== importId) return openStop();
         [
           $("replaceTitle").textContent,
           $("replaceText").textContent,
@@ -13519,7 +13681,7 @@ dialog details {
             status(
               redraw ? "Kept the current drawing." : "Kept the current image."
             );
-          return false;
+          return openStop();
         }
       }
       document.activeElement?.blur();
@@ -13577,11 +13739,11 @@ dialog details {
       status(
         isSample ? "Sample ready. Pick a colour to get started." : redraw ? "Redrew " + name + " at " + edge + " px." : "Opened " + name + (decoded.still ? " as a still image." : ".")
       );
-      return true;
+      return openOk();
     } catch (e) {
-      if (ticket === importId && e.name !== "AbortError")
-        status("Could not open image: " + e.message);
-      return false;
+      if (ticket !== importId || e.name === "AbortError") return openStop();
+      status("Could not open image: " + e.message);
+      return openStop(e.message);
     } finally {
       if (ticket === importId) importAbort = null;
     }
@@ -14111,8 +14273,13 @@ dialog details {
   $("svgSize").onchange = async () => {
     const previous = svgSource;
     if (!previous) return;
-    if (!await openBlob(previous.blob, previous.name, false, true) && svgSource === previous)
+    const epoch = ++importEpoch;
+    const redrawn = await openBlob(previous.blob, previous.name, false, true);
+    if (!redrawn.ok && svgSource === previous)
       $("svgSize").value = String(previous.edge);
+    if (redrawn.ok) acceptImport(epoch, []);
+    else if (redrawn.reason)
+      acceptImport(epoch, [{ name: previous.name, reason: redrawn.reason }]);
   };
   var readoutTicket = 0;
   var readoutTimer = 0;
@@ -14179,14 +14346,16 @@ dialog details {
       status(
         "Opened " + set.label + " with " + entries2.length + (entries2.length === 1 ? " colour." : " colours.")
       );
+      return openOk();
     } catch (e) {
       status("Could not open palette: " + e.message);
+      return openStop(e.message);
     }
   }
   $("openPalette").onclick = () => $("paletteInput").click();
   $("paletteInput").onchange = (e) => {
     const f = e.target.files[0];
-    if (f) openPalette(f, f.name);
+    if (f) openFiles([f]);
     e.target.value = "";
   };
   var paletteEntries = (set) => set.entries.flatMap(
@@ -14481,7 +14650,12 @@ dialog details {
     );
   }
   async function applyRecipe(file) {
-    if (!pixels || batchAbort) return;
+    if (batchAbort) return openStop();
+    if (!pixels) {
+      const reason = "Open an image before applying a recipe.";
+      status("Could not apply the recipe: " + reason);
+      return openStop(reason);
+    }
     dropDraft();
     noteSpatial();
     const doc = activeDocument, request = imageId;
@@ -14489,11 +14663,12 @@ dialog details {
       if (file.size > MAX_RECIPE_BYTES)
         throw Error("Recipes must be 64 KB or smaller.");
       const text2 = await file.text();
-      if (doc !== activeDocument || request !== imageId || batchAbort) return;
+      if (doc !== activeDocument || request !== imageId || batchAbort)
+        return openStop();
       const { steps: recipe, outline: recipeOutline } = parseRecipeFile(text2), { steps, preview } = await currentSteps(), iid = imageId, base = preview ? preview.pixels : pixels;
       status("Applying " + file.name + "\u2026");
       const out = await replay(w, h, base, recipe, pause, () => iid !== imageId);
-      if (iid !== imageId) return;
+      if (iid !== imageId) return openStop();
       const old = snapshot();
       pixels = out;
       overrides = new Int8Array(w * h);
@@ -14512,8 +14687,10 @@ dialog details {
       status(
         "Applied " + file.name + " (" + recipe.length + (recipe.length === 1 ? " step" : " steps") + "). Undo is available."
       );
+      return openOk();
     } catch (e) {
       status("Could not apply the recipe: " + e.message);
+      return openStop(e.message);
     }
   }
   $("saveRecipe").onclick = saveRecipe;
@@ -14521,7 +14698,7 @@ dialog details {
   $("recipeInput").onchange = (e) => {
     const f = e.target.files[0];
     e.target.value = "";
-    if (f) applyRecipe(f);
+    if (f) openFiles([f]);
   };
   var MAX_BATCH = 100;
   var batchRun = 0;
@@ -14845,6 +15022,9 @@ dialog details {
     const r = c.getBoundingClientRect(), x = Math.floor((e.clientX - r.left) / r.width * w), y = Math.floor((e.clientY - r.top) / r.height * h);
     return x >= 0 && y >= 0 && x < w && y < h ? { x, y } : null;
   }
+  function pickSlop(pointerType) {
+    return pointerType === "touch" ? 10 : 6;
+  }
   function brush(x, y) {
     const radius = Number($("brushSize").value) / 2, value = tool === "add" ? edit.rows[edit.active].id : -1;
     for (let yy = Math.max(0, Math.floor(y - radius)); yy <= Math.min(h - 1, Math.ceil(y + radius)); yy++)
@@ -14913,10 +15093,14 @@ dialog details {
     };
   };
   function startPinch(space2, e) {
-    space2.setPointerCapture(e.pointerId);
-    if (drag && !drag.pan && (tool === "add" || tool === "subtract"))
-      commit("Brush selection");
+    const brushing = drag && !drag.pan && (tool === "add" || tool === "subtract");
+    if (drag) drag.pickDisqualified = true;
     drag = null;
+    if (brushing) commit("Brush selection");
+    try {
+      space2.setPointerCapture(e.pointerId);
+    } catch {
+    }
     $("loupe").hidden = true;
     pinch = { space: space2, zoom, panX, panY, ...touchMid() };
   }
@@ -15074,7 +15258,10 @@ dialog details {
       const p = point(e, c);
       const pan = tool === "pan" || space;
       if (!p && !pan) return;
-      c.parentElement.setPointerCapture(e.pointerId);
+      try {
+        c.parentElement.setPointerCapture(e.pointerId);
+      } catch {
+      }
       drag = {
         pointer: e.pointerId,
         pan,
@@ -15083,7 +15270,10 @@ dialog details {
         panX,
         panY,
         last: p,
-        moved: false
+        downPoint: p,
+        pointerType: e.pointerType || "mouse",
+        moved: false,
+        pickDisqualified: false
       };
       if (!pan && (tool === "add" || tool === "subtract")) {
         begin();
@@ -15109,7 +15299,14 @@ dialog details {
         cursor.style.width = cursor.style.height = Number($("brushSize").value) * zoom + "px";
       }
       if (!drag || drag.pointer !== e.pointerId) return;
-      drag.moved ||= Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) > 3;
+      const dist = Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY);
+      if (tool === "pick" && !drag.pan) {
+        if (!drag.pickDisqualified && dist > pickSlop(drag.pointerType)) {
+          drag.pickDisqualified = true;
+          drag.pan = true;
+          drag.moved = true;
+        }
+      } else if (dist > 3) drag.moved = true;
       if (drag.pan) {
         fitMode = false;
         panX = drag.panX + e.clientX - drag.startX;
@@ -15122,17 +15319,29 @@ dialog details {
     });
     const finish3 = (e) => {
       if (!drag || drag.pointer !== e.pointerId) return;
-      const p = point(e, c), d = drag;
+      const d = drag;
       drag = null;
-      if ((tool === "add" || tool === "subtract") && !d.pan)
+      if ((tool === "add" || tool === "subtract") && !d.pan) {
         commit("Brush selection");
-      else if (!d.pan && !d.moved && p && tool === "polygon") addPolygonPoint(p);
-      else if (!d.pan && !d.moved && p) {
-        const old = addSample;
-        addSample ||= e.shiftKey;
-        pick(p.x, p.y);
-        addSample = old;
+        return;
       }
+      if (d.pan || d.pickDisqualified || d.moved) return;
+      if (tool === "polygon") {
+        const p = point(e, c);
+        if (p) addPolygonPoint(p);
+        return;
+      }
+      if (tool !== "pick" || !d.downPoint) return;
+      const old = addSample;
+      addSample ||= e.shiftKey;
+      pick(d.downPoint.x, d.downPoint.y);
+      addSample = old;
+    };
+    const abandonDrag = (e) => {
+      if (!drag || drag.pointer !== e.pointerId) return;
+      const brushing = !drag.pan && (tool === "add" || tool === "subtract");
+      drag = null;
+      if (brushing) commit("Brush selection");
     };
     const release = (e) => {
       if (!touches.delete(e.pointerId)) return;
@@ -15145,10 +15354,10 @@ dialog details {
     });
     c.parentElement.addEventListener("pointercancel", (e) => {
       release(e);
-      if (drag?.pointer === e.pointerId) {
-        drag = null;
-        commit("Brush selection");
-      }
+      abandonDrag(e);
+    });
+    c.parentElement.addEventListener("lostpointercapture", (e) => {
+      abandonDrag(e);
     });
     c.parentElement.addEventListener("pointerleave", () => {
       $("loupe").hidden = true;
@@ -15157,11 +15366,11 @@ dialog details {
   }
   $("open").onclick = () => $("fileInput").click();
   async function openFile(f) {
-    if (isSessionFile(f)) await openSessionFile(f);
-    else if (isPaletteFile(f)) await openPalette(f, f.name);
-    else if (/\.json$/i.test(f.name) || f.type === "application/json")
-      await applyRecipe(f);
-    else await openBlob(f, f.name);
+    if (isSessionFile(f)) return openSessionFile(f);
+    if (isPaletteFile(f)) return openPalette(f, f.name);
+    if (/\.json$/i.test(f.name) || f.type === "application/json")
+      return applyRecipe(f);
+    return openBlob(f, f.name);
   }
   function sessionDirty(item) {
     if (item.edit.steps.length || item.edit.outline.on) return true;
@@ -15217,9 +15426,9 @@ dialog details {
   async function openSessionFile(file) {
     if (batchAbort) {
       status("Wait for the batch to finish, or cancel it first.");
-      return;
+      return openStop("Wait for the batch to finish, or cancel it first.");
     }
-    if ($("replaceDialog").open) return;
+    if ($("replaceDialog").open) return openStop();
     commit("Adjust colour");
     stash();
     let parsed;
@@ -15229,11 +15438,11 @@ dialog details {
       parsed = parseSession(await file.text());
     } catch (e) {
       status("Could not open the session: " + e.message);
-      return;
+      return openStop(e.message);
     }
     if (documents.some((d) => d.edited) && !await askDiscard("session"))
-      return;
-    if (batchAbort || $("replaceDialog").open) return;
+      return openStop();
+    if (batchAbort || $("replaceDialog").open) return openStop();
     document.activeElement?.blur();
     invalidateDocumentWork();
     for (const doc of documents) {
@@ -15293,14 +15502,42 @@ dialog details {
     status(
       "Opened " + file.name + " (" + documents.length + (documents.length === 1 ? " image)." : " images).")
     );
+    return openOk();
   }
   var openingFiles = Promise.resolve();
   function openFiles(files) {
     openingFiles = openingFiles.then(async () => {
-      for (const f of files) await openFile(f);
-    }).catch((e) => status("Could not open images: " + e.message));
+      const epoch = ++importEpoch;
+      try {
+        const failures = [];
+        let opened = 0;
+        for (const f of files) {
+          const result2 = await openFile(f) || openStop("Could not open this file.");
+          if (epoch !== importEpoch) return;
+          if (result2.ok) opened++;
+          else if (result2.reason)
+            failures.push({
+              name: String(f.name || "file").slice(0, 200),
+              reason: String(result2.reason).slice(0, 500)
+            });
+        }
+        if (epoch !== importEpoch) return;
+        if (failures.length) {
+          acceptImport(epoch, failures);
+          if (opened || failures.length > 1)
+            status(
+              (opened ? "Opened " + opened + (opened === 1 ? " file. " : " files. ") : "") + "Could not open " + failures.map((failure) => failure.name + " (" + failure.reason + ")").join("; ") + "."
+            );
+        } else if (opened) acceptImport(epoch, []);
+      } catch (e) {
+        if (epoch !== importEpoch) return;
+        status("Could not open images: " + e.message);
+        acceptImport(epoch, [{ name: "Import", reason: e.message }]);
+      }
+    });
     return openingFiles;
   }
+  $("dismissImport").onclick = () => renderImportNotice([]);
   $("fileInput").onchange = (e) => {
     const files = [...e.target.files];
     if (files.length) openFiles(files);
@@ -15308,7 +15545,7 @@ dialog details {
   };
   $("sessionInput").onchange = (e) => {
     const file = e.target.files?.[0];
-    if (file) openSessionFile(file);
+    if (file) openFiles([file]);
     e.target.value = "";
   };
   $("targetHex").addEventListener("input", (e) => {
@@ -15459,7 +15696,6 @@ dialog details {
   $("showAdvanced").onclick = () => chooseExperience("advanced", false);
   $("keepSimple").onclick = () => chooseExperience("simple", true);
   $("keepAdvanced").onclick = () => chooseExperience("advanced", true);
-  $("openAdvanced").onclick = () => chooseExperience("advanced", true);
   picker = createPicker({
     store: colourStore,
     recent: () => recent,
@@ -15591,23 +15827,138 @@ dialog details {
     experience = "simple";
     modeAsk = true;
   }
-  function advancedOnImage() {
-    if (!pixels || !edit) return false;
+  function advancedReasonRows() {
+    if (!pixels || !edit) return [];
     const base = defaults();
-    if (overrides) {
-      for (let i = 0; i < overrides.length; i++)
-        if (overrides[i] !== 0) return true;
-    }
-    for (const row of edit.rows) {
+    const adds = /* @__PURE__ */ new Set();
+    let excluded = false;
+    if (overrides)
+      for (let i = 0; i < overrides.length; i++) {
+        const mark = overrides[i];
+        if (mark === -1) excluded = true;
+        else if (mark > 0) adds.add(mark);
+      }
+    const rows = {
+      brush: [],
+      polygon: [],
+      connected: [],
+      manual: [],
+      ramp: [],
+      refine: []
+    };
+    edit.rows.forEach((row, index) => {
+      if (adds.has(row.id) || excluded) rows.brush.push(index);
       const p = row.params;
-      if (row.polygon?.length) return true;
-      if (p.connected || p.manual || p.ramp || p.soft !== base.soft || p.feather !== base.feather || p.protect !== base.protect || p.cleanEdges !== base.cleanEdges || p.model !== base.model)
-        return true;
+      if (row.polygon?.length) rows.polygon.push(index);
+      if (p.connected) rows.connected.push(index);
+      if (p.manual) rows.manual.push(index);
+      if (p.ramp) rows.ramp.push(index);
+      if (p.soft !== base.soft || p.feather !== base.feather || p.protect !== base.protect || p.cleanEdges !== base.cleanEdges || p.model !== base.model)
+        rows.refine.push(index);
+    });
+    if ((adds.size || excluded) && !rows.brush.length) rows.brush.push(edit.active);
+    return [
+      ["brush", "Brush strokes or exclusions", "Show the brush"],
+      ["polygon", "A polygon", "Show the polygon tool"],
+      ["connected", "A connected selection", "Show connected regions"],
+      ["manual", "Manual adjustments", "Show the fine sliders"],
+      ["ramp", "A skin-tone ramp", "Show skin-tone swatches"],
+      ["refine", "Changed refinement or colour-model settings", "Show refinement"]
+    ].filter(([id]) => rows[id].length).map(([id, label2, control]) => ({
+      id,
+      label: label2,
+      control,
+      rows: rows[id],
+      exclusions: id === "brush" && excluded,
+      adds: id === "brush" && adds.size > 0
+    }));
+  }
+  function colourList(indexes) {
+    const names = indexes.map((index) => "colour " + (index + 1));
+    if (names.length <= 1) return names[0] || "this colour";
+    if (names.length === 2) return names[0] + " and " + names[1];
+    return names.slice(0, -1).join(", ") + ", and " + names.at(-1);
+  }
+  function revealPanel(id) {
+    const tab = {
+      selection: "selection",
+      colour: "colour",
+      adjust: "colour",
+      swatches: "swatches",
+      outline: "export",
+      export: "export"
+    }[id];
+    if (workspace.preset === "phone" && tab) {
+      const dock = $("dock");
+      dock.dataset.tab = tab;
+      for (const button2 of dock.querySelectorAll(".dock-tabs button"))
+        button2.setAttribute("aria-pressed", String(button2.dataset.tab === tab));
     }
-    return false;
+    workspace.setCollapsed(id, false);
+  }
+  function showAdvancedReason(id, row) {
+    if (pixels && edit && row !== edit.active) selectRow(row);
+    chooseExperience("advanced", true);
+    if (id === "brush") {
+      const exclusionsOnly = $("advancedHeld").dataset.exclusions === "true" && $("advancedHeld").dataset.adds !== "true";
+      setTool(exclusionsOnly ? "subtract" : "add");
+      $(exclusionsOnly ? "brushSubtract" : "brushAdd").focus();
+    } else if (id === "polygon") {
+      setTool("polygon");
+      $("polygon").focus();
+    } else if (id === "connected") {
+      revealPanel("selection");
+      $("connected").focus();
+    } else if (id === "manual") {
+      revealPanel("adjust");
+      $("dh").focus();
+    } else if (id === "ramp") {
+      revealPanel("swatches");
+      const select = $("paletteSet");
+      if (!currentSet().entries.some((entry) => entry.ramp)) {
+        select.value = "skin-fluent";
+        renderSet(true);
+      }
+      ($("presets").querySelector("button") || select).focus();
+    } else if (id === "refine") {
+      revealPanel("selection");
+      $("refinement").open = true;
+      $("soft").focus();
+    }
   }
   function refreshAdvancedHeld() {
-    $("advancedHeld").hidden = !(experience === "simple" && advancedOnImage());
+    const box = $("advancedHeld");
+    const reasons = experience === "simple" ? advancedReasonRows() : [];
+    box.hidden = !reasons.length;
+    if (!reasons.length) {
+      delete box.dataset.signature;
+      return;
+    }
+    const signature = reasons.map((reason) => reason.id + ":" + reason.rows.join(",")).join("|");
+    if (box.dataset.signature === signature) return;
+    box.dataset.signature = signature;
+    const brush2 = reasons.find((reason) => reason.id === "brush");
+    box.dataset.exclusions = String(!!brush2?.exclusions);
+    box.dataset.adds = String(!!brush2?.adds);
+    const list = $("advancedReasons");
+    list.replaceChildren(
+      ...reasons.map((reason) => {
+        const item = document.createElement("li");
+        const text2 = document.createElement("span");
+        text2.textContent = reason.label + " on " + colourList(reason.rows) + ".";
+        item.append(text2);
+        item.dataset.reason = reason.id;
+        for (const row of reason.rows) {
+          const button2 = document.createElement("button");
+          button2.type = "button";
+          button2.className = "text-button";
+          button2.textContent = reason.rows.length === 1 ? reason.control : reason.control + " for colour " + (row + 1);
+          button2.addEventListener("click", () => showAdvancedReason(reason.id, row));
+          item.append(button2);
+        }
+        return item;
+      })
+    );
   }
   function applyExperience() {
     document.querySelector(".app").dataset.experience = experience;
@@ -15740,8 +16091,13 @@ dialog details {
   });
   window.addEventListener("blur", () => {
     space = false;
+    if (!drag) {
+      commit("Brush selection");
+      return;
+    }
+    const brushing = !drag.pan && (tool === "add" || tool === "subtract");
     drag = null;
-    commit("Brush selection");
+    if (brushing) commit("Brush selection");
   });
   var depth = 0;
   document.addEventListener("dragenter", (e) => {
@@ -15771,7 +16127,7 @@ dialog details {
         const f = item.getAsFile();
         if (f) {
           e.preventDefault();
-          openBlob(f, "pasted.png");
+          openFiles([new File([f], "pasted.png", { type: f.type })]);
         }
         return;
       }
@@ -15796,7 +16152,9 @@ dialog details {
       for (const item of await navigator.clipboard.read()) {
         const type = item.types.find((t) => t.startsWith("image/"));
         if (type) {
-          openBlob(await item.getType(type), "pasted.png");
+          openFiles([
+            new File([await item.getType(type)], "pasted.png", { type })
+          ]);
           return;
         }
       }
@@ -16646,6 +17004,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 Original C# port and code by Christian Winnerlein (CodesInChaos), public domain, https://github.com/CodesInChaos/Chaos.NaCl . Poly1305 by Andrew M. (floodyberry), MIT or public domain. Curve25519, Ed25519, Salsa20 and HSalsa20 from SUPERCOP ref10 by Dan Bernstein, public domain (http://bench.cr.yp.to/supercop.html). SHA512 by Christian Winnerlein, public domain.</pre></template>
     <template id="release-notes"><pre># Hex Shift 3
+
+**New in 3.11.0:** A small movement while picking still picks the colour under the pointer where it went down. A mouse or pen can move 6 pixels, and a finger 10, before that gesture becomes a pan and will not pick. Letting go after a cancelled gesture does not pick. A transparent pixel says to pick an opaque part. Simple names each advanced edit still on the image — a brush or exclusion, a polygon, a connected selection, manual adjustments, a skin-tone ramp, or changed refinement — and opens that colour's control. A file that cannot be opened stays listed, with its name and the reason, until a later open succeeds or the notice is dismissed. Other files in the same open still open. The status bar stays one line.
 
 **New in 3.10.0:** A polygon can limit the active colour to an area of the image. Click the points; Enter or the first point closes it. Backspace removes the last point and Escape cancels. It is not a freehand lasso. The add and subtract brushes still correct the result. The polygon belongs to that colour. It is not the strokes that keep pixels out of every colour. A session keeps it. An older session still opens. A recipe leaves the polygon out and says so before it repeats.
 

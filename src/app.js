@@ -232,6 +232,17 @@ let cancelTimer = 0;
 let undoCommand, redoCommand, bakeCommand, resetCommand, resetAllCommand, mapCommand;
 let experience = "advanced";
 let modeAsk = false;
+// True while sync() is assigning slider values. An input or change that
+// arrives inside that write is the assignment, not a person editing.
+let controlSync = false;
+function sliderUnchanged(key, value, min, max) {
+  const step = key === "dh" || key === "ds" || key === "dl" ? 0.01 : 1;
+  const quantize = (n) => {
+    const clamped = clamp(Number(n) || 0, min, max);
+    return Math.round(Math.round(clamped / step) * step * 1000) / 1000;
+  };
+  return quantize(value) === quantize(params[key]);
+}
 function historyName(entries, fallback) {
   const label = entries.at(-1)?.label;
   return label ? fallback + " " + label : fallback;
@@ -575,9 +586,15 @@ function makeSlider(parent, key, label, min, max, unit, short = label) {
   range.setAttribute("aria-label", label);
   box.append(lab, range, number);
   $(parent).append(box);
+  // A control that reports the value the model already has is synchronization
+  // (a programmatic write, a restored row, or a late input event). It must not
+  // start an edit or mark the colour manual. `edited` is this slider only.
+  let edited = false;
   const update = (value) => {
+    if (controlSync || sliderUnchanged(key, value, min, max)) return;
     begin();
     params[key] = clamp(Number(value) || 0, min, max);
+    edited = true;
     range.value = number.value = params[key];
     if (["dh", "ds", "dl"].includes(key)) {
       params.manual = true;
@@ -590,6 +607,8 @@ function makeSlider(parent, key, label, min, max, unit, short = label) {
   number.addEventListener("input", () => update(number.value));
   for (const input of [range, number])
     input.addEventListener("change", () => {
+      if (controlSync || !edited) return;
+      edited = false;
       commit(label);
       sync();
     });
@@ -1032,18 +1051,25 @@ function syncTarget() {
   $("returnTarget").hidden = !(params.manual && params.mode === "shift");
 }
 function sync() {
-  for (const key of [
-    "hueTol",
-    "shadeTol",
-    "soft",
-    "feather",
-    "dh",
-    "ds",
-    "dl",
-  ]) {
-    if (document.activeElement !== $(key)) $(key).value = params[key];
-    if (document.activeElement !== $(key + "Number"))
-      $(key + "Number").value = Math.round(params[key] * 100) / 100;
+  // Held across the writes so a re-entrant input is ignored. A late input,
+  // after this flag drops, still matches the model and is ignored too.
+  controlSync = true;
+  try {
+    for (const key of [
+      "hueTol",
+      "shadeTol",
+      "soft",
+      "feather",
+      "dh",
+      "ds",
+      "dl",
+    ]) {
+      if (document.activeElement !== $(key)) $(key).value = params[key];
+      if (document.activeElement !== $(key + "Number"))
+        $(key + "Number").value = Math.round(params[key] * 100) / 100;
+    }
+  } finally {
+    controlSync = false;
   }
   setChoice("mode", params.mode);
   setChoice("model", params.model);
@@ -1357,23 +1383,61 @@ const dialogText = {
     "Open session",
   ],
 };
-// Resolves true once the image is open. `redraw` reopens the current SVG at
-// the size chosen under "SVG drawn at".
+function openOk() {
+  return { ok: true, reason: "" };
+}
+function openStop(reason = "") {
+  return { ok: false, reason };
+}
+// One generation per import action. A finished action whose generation is no
+// longer current must not replace a newer notice.
+let importEpoch = 0;
+function renderImportNotice(failures) {
+  const box = $("importNotice");
+  const list = $("importNoticeList");
+  list.replaceChildren();
+  if (!failures.length) {
+    box.hidden = true;
+    $("emptyEditor").classList.remove("quiet");
+    return;
+  }
+  for (const failure of failures) {
+    const item = document.createElement("li");
+    const file = document.createElement("span");
+    file.className = "import-file";
+    file.textContent = failure.name;
+    const why = document.createElement("span");
+    why.className = "import-reason";
+    why.textContent = failure.reason;
+    item.append(file, why);
+    list.append(item);
+  }
+  box.hidden = false;
+  $("emptyEditor").classList.toggle("quiet", !$("emptyEditor").hidden);
+}
+function acceptImport(epoch, failures) {
+  if (epoch !== importEpoch) return;
+  renderImportNotice(failures);
+}
+// Resolves `{ ok, reason }` once the image is open or refused. `reason` is
+// empty when the refusal must not be listed (a newer import replaced this
+// one, the person cancelled, or the operation was aborted). `redraw` reopens
+// the current SVG at the size chosen under "SVG drawn at".
 async function openBlob(blob, fileName, isSample = false, redraw = false) {
   if (batchAbort) {
     status("Wait for the batch to finish, or cancel it first.");
-    return false;
+    return openStop("Wait for the batch to finish, or cancel it first.");
   }
-  if ($("replaceDialog").open) return false;
+  if ($("replaceDialog").open) return openStop();
   // A pristine demonstration is replaced by the first real image; an edited
   // sample is a normal document and stays open.
   let replaceSample =
     !isSample && !redraw && activeDocument?.sample && !currentHasEdits();
   if (!redraw && documents.length >= MAX_DOCUMENTS && !replaceSample) {
-    status(
-      "Up to 20 image tabs can be open. Close a tab, or use Batch from files for up to 100 images.",
-    );
-    return false;
+    const reason =
+      "Up to 20 image tabs can be open. Close a tab, or use Batch from files for up to 100 images.";
+    status(reason);
+    return openStop(reason);
   }
   const ticket = ++importId;
   const redrawDoc = activeDocument;
@@ -1384,17 +1448,17 @@ async function openBlob(blob, fileName, isSample = false, redraw = false) {
   try {
     const edge = Number($("svgSize").value),
       decoded = await decodeBlob(blob, controller.signal, { svgEdge: edge });
-    if (ticket !== importId) return false;
-    if (batchAbort || $("replaceDialog").open) return false;
+    if (ticket !== importId) return openStop();
+    if (batchAbort || $("replaceDialog").open) return openStop();
     replaceSample =
       !isSample && !redraw && activeDocument?.sample && !currentHasEdits();
     if (!redraw && documents.length >= MAX_DOCUMENTS && !replaceSample) {
-      status(
-        "Up to 20 image tabs can be open. Close a tab, or use Batch from files for up to 100 images.",
-      );
-      return false;
+      const reason =
+        "Up to 20 image tabs can be open. Close a tab, or use Batch from files for up to 100 images.";
+      status(reason);
+      return openStop(reason);
     }
-    if (redraw && activeDocument !== redrawDoc) return false;
+    if (redraw && activeDocument !== redrawDoc) return openStop();
     if (redraw && pixels && currentHasEdits()) {
       const dialog = $("replaceDialog");
       if (dialog.open) {
@@ -1404,7 +1468,7 @@ async function openBlob(blob, fileName, isSample = false, redraw = false) {
         dialog.close("cancel");
         await closed;
       }
-      if (ticket !== importId) return false;
+      if (ticket !== importId) return openStop();
       [
         $("replaceTitle").textContent,
         $("replaceText").textContent,
@@ -1421,7 +1485,7 @@ async function openBlob(blob, fileName, isSample = false, redraw = false) {
           status(
             redraw ? "Kept the current drawing." : "Kept the current image.",
           );
-        return false;
+        return openStop();
       }
     }
     document.activeElement?.blur();
@@ -1485,11 +1549,11 @@ async function openBlob(blob, fileName, isSample = false, redraw = false) {
           ? "Redrew " + name + " at " + edge + " px."
           : "Opened " + name + (decoded.still ? " as a still image." : "."),
     );
-    return true;
+    return openOk();
   } catch (e) {
-    if (ticket === importId && e.name !== "AbortError")
-      status("Could not open image: " + e.message);
-    return false;
+    if (ticket !== importId || e.name === "AbortError") return openStop();
+    status("Could not open image: " + e.message);
+    return openStop(e.message);
   } finally {
     if (ticket === importId) importAbort = null;
   }
@@ -2125,11 +2189,13 @@ $("customSize").oninput = (e) => {
 $("svgSize").onchange = async () => {
   const previous = svgSource;
   if (!previous) return;
-  if (
-    !(await openBlob(previous.blob, previous.name, false, true)) &&
-    svgSource === previous
-  )
+  const epoch = ++importEpoch;
+  const redrawn = await openBlob(previous.blob, previous.name, false, true);
+  if (!redrawn.ok && svgSource === previous)
     $("svgSize").value = String(previous.edge);
+  if (redrawn.ok) acceptImport(epoch, []);
+  else if (redrawn.reason)
+    acceptImport(epoch, [{ name: previous.name, reason: redrawn.reason }]);
 };
 let readoutTicket = 0,
   readoutTimer = 0;
@@ -2221,14 +2287,16 @@ async function openPalette(source, label) {
         entries.length +
         (entries.length === 1 ? " colour." : " colours."),
     );
+    return openOk();
   } catch (e) {
     status("Could not open palette: " + e.message);
+    return openStop(e.message);
   }
 }
 $("openPalette").onclick = () => $("paletteInput").click();
 $("paletteInput").onchange = (e) => {
   const f = e.target.files[0];
-  if (f) openPalette(f, f.name);
+  if (f) openFiles([f]);
   e.target.value = "";
 };
 // Skin tones are saved with every colour of each tone.
@@ -2599,7 +2667,12 @@ async function saveRecipe() {
 }
 // Applies a recipe on top of the current preview, as one undoable change.
 async function applyRecipe(file) {
-  if (!pixels || batchAbort) return;
+  if (batchAbort) return openStop();
+  if (!pixels) {
+    const reason = "Open an image before applying a recipe.";
+    status("Could not apply the recipe: " + reason);
+    return openStop(reason);
+  }
   dropDraft();
   noteSpatial();
   const doc = activeDocument,
@@ -2608,14 +2681,15 @@ async function applyRecipe(file) {
     if (file.size > MAX_RECIPE_BYTES)
       throw Error("Recipes must be 64 KB or smaller.");
     const text = await file.text();
-    if (doc !== activeDocument || request !== imageId || batchAbort) return;
+    if (doc !== activeDocument || request !== imageId || batchAbort)
+      return openStop();
     const { steps: recipe, outline: recipeOutline } = parseRecipeFile(text),
       { steps, preview } = await currentSteps(),
       iid = imageId,
       base = preview ? preview.pixels : pixels;
     status("Applying " + file.name + "…");
     const out = await replay(w, h, base, recipe, pause, () => iid !== imageId);
-    if (iid !== imageId) return;
+    if (iid !== imageId) return openStop();
     const old = snapshot();
     pixels = out;
     overrides = new Int8Array(w * h);
@@ -2641,8 +2715,10 @@ async function applyRecipe(file) {
         (recipe.length === 1 ? " step" : " steps") +
         "). Undo is available.",
     );
+    return openOk();
   } catch (e) {
     status("Could not apply the recipe: " + e.message);
+    return openStop(e.message);
   }
 }
 $("saveRecipe").onclick = saveRecipe;
@@ -2650,7 +2726,7 @@ $("openRecipe").onclick = () => $("recipeInput").click();
 $("recipeInput").onchange = (e) => {
   const f = e.target.files[0];
   e.target.value = "";
-  if (f) applyRecipe(f);
+  if (f) openFiles([f]);
 };
 // Batch: the recipe for this image, applied to other images one at a time and
 // exported at the chosen size and format into one ZIP. Images that fail are
@@ -3066,6 +3142,11 @@ function point(e, c) {
     y = Math.floor(((e.clientY - r.top) / r.height) * h);
   return x >= 0 && y >= 0 && x < w && y < h ? { x, y } : null;
 }
+// Pick slop is CSS pixels at the pointer, not image pixels. A pen uses the
+// mouse distance. Touch needs more room for a finger.
+function pickSlop(pointerType) {
+  return pointerType === "touch" ? 10 : 6;
+}
 function brush(x, y) {
   // Add forces pixels into the active colour; subtract keeps them out of all.
   const radius = Number($("brushSize").value) / 2,
@@ -3165,10 +3246,15 @@ const touchMid = () => {
   };
 };
 function startPinch(space, e) {
-  space.setPointerCapture(e.pointerId);
-  if (drag && !drag.pan && (tool === "add" || tool === "subtract"))
-    commit("Brush selection");
+  // Drop the first finger's gesture before anything that can throw. A pinch
+  // must not end in a pick, including when pointer capture is unavailable.
+  const brushing = drag && !drag.pan && (tool === "add" || tool === "subtract");
+  if (drag) drag.pickDisqualified = true;
   drag = null;
+  if (brushing) commit("Brush selection");
+  try {
+    space.setPointerCapture(e.pointerId);
+  } catch {}
   $("loupe").hidden = true;
   pinch = { space, zoom, panX, panY, ...touchMid() };
 }
@@ -3339,7 +3425,9 @@ for (const c of [before, after]) {
     const p = point(e, c);
     const pan = tool === "pan" || space;
     if (!p && !pan) return;
-    c.parentElement.setPointerCapture(e.pointerId);
+    try {
+      c.parentElement.setPointerCapture(e.pointerId);
+    } catch {}
     drag = {
       pointer: e.pointerId,
       pan,
@@ -3348,7 +3436,10 @@ for (const c of [before, after]) {
       panX,
       panY,
       last: p,
+      downPoint: p,
+      pointerType: e.pointerType || "mouse",
       moved: false,
+      pickDisqualified: false,
     };
     if (!pan && (tool === "add" || tool === "subtract")) {
       begin();
@@ -3384,8 +3475,18 @@ for (const c of [before, after]) {
         Number($("brushSize").value) * zoom + "px";
     }
     if (!drag || drag.pointer !== e.pointerId) return;
-    drag.moved ||=
-      Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) > 3;
+    const dist = Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY);
+    // Crossing the pick threshold turns that gesture into a pan. It stays a
+    // pan even if the pointer comes back. A smaller movement is still a pick:
+    // the old 3px slop does not apply to Pick. Explicit Pan, Space and
+    // brushes are unchanged.
+    if (tool === "pick" && !drag.pan) {
+      if (!drag.pickDisqualified && dist > pickSlop(drag.pointerType)) {
+        drag.pickDisqualified = true;
+        drag.pan = true;
+        drag.moved = true;
+      }
+    } else if (dist > 3) drag.moved = true;
     if (drag.pan) {
       fitMode = false;
       panX = drag.panX + e.clientX - drag.startX;
@@ -3398,18 +3499,32 @@ for (const c of [before, after]) {
   });
   const finish = (e) => {
     if (!drag || drag.pointer !== e.pointerId) return;
-    const p = point(e, c),
-      d = drag;
+    const d = drag;
     drag = null;
-    if ((tool === "add" || tool === "subtract") && !d.pan)
+    if ((tool === "add" || tool === "subtract") && !d.pan) {
       commit("Brush selection");
-    else if (!d.pan && !d.moved && p && tool === "polygon") addPolygonPoint(p);
-    else if (!d.pan && !d.moved && p) {
-      const old = addSample;
-      addSample ||= e.shiftKey;
-      pick(p.x, p.y);
-      addSample = old;
+      return;
     }
+    // A pan, a disqualified pick, or a polygon drag does not sample a colour.
+    if (d.pan || d.pickDisqualified || d.moved) return;
+    if (tool === "polygon") {
+      const p = point(e, c);
+      if (p) addPolygonPoint(p);
+      return;
+    }
+    if (tool !== "pick" || !d.downPoint) return;
+    const old = addSample;
+    addSample ||= e.shiftKey;
+    pick(d.downPoint.x, d.downPoint.y);
+    addSample = old;
+  };
+  // Cancellation and a lost capture drop the gesture. They never pick, and
+  // they say nothing: there is no failure to correct.
+  const abandonDrag = (e) => {
+    if (!drag || drag.pointer !== e.pointerId) return;
+    const brushing = !drag.pan && (tool === "add" || tool === "subtract");
+    drag = null;
+    if (brushing) commit("Brush selection");
   };
   // A lifted finger ends any pinch; the remaining finger does nothing until
   // it is lifted too, so a pinch never ends in an accidental pick.
@@ -3424,10 +3539,10 @@ for (const c of [before, after]) {
   });
   c.parentElement.addEventListener("pointercancel", (e) => {
     release(e);
-    if (drag?.pointer === e.pointerId) {
-      drag = null;
-      commit("Brush selection");
-    }
+    abandonDrag(e);
+  });
+  c.parentElement.addEventListener("lostpointercapture", (e) => {
+    abandonDrag(e);
   });
   c.parentElement.addEventListener("pointerleave", () => {
     $("loupe").hidden = true;
@@ -3438,11 +3553,11 @@ $("open").onclick = () => $("fileInput").click();
 // Palette files (.gpl, .hex, .pal, .txt) open as palettes, recipes (.json)
 // apply to the image, anything else opens as an image.
 async function openFile(f) {
-  if (isSessionFile(f)) await openSessionFile(f);
-  else if (isPaletteFile(f)) await openPalette(f, f.name);
-  else if (/\.json$/i.test(f.name) || f.type === "application/json")
-    await applyRecipe(f);
-  else await openBlob(f, f.name);
+  if (isSessionFile(f)) return openSessionFile(f);
+  if (isPaletteFile(f)) return openPalette(f, f.name);
+  if (/\.json$/i.test(f.name) || f.type === "application/json")
+    return applyRecipe(f);
+  return openBlob(f, f.name);
 }
 function sessionDirty(item) {
   if (item.edit.steps.length || item.edit.outline.on) return true;
@@ -3500,9 +3615,9 @@ async function saveSession() {
 async function openSessionFile(file) {
   if (batchAbort) {
     status("Wait for the batch to finish, or cancel it first.");
-    return;
+    return openStop("Wait for the batch to finish, or cancel it first.");
   }
-  if ($("replaceDialog").open) return;
+  if ($("replaceDialog").open) return openStop();
   commit("Adjust colour");
   stash();
   let parsed;
@@ -3512,11 +3627,11 @@ async function openSessionFile(file) {
     parsed = parseSession(await file.text());
   } catch (e) {
     status("Could not open the session: " + e.message);
-    return;
+    return openStop(e.message);
   }
   if (documents.some((d) => d.edited) && !(await askDiscard("session")))
-    return;
-  if (batchAbort || $("replaceDialog").open) return;
+    return openStop();
+  if (batchAbort || $("replaceDialog").open) return openStop();
   document.activeElement?.blur();
   invalidateDocumentWork();
   for (const doc of documents) {
@@ -3582,16 +3697,58 @@ async function openSessionFile(file) {
       documents.length +
       (documents.length === 1 ? " image)." : " images)."),
   );
+  return openOk();
 }
 let openingFiles = Promise.resolve();
 function openFiles(files) {
   openingFiles = openingFiles
     .then(async () => {
-      for (const f of files) await openFile(f);
-    })
-    .catch((e) => status("Could not open images: " + e.message));
+      // Taken when this action starts, so a queued action cannot cancel the
+      // files this one still has to open. A newer action that starts before
+      // this one publishes (a redraw, or this one being overtaken) wins.
+      const epoch = ++importEpoch;
+      try {
+        const failures = [];
+        let opened = 0;
+        for (const f of files) {
+          const result =
+            (await openFile(f)) || openStop("Could not open this file.");
+          // A newer import owns the notice and the document. Do not open the
+          // rest of this batch, and do not publish over that newer result.
+          if (epoch !== importEpoch) return;
+          if (result.ok) opened++;
+          else if (result.reason)
+            failures.push({
+              name: String(f.name || "file").slice(0, 200),
+              reason: String(result.reason).slice(0, 500),
+            });
+        }
+        if (epoch !== importEpoch) return;
+        if (failures.length) {
+          acceptImport(epoch, failures);
+          if (opened || failures.length > 1)
+            status(
+              (opened
+                ? "Opened " +
+                  opened +
+                  (opened === 1 ? " file. " : " files. ")
+                : "") +
+                "Could not open " +
+                failures
+                  .map((failure) => failure.name + " (" + failure.reason + ")")
+                  .join("; ") +
+                ".",
+            );
+        } else if (opened) acceptImport(epoch, []);
+      } catch (e) {
+        if (epoch !== importEpoch) return;
+        status("Could not open images: " + e.message);
+        acceptImport(epoch, [{ name: "Import", reason: e.message }]);
+      }
+    });
   return openingFiles;
 }
+$("dismissImport").onclick = () => renderImportNotice([]);
 $("fileInput").onchange = (e) => {
   const files = [...e.target.files];
   if (files.length) openFiles(files);
@@ -3599,7 +3756,7 @@ $("fileInput").onchange = (e) => {
 };
 $("sessionInput").onchange = (e) => {
   const file = e.target.files?.[0];
-  if (file) openSessionFile(file);
+  if (file) openFiles([file]);
   e.target.value = "";
 };
 $("targetHex").addEventListener("input", (e) => {
@@ -3772,7 +3929,6 @@ $("dismissTip").onclick = () => {
 $("showAdvanced").onclick = () => chooseExperience("advanced", false);
 $("keepSimple").onclick = () => chooseExperience("simple", true);
 $("keepAdvanced").onclick = () => chooseExperience("advanced", true);
-$("openAdvanced").onclick = () => chooseExperience("advanced", true);
 picker = createPicker({
   store: colourStore,
   recent: () => recent,
@@ -3924,31 +4080,155 @@ function readExperience() {
   experience = "simple";
   modeAsk = true;
 }
-function advancedOnImage() {
-  if (!pixels || !edit) return false;
+// Named reasons Simple is hiding. Each lists the colour rows it still affects.
+function advancedReasonRows() {
+  if (!pixels || !edit) return [];
   const base = defaults();
+  const adds = new Set();
+  let excluded = false;
   if (overrides)
-    for (let i = 0; i < overrides.length; i++)
-      if (overrides[i] !== 0) return true;
-  for (const row of edit.rows) {
+    for (let i = 0; i < overrides.length; i++) {
+      const mark = overrides[i];
+      if (mark === -1) excluded = true;
+      else if (mark > 0) adds.add(mark);
+    }
+  const rows = {
+    brush: [],
+    polygon: [],
+    connected: [],
+    manual: [],
+    ramp: [],
+    refine: [],
+  };
+  edit.rows.forEach((row, index) => {
+    if (adds.has(row.id) || excluded) rows.brush.push(index);
     const p = row.params;
-    if (row.polygon?.length) return true;
+    if (row.polygon?.length) rows.polygon.push(index);
+    if (p.connected) rows.connected.push(index);
+    if (p.manual) rows.manual.push(index);
+    if (p.ramp) rows.ramp.push(index);
     if (
-      p.connected ||
-      p.manual ||
-      p.ramp ||
       p.soft !== base.soft ||
       p.feather !== base.feather ||
       p.protect !== base.protect ||
       p.cleanEdges !== base.cleanEdges ||
       p.model !== base.model
     )
-      return true;
+      rows.refine.push(index);
+  });
+  if ((adds.size || excluded) && !rows.brush.length) rows.brush.push(edit.active);
+  return [
+    ["brush", "Brush strokes or exclusions", "Show the brush"],
+    ["polygon", "A polygon", "Show the polygon tool"],
+    ["connected", "A connected selection", "Show connected regions"],
+    ["manual", "Manual adjustments", "Show the fine sliders"],
+    ["ramp", "A skin-tone ramp", "Show skin-tone swatches"],
+    ["refine", "Changed refinement or colour-model settings", "Show refinement"],
+  ]
+    .filter(([id]) => rows[id].length)
+    .map(([id, label, control]) => ({
+      id,
+      label,
+      control,
+      rows: rows[id],
+      exclusions: id === "brush" && excluded,
+      adds: id === "brush" && adds.size > 0,
+    }));
+}
+function colourList(indexes) {
+  const names = indexes.map((index) => "colour " + (index + 1));
+  if (names.length <= 1) return names[0] || "this colour";
+  if (names.length === 2) return names[0] + " and " + names[1];
+  return names.slice(0, -1).join(", ") + ", and " + names.at(-1);
+}
+function revealPanel(id) {
+  const tab = {
+    selection: "selection",
+    colour: "colour",
+    adjust: "colour",
+    swatches: "swatches",
+    outline: "export",
+    export: "export",
+  }[id];
+  if (workspace.preset === "phone" && tab) {
+    const dock = $("dock");
+    dock.dataset.tab = tab;
+    for (const button of dock.querySelectorAll(".dock-tabs button"))
+      button.setAttribute("aria-pressed", String(button.dataset.tab === tab));
   }
-  return false;
+  workspace.setCollapsed(id, false);
+}
+function showAdvancedReason(id, row) {
+  if (pixels && edit && row !== edit.active) selectRow(row);
+  chooseExperience("advanced", true);
+  if (id === "brush") {
+    const exclusionsOnly =
+      $("advancedHeld").dataset.exclusions === "true" &&
+      $("advancedHeld").dataset.adds !== "true";
+    setTool(exclusionsOnly ? "subtract" : "add");
+    $(exclusionsOnly ? "brushSubtract" : "brushAdd").focus();
+  } else if (id === "polygon") {
+    setTool("polygon");
+    $("polygon").focus();
+  } else if (id === "connected") {
+    revealPanel("selection");
+    $("connected").focus();
+  } else if (id === "manual") {
+    revealPanel("adjust");
+    $("dh").focus();
+  } else if (id === "ramp") {
+    revealPanel("swatches");
+    const select = $("paletteSet");
+    if (!currentSet().entries.some((entry) => entry.ramp)) {
+      select.value = "skin-fluent";
+      renderSet(true);
+    }
+    ($("presets").querySelector("button") || select).focus();
+  } else if (id === "refine") {
+    revealPanel("selection");
+    $("refinement").open = true;
+    $("soft").focus();
+  }
 }
 function refreshAdvancedHeld() {
-  $("advancedHeld").hidden = !(experience === "simple" && advancedOnImage());
+  const box = $("advancedHeld");
+  const reasons = experience === "simple" ? advancedReasonRows() : [];
+  box.hidden = !reasons.length;
+  if (!reasons.length) {
+    delete box.dataset.signature;
+    return;
+  }
+  const signature = reasons
+    .map((reason) => reason.id + ":" + reason.rows.join(","))
+    .join("|");
+  if (box.dataset.signature === signature) return;
+  box.dataset.signature = signature;
+  const brush = reasons.find((reason) => reason.id === "brush");
+  box.dataset.exclusions = String(!!brush?.exclusions);
+  box.dataset.adds = String(!!brush?.adds);
+  const list = $("advancedReasons");
+  list.replaceChildren(
+    ...reasons.map((reason) => {
+      const item = document.createElement("li");
+      const text = document.createElement("span");
+      text.textContent =
+        reason.label + " on " + colourList(reason.rows) + ".";
+      item.append(text);
+      item.dataset.reason = reason.id;
+      for (const row of reason.rows) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "text-button";
+        button.textContent =
+          reason.rows.length === 1
+            ? reason.control
+            : reason.control + " for colour " + (row + 1);
+        button.addEventListener("click", () => showAdvancedReason(reason.id, row));
+        item.append(button);
+      }
+      return item;
+    }),
+  );
 }
 function applyExperience() {
   document.querySelector(".app").dataset.experience = experience;
@@ -4109,8 +4389,13 @@ document.addEventListener("keyup", (e) => {
 });
 window.addEventListener("blur", () => {
   space = false;
+  if (!drag) {
+    commit("Brush selection");
+    return;
+  }
+  const brushing = !drag.pan && (tool === "add" || tool === "subtract");
   drag = null;
-  commit("Brush selection");
+  if (brushing) commit("Brush selection");
 });
 let depth = 0;
 document.addEventListener("dragenter", (e) => {
@@ -4140,7 +4425,10 @@ document.addEventListener("paste", (e) => {
       const f = item.getAsFile();
       if (f) {
         e.preventDefault();
-        openBlob(f, "pasted.png");
+        // A clipboard image has no meaningful filename. Browsers often
+        // supply "image.png" or another placeholder, so every paste opens
+        // as pasted.png.
+        openFiles([new File([f], "pasted.png", { type: f.type })]);
       }
       return;
     }
@@ -4168,7 +4456,9 @@ async function pasteFromClipboard() {
     for (const item of await navigator.clipboard.read()) {
       const type = item.types.find((t) => t.startsWith("image/"));
       if (type) {
-        openBlob(await item.getType(type), "pasted.png");
+        openFiles([
+          new File([await item.getType(type)], "pasted.png", { type }),
+        ]);
         return;
       }
     }
