@@ -5,12 +5,14 @@ import {
   PANELS,
   defaultLayout,
   hidePanel,
-  insertPanel,
   materialize,
   moveBy,
   movePhoneTab,
   moveToRegion,
+  panelsIn,
   parseLayout,
+  placePanel,
+  placeRelative,
   placement,
   showPanel,
   applyPreset,
@@ -38,18 +40,40 @@ const presets = {
 
 test("the default layout is valid and keeps every panel once", () => {
   const layout = validateLayout(defaultLayout());
+  assert.equal(layout.v, 2);
   assert.equal(layout.mode, "auto");
   assert.equal(layout.locked, false);
-  const placed = Object.values(layout.regions).flat(2).sort();
+  assert.deepEqual(panelsIn(layout.regions.left), ["selection"]);
+  assert.deepEqual(panelsIn(layout.regions.right), [
+    "colour",
+    "adjust",
+    "swatches",
+    "outline",
+    "export",
+  ]);
+  assert.equal(layout.regions.bottom, null);
+  const placed = REGIONS(layout)
+    .flat()
+    .sort();
   assert.deepEqual(placed, [...PANELS].sort());
 });
+
+function REGIONS(layout) {
+  return Object.values(layout.regions).map((node) => panelsIn(node));
+}
 
 test("a saved layout round-trips and drops fields that are not part of it", () => {
   const text =
     '{"v":1,"mode":"auto","locked":false,"collapsed":[],"touched":[],"hidden":[],"regions":{"left":[["selection"]],"right":[["colour","adjust","swatches","outline","export"]],"bottom":[]},"sizes":{"left":null,"right":null,"dock":null},"spans":{},"phoneTabs":["selection","colour","swatches","export"],"image":"secret","__proto__":{"polluted":true}}';
   const clean = parseLayout(text);
+  assert.equal(clean.v, 2);
   assert.equal(clean.image, undefined);
   assert.equal({}.polluted, undefined);
+  assert.deepEqual(panelsIn(clean.regions.left), ["selection"]);
+  assert.equal(clean.regions.left.t, "leaf");
+  assert.equal(clean.regions.right.t, "split");
+  assert.equal(clean.regions.right.d, "v");
+  assert.equal(clean.regions.bottom, null);
   assert.deepEqual(clean.phoneTabs, [
     "selection",
     "colour",
@@ -90,47 +114,80 @@ test("moving a panel changes its region and refuses a locked or no-op move", () 
   const start = materialize(defaultLayout(), "side", presets);
   const moved = moveToRegion(start, "outline", "bottom");
   assert.equal(moved.changed, true);
-  assert.deepEqual(moved.layout.regions.bottom, [["outline"]]);
-  assert.equal(moved.layout.regions.right[0].includes("outline"), false);
+  assert.deepEqual(panelsIn(moved.layout.regions.bottom), ["outline"]);
+  assert.equal(panelsIn(moved.layout.regions.right).includes("outline"), false);
   assert.equal(moved.layout.mode, "custom");
   assert.equal(moveToRegion(moved.layout, "outline", "bottom").reason, "already");
   const locked = { ...moved.layout, locked: true };
   assert.equal(moveToRegion(locked, "colour", "left").reason, "locked");
   const up = moveBy(start, "adjust", -1);
-  assert.deepEqual(up.layout.regions.right[0].slice(0, 2), ["adjust", "colour"]);
+  assert.deepEqual(panelsIn(up.layout.regions.right).slice(0, 2), [
+    "adjust",
+    "colour",
+  ]);
   assert.equal(moveBy(start, "colour", -1).reason, "end");
   assert.equal(moveBy(start, "export", 1).reason, "end");
 });
 
-test("a drop uses the gap it was aimed at, including across stacks", () => {
+test("a drop tabs into the centre and places the panel beside an edge", () => {
   const start = materialize(defaultLayout(), "dock", presets);
-  // Outline is index 1 of bottom stack 2. Insert it before Swatches (index 0).
-  const before = insertPanel(start, "outline", {
+  const above = placePanel(start, "outline", {
     region: "bottom",
-    stack: 2,
-    index: 0,
+    zone: "above",
+    target: "swatches",
   });
-  assert.deepEqual(before.layout.regions.bottom[2], [
+  assert.deepEqual(panelsIn(above.layout.regions.bottom.children[2]), [
     "outline",
     "swatches",
     "export",
   ]);
-  const same = insertPanel(start, "outline", {
+  const same = placePanel(start, "outline", {
     region: "bottom",
-    stack: 2,
-    index: 1,
+    zone: "below",
+    target: "swatches",
   });
   assert.equal(same.reason, "already");
-  const toLeft = insertPanel(start, "selection", {
+  const toLeft = placePanel(start, "selection", {
     region: "left",
-    stack: 0,
-    index: 0,
+    zone: "end",
   });
-  assert.deepEqual(toLeft.layout.regions.left, [["selection"]]);
-  assert.equal(
-    toLeft.layout.regions.bottom.some((stack) => stack.includes("selection")),
-    false,
+  assert.deepEqual(panelsIn(toLeft.layout.regions.left), ["selection"]);
+  assert.equal(panelsIn(toLeft.layout.regions.bottom).includes("selection"), false);
+  const beside = placePanel(start, "adjust", {
+    region: "bottom",
+    zone: "left",
+    target: "colour",
+  });
+  assert.deepEqual(panelsIn(beside.layout.regions.bottom.children[1]), ["adjust"]);
+  assert.deepEqual(panelsIn(beside.layout.regions.bottom.children[2]), ["colour"]);
+  const side = materialize(defaultLayout(), "side", presets);
+  const nested = placePanel(side, "adjust", {
+    region: "right",
+    zone: "left",
+    target: "swatches",
+  });
+  const wrapped = nested.layout.regions.right.children.find(
+    (node) => node.t === "split",
   );
+  assert.equal(wrapped.d, "h");
+  assert.deepEqual(panelsIn(wrapped), ["adjust", "swatches"]);
+  const tabs = placePanel(start, "adjust", {
+    region: "bottom",
+    zone: "centre",
+    target: "colour",
+  });
+  const group = tabs.layout.regions.bottom.children[1];
+  assert.equal(group.t, "leaf");
+  assert.deepEqual(group.panels, ["colour", "adjust"]);
+  assert.equal(group.active, "adjust");
+  const menu = placeRelative(start, "adjust", "centre");
+  assert.equal(menu.changed, true);
+  assert.equal(menu.beside, "swatches");
+  assert.equal(menu.layout.regions.bottom.children[2].children[0].t, "leaf");
+  assert.deepEqual(menu.layout.regions.bottom.children[2].children[0].panels, [
+    "swatches",
+    "adjust",
+  ]);
 });
 
 test("hide and show keep every panel and will not hide the last one", () => {
@@ -139,11 +196,11 @@ test("hide and show keep every panel and will not hide the last one", () => {
     layout = hidePanel(layout, id).layout;
   assert.equal(hidePanel(layout, "selection").reason, "last");
   const back = showPanel(layout, "outline", "right");
-  assert.deepEqual(back.layout.regions.right, [["outline"]]);
+  assert.deepEqual(panelsIn(back.layout.regions.right), ["outline"]);
   assert.equal(back.layout.hidden.includes("outline"), false);
   const placed = placement(back.layout, "custom", presets);
-  assert.deepEqual(placed.left, [["selection"]]);
-  assert.deepEqual(placed.right, [["outline"]]);
+  assert.deepEqual(panelsIn(placed.left), ["selection"]);
+  assert.deepEqual(panelsIn(placed.right), ["outline"]);
 });
 
 test("phone tab order moves without touching regions, and a preset restores them", () => {
@@ -162,7 +219,36 @@ test("phone tab order moves without touching regions, and a preset restores them
   const restored = applyPreset(hidden, "dock", presets);
   assert.equal(restored.layout.mode, "dock");
   assert.deepEqual(restored.layout.hidden, []);
-  assert.equal(restored.layout.regions.bottom.length, 3);
+  assert.equal(restored.layout.regions.bottom.t, "split");
+  assert.equal(restored.layout.regions.bottom.d, "h");
+  assert.equal(restored.layout.regions.bottom.children.length, 3);
+});
+
+test("version 1 dock stacks migrate to a horizontal split and are not rewritten here", () => {
+  const saved = {
+    v: 1,
+    mode: "dock",
+    locked: false,
+    collapsed: ["swatches"],
+    touched: ["swatches"],
+    hidden: [],
+    regions: presets.dock,
+    sizes: { left: null, right: null, dock: 480 },
+    spans: { colour: 80 },
+    phoneTabs: ["selection", "colour", "swatches", "export"],
+  };
+  const clean = validateLayout(saved);
+  assert.equal(clean.v, 2);
+  assert.equal(clean.mode, "dock");
+  assert.equal(clean.regions.bottom.d, "h");
+  assert.deepEqual(
+    clean.regions.bottom.children.map((node) => panelsIn(node)),
+    [["selection"], ["colour", "adjust"], ["swatches", "outline", "export"]],
+  );
+  assert.equal(clean.sizes.dock, 480);
+  assert.equal(clean.spans.colour, 80);
+  assert.deepEqual(clean.collapsed, ["swatches"]);
+  assert.equal(saved.v, 1);
 });
 
 test("saved column sizes fit the window and the stored choice is not rewritten", () => {

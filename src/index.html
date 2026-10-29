@@ -146,7 +146,7 @@
           </button>
         </div>
         <div class="file-info" hidden>
-          <span id="fileName">Loading sample…</span><span id="fileDims"></span>
+          <span id="fileName">No images open</span><span id="fileDims"></span>
         </div>
         <div class="top-actions">
           <button id="open" class="button" title="Open an image (Ctrl/Cmd O)">
@@ -246,9 +246,7 @@
                     ><input type="checkbox" id="connected" /> Only connected
                     regions</label
                   >
-                  <p id="coverage" class="readout">
-                    Click a colour on the image, or choose a swatch.
-                  </p>
+                  <p id="coverage" class="readout">Open an image to begin.</p>
                 </div>
               </section>
             </div>
@@ -421,10 +419,10 @@
                 ><span id="zoomReadout">100%</span>
               </div>
             </div>
-            <div class="first-use" id="firstUse">
+            <div class="first-use" id="firstUse" hidden>
               <p>
-                <strong>Pick a colour. Make it yours.</strong> Click the image,
-                set a target colour, then export.
+                <strong>Pick a colour. Make it yours.</strong> Open an image,
+                click a colour, set a target, then export.
               </p>
               <button
                 id="dismissTip"
@@ -437,6 +435,7 @@
               </button>
             </div>
             <div id="viewport" class="viewport checker" data-view="side">
+              <p id="emptyEditor" class="empty-editor">Open an image to begin.</p>
               <div class="pane before">
                 <div class="canvas-space">
                   <canvas
@@ -999,7 +998,9 @@
         </div>
       </main>
       <footer class="statusbar">
-        <p id="status" role="status" aria-live="polite">Loading sample…</p>
+        <p id="status" role="status" aria-live="polite">
+          Open an image to begin.
+        </p>
         <button id="cancel" class="text-button" type="button">Cancel</button>
         <span id="pixelReadout" class="mono"
           >Hover to inspect · scroll to zoom</span

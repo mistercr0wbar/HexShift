@@ -1,12 +1,14 @@
 // The three defects found in the 3.5.0 release. Each one failed on the
 // shipped page before the repair.
 import { test, expect } from "@playwright/test";
+import { ensureHeart } from "./fixture.mjs";
 import { readFile } from "node:fs/promises";
 import sharp from "sharp";
 
 const settled = (page) =>
   expect(page.locator(".app")).toHaveAttribute("data-busy", "false");
 async function ready(page) {
+  await ensureHeart(page);
   await expect(page.locator("#palette button").first()).toBeVisible();
   await settled(page);
 }

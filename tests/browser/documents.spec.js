@@ -6,7 +6,6 @@ import AxeBuilder from "@axe-core/playwright";
 const settled = (page) =>
   expect(page.locator(".app")).toHaveAttribute("data-busy", "false");
 const ready = async (page) => {
-  await expect(page.locator("#palette button").first()).toBeAttached();
   await settled(page);
 };
 const tab = (page, name) => page.getByRole("tab", { name, exact: true });
@@ -348,6 +347,7 @@ test("phone picker switches and closes tabs; desktop strip has no accessibility 
 test("multi-file drop and image paste add tabs without a replacement prompt", async ({
   page,
 }) => {
+  await open(page, [await png("base.png")]);
   await paint(page, "#12AB34");
   const files = [await png("drop-one.png"), await png("drop-two.png")];
   await page.evaluate(
@@ -454,6 +454,7 @@ test("quitting checks edits in background tabs through both native-close and Fil
   });
   await page.reload();
   await ready(page);
+  await open(page, [await png("edited.png")]);
   await paint(page, "#12AB34");
   await open(page, [await png("clean.png")]);
   await expect(page.locator("#undo")).toBeDisabled();

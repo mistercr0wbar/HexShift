@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-RxxEBYsJosv6tJvzFg85A0vvH2AjwQNFPf97ZmRX0Qc='; style-src 'sha256-IndhncOyVLQeirgG+IB/P2rGhVAioYsUlCJ9XAiGZ4E='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-6yFCOf+YKQMpOYOiBJH53Nc9RLOPxa6PA2XRQq+Ji5g='; style-src 'sha256-iz2lRtreBI1epj5J65Qkx3Z6R3S5Ytq5NydT6c6YQuM='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta
       name="theme-color"
@@ -173,7 +173,10 @@ fieldset {
   z-index: 30;
   pointer-events: none;
   background: var(--accent);
-  border-radius: 2px;
+  opacity: 0.28;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 6px;
 }
 .sprite {
   position: absolute;
@@ -895,6 +898,70 @@ summary::marker {
   background: var(--accent);
   outline: none;
 }
+.panel-split.v {
+  width: 6px;
+  height: auto;
+  margin: 0 -3px;
+  align-self: stretch;
+  cursor: col-resize;
+}
+.split-h {
+  display: flex;
+  flex: none;
+  flex-direction: row;
+  min-width: 0;
+  min-height: 0;
+}
+.split-h > .stack,
+.split-h > .split-h {
+  min-width: 0;
+  min-height: 0;
+}
+.tab-group {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.tab-strip {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  min-width: 0;
+  padding: 2px 2px 0;
+  overflow: auto;
+}
+.panel-tab {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.panel-tab[aria-selected="true"] {
+  background: var(--hover);
+  color: var(--ink);
+}
+.tab-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.tab-body > .panel {
+  border-bottom: 0;
+}
 
 /* Panels */
 .panel {
@@ -1028,6 +1095,8 @@ summary::marker {
   flex-direction: column;
   gap: var(--gap);
   padding: 0 var(--pad) 8px;
+  /* A wide dock does not stretch every control across the window. */
+  max-width: 440px;
 }
 .panel-body > * {
   margin: 0;
@@ -1035,6 +1104,7 @@ summary::marker {
 .panel select,
 .panel .segmented {
   width: 100%;
+  max-width: 440px;
 }
 .field-grid {
   display: grid;
@@ -1056,9 +1126,12 @@ summary::marker {
 /* One row to a slider: its name, the track, and the number. */
 .slider {
   display: grid;
-  grid-template-columns: 7.6em minmax(0, 1fr) 4.4em;
+  grid-template-columns: minmax(0, 7.6em) minmax(40px, 220px) 4.4em;
   align-items: center;
+  justify-content: start;
   column-gap: 6px;
+  width: fit-content;
+  max-width: 100%;
   min-height: var(--ctl-sm);
 }
 .slider label {
@@ -1319,6 +1392,10 @@ summary::marker {
   align-items: flex-start;
   gap: 6px;
   flex-wrap: wrap;
+  /* Two or three rows, then the strip scrolls. A short picture is not covered
+     by a stack of toolbars. */
+  max-height: min(46%, 148px);
+  overflow: auto;
   pointer-events: none;
 }
 .canvas-tools {
@@ -1404,6 +1481,19 @@ summary::marker {
   border-color: transparent;
   background: transparent;
 }
+.empty-editor {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 24px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--muted);
+  pointer-events: none;
+}
 .viewport {
   position: relative;
   flex: 1;
@@ -1467,6 +1557,16 @@ canvas#outlineCanvas {
 }
 .viewport[data-view="wipe"] #wipeCanvas {
   display: block;
+}
+.artwork-bounds {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  box-sizing: border-box;
+  border: 1px dashed var(--accent);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 4;
 }
 .canvas-label {
   position: absolute;
@@ -2508,7 +2608,7 @@ dialog details {
           </button>
         </div>
         <div class="file-info" hidden>
-          <span id="fileName">Loading sample…</span><span id="fileDims"></span>
+          <span id="fileName">No images open</span><span id="fileDims"></span>
         </div>
         <div class="top-actions">
           <button id="open" class="button" title="Open an image (Ctrl/Cmd O)">
@@ -2608,9 +2708,7 @@ dialog details {
                     ><input type="checkbox" id="connected" /> Only connected
                     regions</label
                   >
-                  <p id="coverage" class="readout">
-                    Click a colour on the image, or choose a swatch.
-                  </p>
+                  <p id="coverage" class="readout">Open an image to begin.</p>
                 </div>
               </section>
             </div>
@@ -2783,10 +2881,10 @@ dialog details {
                 ><span id="zoomReadout">100%</span>
               </div>
             </div>
-            <div class="first-use" id="firstUse">
+            <div class="first-use" id="firstUse" hidden>
               <p>
-                <strong>Pick a colour. Make it yours.</strong> Click the image,
-                set a target colour, then export.
+                <strong>Pick a colour. Make it yours.</strong> Open an image,
+                click a colour, set a target, then export.
               </p>
               <button
                 id="dismissTip"
@@ -2799,6 +2897,7 @@ dialog details {
               </button>
             </div>
             <div id="viewport" class="viewport checker" data-view="side">
+              <p id="emptyEditor" class="empty-editor">Open an image to begin.</p>
               <div class="pane before">
                 <div class="canvas-space">
                   <canvas
@@ -3361,7 +3460,9 @@ dialog details {
         </div>
       </main>
       <footer class="statusbar">
-        <p id="status" role="status" aria-live="polite">Loading sample…</p>
+        <p id="status" role="status" aria-live="polite">
+          Open an image to begin.
+        </p>
         <button id="cancel" class="text-button" type="button">Cancel</button>
         <span id="pixelReadout" class="mono"
           >Hover to inspect · scroll to zoom</span
@@ -8872,6 +8973,7 @@ dialog details {
   var SPAN_LIMITS = [80, 800];
   var EDITOR_RESERVE = 360;
   var CENTRE_MIN = 220;
+  var ZONES = ["left", "right", "above", "below", "centre", "end"];
   function fitSavedSizes(preferred, { width, height, left = false, right = false, bottom = false }) {
     const out = { left: null, right: null, dock: null };
     if (!(width > 0) || !(height > 0)) {
@@ -8903,6 +9005,7 @@ dialog details {
     }
     return out;
   }
+  var allocate = fitSavedSizes;
   var TITLES = {
     selection: "Selection",
     colour: "Colour",
@@ -8919,26 +9022,59 @@ dialog details {
   };
   var regionSpoken = (name2) => REGION_SPOKEN[name2] || name2;
   var clone2 = (value) => structuredClone(value);
-  var blankRegions = () => ({ left: [], right: [], bottom: [] });
+  var blankRegions = () => ({ left: null, right: null, bottom: null });
+  function leaf(panels, active) {
+    const ids = panels.slice();
+    return {
+      t: "leaf",
+      panels: ids,
+      active: ids.includes(active) ? active : ids[0]
+    };
+  }
+  function stackNode(ids) {
+    if (!ids.length) return null;
+    if (ids.length === 1) return leaf(ids);
+    return { t: "split", d: "v", children: ids.map((id) => leaf([id])), flex: ids.map(() => 1) };
+  }
+  function stacksToRegions(source, hidden = /* @__PURE__ */ new Set()) {
+    const regions = blankRegions();
+    for (const name2 of REGIONS) {
+      const cols = [];
+      for (const stack of source?.[name2] || []) {
+        const ids = stack.filter((id) => !hidden.has(id));
+        const node2 = stackNode(ids);
+        if (node2) cols.push(node2);
+      }
+      regions[name2] = cols.length === 0 ? null : cols.length === 1 ? cols[0] : { t: "split", d: "h", children: cols, flex: cols.map(() => 1) };
+    }
+    return regions;
+  }
   function defaultLayout() {
     return {
-      v: 1,
+      v: 2,
       mode: "auto",
       locked: false,
       collapsed: [],
-      // Panels the person has folded or opened. Automatic folding is not recorded
-      // here, so a short window can fold Swatches without pinning that fold.
       touched: [],
       hidden: [],
-      regions: {
+      regions: stacksToRegions({
         left: [["selection"]],
         right: [["colour", "adjust", "swatches", "outline", "export"]],
         bottom: []
-      },
+      }),
       sizes: { left: null, right: null, dock: null },
       spans: {},
       phoneTabs: [...PHONE_TABS]
     };
+  }
+  function panelsIn(node2, out = []) {
+    if (!node2) return out;
+    if (node2.t === "leaf") {
+      out.push(...node2.panels);
+      return out;
+    }
+    for (const child of node2.children) panelsIn(child, out);
+    return out;
   }
   function idList(value, label2) {
     if (!Array.isArray(value)) throw Error(label2 + " must be a list.");
@@ -8950,10 +9086,10 @@ dialog details {
     }
     return value.slice();
   }
-  function readRegions(value) {
+  function readRegionsV1(value) {
     if (!value || typeof value !== "object" || Array.isArray(value))
       throw Error("Regions are missing.");
-    const regions = blankRegions(), seen = /* @__PURE__ */ new Set();
+    const regions = { left: [], right: [], bottom: [] }, seen = /* @__PURE__ */ new Set();
     for (const name2 of REGIONS) {
       const stacks = value[name2];
       if (!Array.isArray(stacks)) throw Error("Each region must list its stacks.");
@@ -8967,6 +9103,47 @@ dialog details {
           return id;
         });
       });
+    }
+    return { regions, seen };
+  }
+  function readFlex(value, count) {
+    if (!Array.isArray(value) || value.length !== count) return Array(count).fill(1);
+    const flex = [];
+    for (const n of value) {
+      if (!Number.isInteger(n) || n < 1 || n > 4e3) return Array(count).fill(1);
+      flex.push(n);
+    }
+    return flex;
+  }
+  function readNode(value, seen) {
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      throw Error("A split is missing.");
+    if (value.t === "leaf") {
+      if (!Array.isArray(value.panels) || !value.panels.length)
+        throw Error("A tab group needs a panel.");
+      const panels = [];
+      for (const id of value.panels) {
+        if (!PANELS.includes(id) || seen.has(id))
+          throw Error("Each panel is placed once.");
+        seen.add(id);
+        panels.push(id);
+      }
+      return leaf(panels, value.active);
+    }
+    if (value.t !== "split" || value.d !== "h" && value.d !== "v")
+      throw Error("A split is missing.");
+    if (!Array.isArray(value.children) || value.children.length < 2)
+      throw Error("A split needs two sides.");
+    const children = value.children.map((child) => readNode(child, seen));
+    return { t: "split", d: value.d, children, flex: readFlex(value.flex, children.length) };
+  }
+  function readRegionsV2(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      throw Error("Regions are missing.");
+    const regions = blankRegions(), seen = /* @__PURE__ */ new Set();
+    for (const name2 of REGIONS) {
+      if (!Object.hasOwn(value, name2)) throw Error("Regions are missing.");
+      regions[name2] = value[name2] == null ? null : readNode(value[name2], seen);
     }
     return { regions, seen };
   }
@@ -9008,29 +9185,44 @@ dialog details {
     }
     return value.slice();
   }
-  function validateLayout(source) {
-    if (source?.v !== 1 || !MODES.includes(source.mode))
-      throw Error("This layout format is not supported.");
-    if (typeof source.locked !== "boolean") throw Error("Lock must be yes or no.");
-    const collapsed = idList(source.collapsed, "Collapsed panels"), touched = idList(source.touched, "Touched panels"), hidden = idList(source.hidden, "Hidden panels"), { regions, seen } = readRegions(source.regions);
+  function finishFields(source, regions) {
+    return {
+      v: 2,
+      mode: source.mode,
+      locked: source.locked,
+      collapsed: idList(source.collapsed, "Collapsed panels"),
+      touched: idList(source.touched, "Touched panels"),
+      hidden: idList(source.hidden, "Hidden panels"),
+      regions,
+      sizes: readSizes(source.sizes),
+      spans: readSpans(source.spans),
+      phoneTabs: readPhoneTabs(source.phoneTabs)
+    };
+  }
+  function assertCovered(hidden, seen) {
     for (const id of hidden) {
       if (seen.has(id)) throw Error("A hidden panel is also placed.");
     }
     for (const id of PANELS) {
       if (!seen.has(id) && !hidden.includes(id)) throw Error("A panel is missing.");
     }
-    return {
-      v: 1,
-      mode: source.mode,
-      locked: source.locked,
-      collapsed,
-      touched,
-      hidden,
-      regions,
-      sizes: readSizes(source.sizes),
-      spans: readSpans(source.spans),
-      phoneTabs: readPhoneTabs(source.phoneTabs)
-    };
+  }
+  function validateLayout(source) {
+    if (!MODES.includes(source?.mode)) throw Error("This layout format is not supported.");
+    if (typeof source?.locked !== "boolean") throw Error("Lock must be yes or no.");
+    if (source.v === 1) {
+      const { regions: regions2, seen: seen2 } = readRegionsV1(source.regions), hidden2 = idList(source.hidden, "Hidden panels");
+      assertCovered(hidden2, seen2);
+      const next2 = finishFields(source, stacksToRegions(regions2));
+      next2.hidden = hidden2;
+      return next2;
+    }
+    if (source.v !== 2) throw Error("This layout format is not supported.");
+    const { regions, seen } = readRegionsV2(source.regions), hidden = idList(source.hidden, "Hidden panels");
+    assertCovered(hidden, seen);
+    const next = finishFields(source, regions);
+    next.hidden = hidden;
+    return next;
   }
   function parseLayout(text2) {
     if (typeof text2 !== "string" || new TextEncoder().encode(text2).length > MAX_LAYOUT_BYTES)
@@ -9047,13 +9239,38 @@ dialog details {
       throw Error("Saved layout could not be read and was ignored.");
     }
   }
-  function locate(regions, panel) {
-    for (const region of REGIONS)
-      for (let stack = 0; stack < regions[region].length; stack++) {
-        const index = regions[region][stack].indexOf(panel);
-        if (index >= 0) return { region, stack, index };
-      }
+  function findNode(node2, panel, path = []) {
+    if (!node2) return null;
+    if (node2.t === "leaf") {
+      const index = node2.panels.indexOf(panel);
+      if (index < 0) return null;
+      return { path, index, node: node2 };
+    }
+    for (let i = 0; i < node2.children.length; i++) {
+      const hit = findNode(node2.children[i], panel, path.concat(i));
+      if (hit) return hit;
+    }
     return null;
+  }
+  function findIn(regions, panel) {
+    for (const region of REGIONS) {
+      const hit = findNode(regions[region], panel);
+      if (hit) return { region, ...hit };
+    }
+    return null;
+  }
+  function locate(regions, panel) {
+    const hit = findIn(regions, panel);
+    if (!hit) return null;
+    const order = panelsIn(regions[hit.region]);
+    return {
+      region: hit.region,
+      index: order.indexOf(panel),
+      tabIndex: hit.index,
+      tabs: hit.node.panels.slice(),
+      active: hit.node.active,
+      path: hit.path.slice()
+    };
   }
   function blocked(layout2) {
     return layout2.locked ? { layout: layout2, changed: false, reason: "locked" } : null;
@@ -9061,87 +9278,260 @@ dialog details {
   function finish2(layout2) {
     return { layout: validateLayout(layout2), changed: true };
   }
+  function updateAt(node2, path, fn) {
+    if (!path.length) return fn(node2);
+    const [index, ...rest] = path;
+    const children = node2.children.slice();
+    children[index] = updateAt(children[index], rest, fn);
+    return { t: "split", d: node2.d, children, flex: node2.flex };
+  }
+  function parentOf(node2, path) {
+    if (!path.length) return null;
+    let current = node2;
+    for (let i = 0; i < path.length - 1; i++) current = current.children[path[i]];
+    return current;
+  }
+  function without(node2, id) {
+    if (!node2) return null;
+    if (node2.t === "leaf") {
+      if (!node2.panels.includes(id)) return node2;
+      const panels = node2.panels.filter((item) => item !== id);
+      if (!panels.length) return null;
+      return leaf(panels, node2.active === id ? panels[0] : node2.active);
+    }
+    const children = [], flex = [];
+    node2.children.forEach((child, i) => {
+      const next = without(child, id);
+      if (!next) return;
+      children.push(next);
+      flex.push(node2.flex?.[i] ?? 1);
+    });
+    if (!children.length) return null;
+    if (children.length === 1) return children[0];
+    return { t: "split", d: node2.d, children, flex };
+  }
+  function appendLeaf(node2, panel) {
+    const added = leaf([panel]);
+    if (!node2) return added;
+    if (node2.t === "leaf")
+      return { t: "split", d: "v", children: [node2, added], flex: [1, 1] };
+    if (node2.d === "v")
+      return {
+        t: "split",
+        d: "v",
+        children: [...node2.children, added],
+        flex: [...node2.flex || node2.children.map(() => 1), 1]
+      };
+    const children = node2.children.slice();
+    children[children.length - 1] = appendLeaf(children[children.length - 1], panel);
+    return { t: "split", d: "h", children, flex: node2.flex };
+  }
+  function insertZone(root, target, panel, zone) {
+    const hit = findNode(root, target);
+    if (!hit) return appendLeaf(root, panel);
+    if (zone === "centre")
+      return updateAt(root, hit.path, (node2) => leaf([...node2.panels, panel], panel));
+    const dir = zone === "left" || zone === "right" ? "h" : "v", before2 = zone === "left" || zone === "above", added = leaf([panel]);
+    if (!hit.path.length) {
+      const children = before2 ? [added, root] : [root, added];
+      return { t: "split", d: dir, children, flex: [1, 1] };
+    }
+    const parentPath = hit.path.slice(0, -1), index = hit.path.at(-1);
+    return updateAt(root, parentPath, (parent) => {
+      if (parent.d === dir) {
+        const children2 = parent.children.slice(), at = before2 ? index : index + 1;
+        children2.splice(at, 0, added);
+        const flex = (parent.flex || parent.children.map(() => 1)).slice();
+        flex.splice(at, 0, 1);
+        return { t: "split", d: dir, children: children2, flex };
+      }
+      const kids = before2 ? [added, parent.children[index]] : [parent.children[index], added];
+      const children = parent.children.slice();
+      children[index] = { t: "split", d: dir, children: kids, flex: [1, 1] };
+      return { t: "split", d: parent.d, children, flex: parent.flex };
+    });
+  }
+  function alreadyBeside(root, panel, target, zone) {
+    const hit = findNode(root, target);
+    if (!hit) return false;
+    const parent = parentOf(root, hit.path);
+    if (!parent || parent.t !== "split") return false;
+    const dir = zone === "left" || zone === "right" ? "h" : "v";
+    if (parent.d !== dir) return false;
+    const index = hit.path.at(-1);
+    const neighbor = parent.children[zone === "left" || zone === "above" ? index - 1 : index + 1];
+    return neighbor?.t === "leaf" && neighbor.panels.length === 1 && neighbor.panels[0] === panel;
+  }
   function materialize(layout2, kind, presets) {
     if (layout2.mode === "custom") return layout2;
     if (!presets[kind]) throw Error("Unknown layout.");
     const next = clone2(layout2);
-    const hidden = new Set(next.hidden);
-    next.regions = blankRegions();
-    for (const name2 of REGIONS)
-      for (const stack of presets[kind][name2]) {
-        const ids = stack.filter((id) => !hidden.has(id));
-        if (ids.length) next.regions[name2].push(ids);
-      }
+    next.regions = stacksToRegions(presets[kind], new Set(next.hidden));
     next.mode = "custom";
     return validateLayout(next);
   }
   function moveToRegion(layout2, panel, region) {
     const stop = blocked(layout2);
     if (stop) return stop;
-    if (!PANELS.includes(panel) || !REGIONS.includes(region))
-      throw Error("Unknown move.");
-    if (layout2.hidden.includes(panel))
-      return { layout: layout2, changed: false, reason: "hidden" };
+    if (!PANELS.includes(panel) || !REGIONS.includes(region)) throw Error("Unknown move.");
+    if (layout2.hidden.includes(panel)) return { layout: layout2, changed: false, reason: "hidden" };
     const from = locate(layout2.regions, panel);
     if (!from) throw Error("Missing panel.");
-    if (from.region === region)
-      return { layout: layout2, changed: false, reason: "already" };
+    if (from.region === region) return { layout: layout2, changed: false, reason: "already" };
     const next = clone2(layout2);
-    next.regions[from.region][from.stack].splice(from.index, 1);
-    if (!next.regions[from.region][from.stack].length)
-      next.regions[from.region].splice(from.stack, 1);
-    if (!next.regions[region].length) next.regions[region].push([panel]);
-    else next.regions[region].at(-1).push(panel);
+    for (const name2 of REGIONS) next.regions[name2] = without(next.regions[name2], panel);
+    next.regions[region] = appendLeaf(next.regions[region], panel);
     next.mode = "custom";
     return finish2(next);
+  }
+  function canStep(regions, panel, delta) {
+    const hit = findIn(regions, panel);
+    if (!hit || delta !== -1 && delta !== 1) return false;
+    if (hit.node.panels.length > 1) {
+      const index2 = hit.index + delta;
+      return index2 >= 0 && index2 < hit.node.panels.length;
+    }
+    if (!hit.path.length) return false;
+    const parent = parentOf(regions[hit.region], hit.path);
+    if (!parent || parent.d !== "v") return false;
+    const index = hit.path.at(-1) + delta;
+    return index >= 0 && index < parent.children.length;
   }
   function moveBy(layout2, panel, delta) {
     const stop = blocked(layout2);
     if (stop) return stop;
-    if (delta !== -1 && delta !== 1 || !PANELS.includes(panel))
-      throw Error("Unknown move.");
-    if (layout2.hidden.includes(panel))
-      return { layout: layout2, changed: false, reason: "hidden" };
-    const from = locate(layout2.regions, panel);
+    if (delta !== -1 && delta !== 1 || !PANELS.includes(panel)) throw Error("Unknown move.");
+    if (layout2.hidden.includes(panel)) return { layout: layout2, changed: false, reason: "hidden" };
+    const from = findIn(layout2.regions, panel);
     if (!from) throw Error("Missing panel.");
-    const index = from.index + delta;
-    if (index < 0 || index >= layout2.regions[from.region][from.stack].length)
+    if (!canStep(layout2.regions, panel, delta))
       return { layout: layout2, changed: false, reason: "end" };
     const next = clone2(layout2);
-    const stack = next.regions[from.region][from.stack];
-    const [item] = stack.splice(from.index, 1);
-    stack.splice(index, 0, item);
+    const root = next.regions[from.region];
+    const hit = findNode(root, panel);
+    if (hit.node.panels.length > 1) {
+      const panels = hit.node.panels.slice();
+      const [item] = panels.splice(hit.index, 1);
+      panels.splice(hit.index + delta, 0, item);
+      next.regions[from.region] = updateAt(root, hit.path, (node2) => leaf(panels, node2.active));
+    } else {
+      const parentPath = hit.path.slice(0, -1), index = hit.path.at(-1);
+      next.regions[from.region] = updateAt(root, parentPath, (node2) => {
+        const children = node2.children.slice();
+        const [item] = children.splice(index, 1);
+        children.splice(index + delta, 0, item);
+        const flex = (node2.flex || children.map(() => 1)).slice();
+        if (flex.length === node2.children.length) {
+          const [share] = flex.splice(index, 1);
+          flex.splice(index + delta, 0, share);
+        }
+        return { t: "split", d: "v", children, flex };
+      });
+    }
     next.mode = "custom";
     return finish2(next);
   }
-  function insertPanel(layout2, panel, dest) {
+  function placePanel(layout2, panel, dest) {
     const stop = blocked(layout2);
     if (stop) return stop;
-    if (!PANELS.includes(panel) || !REGIONS.includes(dest?.region) || !Number.isInteger(dest.stack) || !Number.isInteger(dest.index))
+    if (!PANELS.includes(panel) || !REGIONS.includes(dest?.region) || !ZONES.includes(dest.zone) || dest.zone !== "end" && !PANELS.includes(dest.target))
       throw Error("Unknown move.");
-    if (layout2.hidden.includes(panel))
-      return { layout: layout2, changed: false, reason: "hidden" };
-    const from = locate(layout2.regions, panel);
+    if (layout2.hidden.includes(panel)) return { layout: layout2, changed: false, reason: "hidden" };
+    if (!locate(layout2.regions, panel)) throw Error("Missing panel.");
+    if (dest.zone !== "end" && dest.target === panel)
+      return { layout: layout2, changed: false, reason: "already" };
+    if (dest.zone === "centre") {
+      const host = findNode(layout2.regions[dest.region], dest.target);
+      if (host?.node.panels.includes(panel))
+        return { layout: layout2, changed: false, reason: "already" };
+    } else if (dest.zone !== "end" && alreadyBeside(layout2.regions[dest.region], panel, dest.target, dest.zone))
+      return { layout: layout2, changed: false, reason: "already" };
+    if (dest.zone !== "end" && dest.zone !== "centre" && !findNode(layout2.regions[dest.region], dest.target)) {
+    } else if (dest.zone !== "end" && !findIn(layout2.regions, dest.target))
+      throw Error("Missing panel.");
+    const next = clone2(layout2);
+    for (const name2 of REGIONS) next.regions[name2] = without(next.regions[name2], panel);
+    if (!findNode(next.regions[dest.region], dest.target) && dest.zone !== "end")
+      next.regions[dest.region] = appendLeaf(next.regions[dest.region], panel);
+    else if (dest.zone === "end")
+      next.regions[dest.region] = appendLeaf(next.regions[dest.region], panel);
+    else
+      next.regions[dest.region] = insertZone(
+        next.regions[dest.region],
+        dest.target,
+        panel,
+        dest.zone
+      );
+    next.mode = "custom";
+    const result2 = finish2(next);
+    if (JSON.stringify(result2.layout.regions) === JSON.stringify(layout2.regions))
+      return { layout: layout2, changed: false, reason: "already" };
+    return result2;
+  }
+  function neighborPanel(root, hit, dir) {
+    const order = panelsIn(root), mine = new Set(hit.node.panels);
+    let i = dir > 0 ? order.indexOf(hit.node.panels.at(-1)) + 1 : order.indexOf(hit.node.panels[0]) - 1;
+    while (i >= 0 && i < order.length) {
+      if (!mine.has(order[i])) return order[i];
+      i += dir;
+    }
+    return null;
+  }
+  function placeRelative(layout2, panel, zone) {
+    const stop = blocked(layout2);
+    if (stop) return stop;
+    if (!["left", "right", "above", "below", "centre"].includes(zone) || !PANELS.includes(panel))
+      throw Error("Unknown move.");
+    if (layout2.hidden.includes(panel)) return { layout: layout2, changed: false, reason: "hidden" };
+    const from = findIn(layout2.regions, panel);
     if (!from) throw Error("Missing panel.");
-    if (from.region === dest.region && from.stack === dest.stack && (dest.index === from.index || dest.index === from.index + 1))
+    const root = layout2.regions[from.region];
+    const hit = findNode(root, panel);
+    if (zone === "centre" || hit.node.panels.length === 1) {
+      const toward = zone === "left" || zone === "above" ? -1 : 1;
+      const neighbor = zone === "centre" || hit.node.panels.length === 1 ? neighborPanel(root, hit, zone === "centre" ? 1 : toward) || neighborPanel(root, hit, zone === "centre" ? -1 : -toward) : null;
+      if (!neighbor) return { layout: layout2, changed: false, reason: "end" };
+      const moved2 = placePanel(layout2, panel, { region: from.region, zone, target: neighbor });
+      return moved2.changed ? { ...moved2, beside: neighbor } : moved2;
+    }
+    const other = hit.node.panels.find((id) => id !== panel);
+    const moved = placePanel(layout2, panel, { region: from.region, zone, target: other });
+    return moved.changed ? { ...moved, beside: other } : moved;
+  }
+  function setActive(layout2, panel) {
+    const stop = blocked(layout2);
+    if (stop) return stop;
+    if (!PANELS.includes(panel)) throw Error("Unknown panel.");
+    const from = findIn(layout2.regions, panel);
+    if (!from) return { layout: layout2, changed: false, reason: "hidden" };
+    if (from.node.panels.length < 2 || from.node.active === panel)
       return { layout: layout2, changed: false, reason: "already" };
     const next = clone2(layout2);
-    const source = next.regions[from.region][from.stack];
-    source.splice(from.index, 1);
-    let stackIndex = dest.stack, index = dest.index;
-    if (from.region === dest.region && from.stack === dest.stack && from.index < dest.index)
-      index -= 1;
-    if (!source.length) {
-      next.regions[from.region].splice(from.stack, 1);
-      if (from.region === dest.region && from.stack < dest.stack) stackIndex -= 1;
+    next.regions[from.region] = updateAt(
+      next.regions[from.region],
+      from.path,
+      (node2) => leaf(node2.panels, panel)
+    );
+    return finish2(next);
+  }
+  function setFlex(layout2, region, path, flex) {
+    const stop = blocked(layout2);
+    if (stop) return stop;
+    if (!REGIONS.includes(region) || !Array.isArray(path)) throw Error("Unknown move.");
+    const node2 = path.length ? path.reduce((current, index) => current?.children?.[index], layout2.regions[region]) : layout2.regions[region];
+    if (!node2 || node2.t !== "split" || !Array.isArray(flex) || flex.length !== node2.children.length)
+      return { layout: layout2, changed: false, reason: "already" };
+    const clean = [];
+    for (const n of flex) {
+      if (!Number.isInteger(n) || n < 1 || n > 4e3)
+        return { layout: layout2, changed: false, reason: "already" };
+      clean.push(n);
     }
-    const stacks = next.regions[dest.region];
-    if (stackIndex < 0) stackIndex = 0;
-    if (stackIndex >= stacks.length) stacks.push([panel]);
-    else {
-      const at = Math.max(0, Math.min(index, stacks[stackIndex].length));
-      stacks[stackIndex].splice(at, 0, panel);
-    }
+    if (node2.flex && clean.every((n, i) => n === node2.flex[i]))
+      return { layout: layout2, changed: false, reason: "already" };
+    const next = clone2(layout2);
+    const apply4 = (current) => ({ t: "split", d: current.d, children: current.children, flex: clean });
+    next.regions[region] = path.length ? updateAt(next.regions[region], path, apply4) : apply4(next.regions[region]);
     next.mode = "custom";
     return finish2(next);
   }
@@ -9149,16 +9539,12 @@ dialog details {
     const stop = blocked(layout2);
     if (stop) return stop;
     if (!PANELS.includes(panel)) throw Error("Unknown panel.");
-    if (layout2.hidden.includes(panel))
-      return { layout: layout2, changed: false, reason: "already" };
+    if (layout2.hidden.includes(panel)) return { layout: layout2, changed: false, reason: "already" };
     if (PANELS.length - layout2.hidden.length <= 1)
       return { layout: layout2, changed: false, reason: "last" };
-    const from = locate(layout2.regions, panel);
-    if (!from) throw Error("Missing panel.");
+    if (!locate(layout2.regions, panel)) throw Error("Missing panel.");
     const next = clone2(layout2);
-    next.regions[from.region][from.stack].splice(from.index, 1);
-    if (!next.regions[from.region][from.stack].length)
-      next.regions[from.region].splice(from.stack, 1);
+    for (const name2 of REGIONS) next.regions[name2] = without(next.regions[name2], panel);
     next.hidden = [...next.hidden, panel];
     next.mode = "custom";
     return finish2(next);
@@ -9166,14 +9552,11 @@ dialog details {
   function showPanel(layout2, panel, region = "right") {
     const stop = blocked(layout2);
     if (stop) return stop;
-    if (!PANELS.includes(panel) || !REGIONS.includes(region))
-      throw Error("Unknown panel.");
-    if (!layout2.hidden.includes(panel))
-      return { layout: layout2, changed: false, reason: "already" };
+    if (!PANELS.includes(panel) || !REGIONS.includes(region)) throw Error("Unknown panel.");
+    if (!layout2.hidden.includes(panel)) return { layout: layout2, changed: false, reason: "already" };
     const next = clone2(layout2);
     next.hidden = next.hidden.filter((id) => id !== panel);
-    if (!next.regions[region].length) next.regions[region].push([panel]);
-    else next.regions[region].at(-1).push(panel);
+    next.regions[region] = appendLeaf(next.regions[region], panel);
     next.mode = "custom";
     return finish2(next);
   }
@@ -9183,7 +9566,7 @@ dialog details {
     if (!presets[name2]) throw Error("Unknown layout.");
     const next = clone2(layout2);
     next.mode = name2;
-    next.regions = clone2(presets[name2]);
+    next.regions = stacksToRegions(presets[name2]);
     next.hidden = [];
     next.spans = {};
     return finish2(next);
@@ -9191,8 +9574,7 @@ dialog details {
   function movePhoneTab(layout2, tab, delta) {
     const stop = blocked(layout2);
     if (stop) return stop;
-    if (!PHONE_TABS.includes(tab) || delta !== -1 && delta !== 1)
-      throw Error("Unknown move.");
+    if (!PHONE_TABS.includes(tab) || delta !== -1 && delta !== 1) throw Error("Unknown move.");
     const index = layout2.phoneTabs.indexOf(tab), to = index + delta;
     if (to < 0 || to >= layout2.phoneTabs.length)
       return { layout: layout2, changed: false, reason: "end" };
@@ -9202,14 +9584,16 @@ dialog details {
     return finish2(next);
   }
   function placement(layout2, kind, presets) {
-    const source = kind === "custom" ? layout2.regions : presets[kind];
-    const hidden = new Set(layout2.hidden), regions = blankRegions();
-    for (const name2 of REGIONS)
-      for (const stack of source?.[name2] || []) {
-        const ids = stack.filter((id) => !hidden.has(id));
-        if (ids.length) regions[name2].push(ids);
+    if (kind === "custom") {
+      const hidden = new Set(layout2.hidden), regions = blankRegions();
+      for (const name2 of REGIONS) {
+        let node2 = layout2.regions[name2];
+        for (const id of hidden) node2 = without(node2, id);
+        regions[name2] = node2;
       }
-    return regions;
+      return regions;
+    }
+    return stacksToRegions(presets[kind], new Set(layout2.hidden));
   }
 
   // src/workspace.js
@@ -9315,13 +9699,17 @@ dialog details {
     park.id = "panelPark";
     park.hidden = true;
     main.append(park);
-    let layout2 = defaultLayout(), warning = "", preset = null, lastDesktop = "side", ready2 = false, announceToken = 0, openFor = null, openButton = null;
-    const collapsed = /* @__PURE__ */ new Set(), touched = /* @__PURE__ */ new Set();
+    let layout2 = defaultLayout(), warning = "", preset = null, lastDesktop = "side", ready2 = false, persisted = false, announceToken = 0, openFor = null, openButton = null;
+    const collapsed = /* @__PURE__ */ new Set(), touched = /* @__PURE__ */ new Set(), undoStack = [], redoStack = [];
     try {
       const text2 = storage()?.getItem(LAYOUT_KEY);
-      if (text2 != null) layout2 = parseLayout(text2);
+      if (text2 != null) {
+        layout2 = parseLayout(text2);
+        persisted = true;
+      }
     } catch {
       layout2 = defaultLayout();
+      persisted = false;
       warning = "Saved layout could not be read and was ignored.";
     }
     for (const id of layout2.collapsed) collapsed.add(id);
@@ -9341,6 +9729,7 @@ dialog details {
         if (!store) throw Error("unavailable");
         store.setItem(LAYOUT_KEY, JSON.stringify(clean));
         layout2 = clean;
+        persisted = true;
         return true;
       } catch {
         return false;
@@ -9369,18 +9758,73 @@ dialog details {
       const plan = visualPlan();
       return plan ? locate(plan, id) : null;
     };
+    function remember() {
+      undoStack.push({ layout: structuredClone(layout2), persisted });
+      if (undoStack.length > 50) undoStack.shift();
+      redoStack.length = 0;
+    }
+    function applyEntry(entry) {
+      layout2 = structuredClone(entry.layout);
+      collapsed.clear();
+      touched.clear();
+      for (const id of layout2.collapsed) collapsed.add(id);
+      for (const id of layout2.touched) touched.add(id);
+      if (entry.persisted) return persist();
+      try {
+        storage()?.removeItem(LAYOUT_KEY);
+      } catch {
+        return false;
+      }
+      persisted = false;
+      for (const name2 of ["--col-left", "--col-right", "--dock-h"])
+        app.style.removeProperty(name2);
+      for (const id of PANELS) panels[id].style.height = "";
+      return true;
+    }
+    function undoLayout() {
+      const entry = undoStack.pop();
+      if (!entry) return;
+      const back = { layout: structuredClone(layout2), persisted };
+      if (!applyEntry(entry)) {
+        undoStack.push(entry);
+        report?.("Could not save the layout.");
+        return;
+      }
+      redoStack.push(back);
+      applyCurrent();
+      fit2();
+      announce("Layout undone.");
+      onPreset?.();
+    }
+    function redoLayout() {
+      const entry = redoStack.pop();
+      if (!entry) return;
+      const back = { layout: structuredClone(layout2), persisted };
+      if (!applyEntry(entry)) {
+        redoStack.push(entry);
+        report?.("Could not save the layout.");
+        return;
+      }
+      undoStack.push(back);
+      applyCurrent();
+      fit2();
+      announce("Layout redone.");
+      onPreset?.();
+    }
     function commit2(result2, message) {
       if (!result2?.changed) {
         if (result2?.reason === "locked") announce("Layout is locked.");
         return false;
       }
       const previous = layout2, folds = [...collapsed], touchedIds = [...touched];
+      remember();
       layout2 = result2.layout;
       collapsed.clear();
       touched.clear();
       for (const id of layout2.collapsed) collapsed.add(id);
       for (const id of layout2.touched) touched.add(id);
       if (!persist()) {
+        undoStack.pop();
         failSave(previous, folds, touchedIds);
         return false;
       }
@@ -9393,14 +9837,22 @@ dialog details {
     function saveSize(key, value) {
       if (!ready2 || layout2.locked || layout2.sizes[key] === value) return;
       const previous = layout2, folds = [...collapsed], touchedIds = [...touched];
+      remember();
       layout2 = { ...layout2, sizes: { ...layout2.sizes, [key]: value } };
-      if (!persist()) failSave(previous, folds, touchedIds);
+      if (!persist()) {
+        undoStack.pop();
+        failSave(previous, folds, touchedIds);
+      }
     }
     function saveSpan(id, value) {
       if (!ready2 || layout2.locked || layout2.spans[id] === value) return;
       const previous = layout2, folds = [...collapsed], touchedIds = [...touched];
+      remember();
       layout2 = { ...layout2, spans: { ...layout2.spans, [id]: value } };
-      if (!persist()) failSave(previous, folds, touchedIds);
+      if (!persist()) {
+        undoStack.pop();
+        failSave(previous, folds, touchedIds);
+      }
     }
     function renderCollapse() {
       for (const id of PANELS) {
@@ -9424,6 +9876,53 @@ dialog details {
           items[i].after(makeSplit(id));
         }
       }
+      for (const row of main.querySelectorAll(".region:not([hidden]) .split-h")) {
+        const blocks = [...row.children].filter(
+          (el) => el.classList.contains("stack") || el.classList.contains("split-h")
+        );
+        for (let i = 0; i < blocks.length - 1; i++) blocks[i].after(makeColumnSplit(row, i));
+      }
+    }
+    function makeColumnSplit(row, index) {
+      const handle = document.createElement("div");
+      handle.className = "panel-split v";
+      handle.setAttribute("role", "separator");
+      handle.setAttribute("aria-orientation", "vertical");
+      handle.setAttribute("aria-label", "Resize columns");
+      handle.setAttribute("aria-valuemin", "80");
+      handle.setAttribute("aria-valuemax", "800");
+      const blocks = () => [...row.children].filter(
+        (el) => el.classList.contains("stack") || el.classList.contains("split-h")
+      );
+      const read = () => blocks()[index]?.offsetWidth || 80;
+      handle.setAttribute("aria-valuenow", String(Math.round(read())));
+      handle.tabIndex = layout2.locked ? -1 : 0;
+      resizer(handle, {
+        axis: "x",
+        invert: false,
+        min: () => 80,
+        max: () => Math.max(81, row.clientWidth - 80),
+        read,
+        write: (v) => {
+          const kids = blocks();
+          const mine = kids[index], other = kids[index + 1];
+          if (!mine || !other) return;
+          mine.style.flex = Math.round(v) + " 1 0px";
+          other.style.flex = Math.max(80, Math.round(row.clientWidth - v)) + " 1 0px";
+        },
+        locked: () => layout2.locked,
+        announce,
+        commit: () => {
+          const kids = blocks();
+          const region = row.closest("[data-region]")?.dataset.region;
+          if (!region || kids.length < 2) return;
+          const path = row.dataset.path ? row.dataset.path.split(".").filter(Boolean).map(Number) : [];
+          const flex = kids.map((el) => Math.max(1, Math.round(el.offsetWidth)));
+          const result2 = setFlex(layout2, region, path, flex);
+          commit2(result2, "Columns resized.");
+        }
+      });
+      return handle;
     }
     function makeSplit(id) {
       const handle = document.createElement("div");
@@ -9449,7 +9948,11 @@ dialog details {
         write: (v) => panels[id].style.height = v + "px",
         locked: () => layout2.locked,
         announce,
-        commit: (v) => saveSpan(id, v)
+        commit: (v) => {
+          saveSpan(id, v);
+          containTallPanels();
+          reclaimDock();
+        }
       });
       return handle;
     }
@@ -9459,7 +9962,7 @@ dialog details {
         for (const id of PHONE_GROUPS[tab]) if (!hidden.has(id)) ids.push(id);
       return ids;
     }
-    function place(plan) {
+    function placeStacks(plan) {
       const shown = /* @__PURE__ */ new Set();
       for (const [name2, region] of Object.entries(regions)) {
         const stacks = region.querySelector(".stacks"), wanted = (plan[name2] || []).filter((ids) => ids.length);
@@ -9469,6 +9972,7 @@ dialog details {
             stack.className = "stack";
             for (const id of ids) {
               shown.add(id);
+              panels[id].hidden = false;
               stack.append(panels[id]);
             }
             return stack;
@@ -9478,6 +9982,121 @@ dialog details {
       }
       for (const id of PANELS) if (!shown.has(id)) park.append(panels[id]);
     }
+    function fillLeaf(container, node2, shown) {
+      if (node2.panels.length === 1) {
+        const id = node2.panels[0];
+        shown.add(id);
+        panels[id].hidden = false;
+        container.append(panels[id]);
+        return;
+      }
+      const group = document.createElement("div");
+      group.className = "tab-group";
+      group.dataset.active = node2.active;
+      const strip = document.createElement("div");
+      strip.className = "tab-strip";
+      strip.setAttribute("role", "tablist");
+      strip.setAttribute("aria-label", node2.panels.map(panelTitle).join(", "));
+      const body = document.createElement("div");
+      body.className = "tab-body";
+      for (const id of node2.panels) {
+        shown.add(id);
+        const tab = document.createElement("button");
+        tab.type = "button";
+        tab.className = "panel-tab";
+        tab.dataset.tab = id;
+        tab.setAttribute("role", "tab");
+        tab.setAttribute("aria-selected", String(id === node2.active));
+        tab.textContent = panelTitle(id);
+        tab.addEventListener("click", () => activateTab(id));
+        strip.append(tab);
+        panels[id].hidden = id !== node2.active;
+        body.append(panels[id]);
+      }
+      strip.addEventListener("keydown", (e) => {
+        if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(e.key)) return;
+        const current = strip.querySelector('[aria-selected="true"]')?.dataset.tab;
+        const loc = current && locate(layout2.regions, current);
+        if (!loc) return;
+        let index = loc.tabs.indexOf(current);
+        if (e.key === "ArrowRight") index = (index + 1) % loc.tabs.length;
+        else if (e.key === "ArrowLeft") index = (index - 1 + loc.tabs.length) % loc.tabs.length;
+        else if (e.key === "Home") index = 0;
+        else index = loc.tabs.length - 1;
+        e.preventDefault();
+        e.stopPropagation();
+        activateTab(loc.tabs[index]);
+      });
+      group.append(strip, body);
+      container.append(group);
+    }
+    function renderBlock(node2, shown, path) {
+      if (node2.t === "split" && node2.d === "h") {
+        const row = document.createElement("div");
+        row.className = "split-h";
+        row.dataset.path = path;
+        node2.children.forEach((child, i) => {
+          const block = renderBlock(child, shown, path ? path + "." + i : String(i));
+          const grow = node2.flex?.[i] || 1;
+          block.style.flex = grow + " 1 0px";
+          row.append(block);
+        });
+        return row;
+      }
+      const stack = document.createElement("div");
+      stack.className = "stack";
+      if (node2.t === "leaf") fillLeaf(stack, node2, shown);
+      else
+        node2.children.forEach((child, i) => {
+          const childPath = path ? path + "." + i : String(i);
+          if (child.t === "leaf") fillLeaf(stack, child, shown);
+          else stack.append(renderBlock(child, shown, childPath));
+        });
+      return stack;
+    }
+    function placeTrees(plan) {
+      const shown = /* @__PURE__ */ new Set();
+      for (const [name2, region] of Object.entries(regions)) {
+        const host = region.querySelector(".stacks");
+        const node2 = plan[name2];
+        if (!node2 || !panelsIn(node2).length) {
+          region.hidden = true;
+          host.replaceChildren();
+          continue;
+        }
+        region.hidden = false;
+        if (node2.t === "split" && node2.d === "h")
+          host.replaceChildren(
+            ...node2.children.map((child, i) => renderBlock(child, shown, String(i)))
+          );
+        else host.replaceChildren(renderBlock(node2, shown, ""));
+      }
+      for (const id of PANELS) if (!shown.has(id)) park.append(panels[id]);
+    }
+    function activateTab(id) {
+      const result2 = setActive(layout2, id);
+      if (!result2.changed) return;
+      const previous = layout2, folds = [...collapsed], touchedIds = [...touched];
+      remember();
+      layout2 = result2.layout;
+      if (!persist()) {
+        undoStack.pop();
+        failSave(previous, folds, touchedIds);
+        return;
+      }
+      const group = panels[id].closest(".tab-group");
+      if (!group) {
+        applyCurrent();
+        fit2();
+        return;
+      }
+      group.dataset.active = id;
+      for (const child of group.querySelectorAll(":scope > .tab-body > [data-panel]"))
+        child.hidden = child.dataset.panel !== id;
+      for (const tab of group.querySelectorAll(".panel-tab"))
+        tab.setAttribute("aria-selected", String(tab.dataset.tab === id));
+      group.querySelector(`.panel-tab[data-tab="${id}"]`)?.focus();
+    }
     function clearInlineGrid() {
       main.style.gridTemplateColumns = "";
       main.style.gridTemplateRows = "";
@@ -9485,18 +10104,19 @@ dialog details {
     }
     function setCustomGrid(plan) {
       const columns = [], top = [];
-      if (plan.left.length) {
+      const occupied = (node2) => !!node2 && panelsIn(node2).length > 0;
+      if (occupied(plan.left)) {
         columns.push("var(--col-left)");
         top.push("left");
       }
       columns.push("minmax(0, 1fr)");
       top.push("centre");
-      if (plan.right.length) {
+      if (occupied(plan.right)) {
         columns.push("var(--col-right)");
         top.push("right");
       }
       main.style.gridTemplateColumns = columns.join(" ");
-      if (plan.bottom.length) {
+      if (occupied(plan.bottom)) {
         const bottom = Array(columns.length).fill("bottom").join(" ");
         main.style.gridTemplateRows = "minmax(220px, 1fr) var(--dock-h)";
         main.style.gridTemplateAreas = `"${top.join(" ")}" "${bottom}"`;
@@ -9513,7 +10133,7 @@ dialog details {
             app.style.removeProperty(cssName);
         return;
       }
-      const fitted2 = fitSavedSizes(layout2.sizes, {
+      const fitted2 = allocate(layout2.sizes, {
         width: main.clientWidth,
         height: main.clientHeight,
         left: !regions.left.hidden,
@@ -9577,12 +10197,12 @@ dialog details {
       clearInlineGrid();
       if (next === "phone") {
         const ids = phoneOrder();
-        place({ left: [], right: [], bottom: ids.length ? [ids] : [] });
+        placeStacks({ left: [], right: [], bottom: ids.length ? [ids] : [] });
       } else if (next === "custom") {
         const plan = placement(layout2, "custom", PRESETS2);
         setCustomGrid(plan);
-        place(plan);
-      } else place(placement(layout2, next, PRESETS2));
+        placeTrees(plan);
+      } else placeTrees(placement(layout2, next, PRESETS2));
       syncSplitters();
       renderCollapse();
       syncPhoneTabs();
@@ -9603,30 +10223,61 @@ dialog details {
         }
       }
     }
-    function growDock() {
-      if (layout2.sizes.dock != null) return;
-      const cap = Math.min(600, Math.max(160, innerHeight - 320));
-      for (let guard = 0; guard < 40 && overflowing(); guard++) {
-        const height = regions.bottom.offsetHeight;
-        if (height + 16 > cap) return;
-        app.style.setProperty("--dock-h", Math.min(cap, height + 16) + "px");
+    function contentHeight(panel) {
+      const head = panel.querySelector(".panel-head")?.offsetHeight || 0;
+      const body = panel.querySelector(".panel-body");
+      if (!body || body.hidden) return head;
+      const kids = [...body.children].filter((el) => el.offsetHeight > 0);
+      let inner = 0;
+      for (const kid of kids) inner += kid.offsetHeight;
+      const style = getComputedStyle(body);
+      const pad = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+      const gap = parseFloat(style.rowGap) || parseFloat(style.gap) || 0;
+      if (kids.length > 1) inner += gap * (kids.length - 1);
+      return Math.ceil(head + inner + pad) + 1;
+    }
+    function containTallPanels() {
+      if (main.querySelector(".panel-split.dragging")) return;
+      for (const panel of main.querySelectorAll(
+        ".region:not([hidden]) [data-panel]"
+      )) {
+        if (!panel.style.height || panel.dataset.collapsed === "true") continue;
+        const need = contentHeight(panel);
+        if (panel.offsetHeight > need + 8) panel.style.height = need + "px";
       }
     }
+    function reclaimDock() {
+      const region = regions.bottom;
+      if (region.hidden || preset === "phone") return;
+      if (main.querySelector(".splitter.dragging, .panel-split.dragging")) return;
+      const stacks = region.querySelectorAll(":scope > .stacks > .stack");
+      let needed = 0;
+      for (const stack of stacks) {
+        let height = 0;
+        for (const child of stack.children) height += child.offsetHeight;
+        needed = Math.max(needed, height);
+      }
+      if (!needed) return;
+      const maxDock = Math.max(120, main.clientHeight - CENTRE_MIN);
+      const next = Math.min(Math.ceil(needed) + 2, maxDock);
+      if (Math.abs(region.offsetHeight - next) > 1)
+        app.style.setProperty("--dock-h", next + "px");
+    }
     function fit2() {
-      if (preset === "phone" || preset === "custom") {
+      if (preset === "phone") {
         refreshSplits();
+        syncLocks();
         return;
       }
-      if (preset === "dock") {
-        if (layout2.mode === "dock") {
-          growDock();
-          foldAuto();
-        }
-        refreshSplits();
-        return;
+      containTallPanels();
+      reclaimDock();
+      if (preset !== "custom") {
+        foldAuto();
+        containTallPanels();
+        reclaimDock();
       }
-      foldAuto();
       refreshSplits();
+      syncLocks();
     }
     function chosen() {
       if (layout2.mode === "side" || layout2.mode === "column" || layout2.mode === "dock")
@@ -9719,8 +10370,10 @@ dialog details {
     function setLocked(on) {
       if (layout2.locked === !!on) return;
       const previous = layout2, folds = [...collapsed], touchedIds = [...touched];
+      remember();
       layout2 = { ...layout2, locked: !!on };
       if (!persist()) {
+        undoStack.pop();
         failSave(previous, folds, touchedIds);
         return;
       }
@@ -9728,12 +10381,17 @@ dialog details {
       announce(on ? "Layout locked." : "Layout unlocked.");
     }
     function reset2() {
+      const previous = layout2, folds = [...collapsed], touchedIds = [...touched];
+      remember();
       try {
         storage()?.removeItem(LAYOUT_KEY);
       } catch {
+        undoStack.pop();
+        failSave(previous, folds, touchedIds);
         report?.("Could not save the layout.");
         return;
       }
+      persisted = false;
       layout2 = defaultLayout();
       collapsed.clear();
       touched.clear();
@@ -9769,23 +10427,57 @@ dialog details {
           ["Hide", locked || shown <= 1, () => tryHide(id)]
         ];
       }
-      const loc = visualLocate(id), stack = loc ? visualPlan()[loc.region][loc.stack] : [];
+      const plan = visualPlan();
+      const place = (zone, label2) => [
+        label2,
+        locked || !canPlace(id, zone),
+        () => tryPlace(id, zone)
+      ];
       return [
-        ["Move to left column", locked || loc?.region === "left", () => tryRegion(id, "left")],
+        ["Move to left column", locked || !plan || locate(plan, id)?.region === "left", () => tryRegion(id, "left")],
         [
           "Move to right column",
-          locked || loc?.region === "right",
+          locked || !plan || locate(plan, id)?.region === "right",
           () => tryRegion(id, "right")
         ],
-        ["Move to bottom", locked || loc?.region === "bottom", () => tryRegion(id, "bottom")],
-        ["Move up", locked || !loc || loc.index === 0, () => tryBy(id, -1)],
-        [
-          "Move down",
-          locked || !loc || loc.index >= stack.length - 1,
-          () => tryBy(id, 1)
-        ],
+        ["Move to bottom", locked || !plan || locate(plan, id)?.region === "bottom", () => tryRegion(id, "bottom")],
+        ["Move up", locked || !plan || !canStep(plan, id, -1), () => tryBy(id, -1)],
+        ["Move down", locked || !plan || !canStep(plan, id, 1), () => tryBy(id, 1)],
+        place("left", "Place left"),
+        place("right", "Place right"),
+        place("above", "Place above"),
+        place("below", "Place below"),
+        place("centre", "Move into tabs"),
         ["Hide", locked || shown <= 1, () => tryHide(id)]
       ];
+    }
+    function canPlace(id, zone) {
+      if (layout2.locked || preset === "phone") return false;
+      try {
+        return placeRelative(editing(), id, zone).changed === true;
+      } catch {
+        return false;
+      }
+    }
+    function tryPlace(id, zone) {
+      closeMenu();
+      if (layout2.locked) {
+        announce("Layout is locked.");
+        return;
+      }
+      const result2 = placeRelative(editing(), id, zone);
+      const beside = result2.beside ? panelTitle(result2.beside) : "";
+      const where = {
+        left: "to the left of",
+        right: "to the right of",
+        above: "above",
+        below: "below"
+      }[zone];
+      commit2(
+        result2,
+        zone === "centre" ? panelTitle(id) + " tabbed with " + beside + "." : panelTitle(id) + " placed " + where + " " + beside + "."
+      );
+      focusPanel(id);
     }
     function openMenu(id, button2, which = "first") {
       closeMenu();
@@ -9884,30 +10576,42 @@ dialog details {
         const startX = e.clientX, startY = e.clientY;
         let dragging = false;
         grip.setPointerCapture(e.pointerId);
+        let cancelled = false;
+        const onKey = (ev) => {
+          if (ev.key !== "Escape") return;
+          ev.preventDefault();
+          ev.stopPropagation();
+          cancelled = true;
+          dragging = false;
+          if (indicator) indicator.hidden = true;
+        };
+        window.addEventListener("keydown", onKey, true);
         const move = (m) => {
+          if (cancelled) return;
           if (!dragging) {
             if (Math.hypot(m.clientX - startX, m.clientY - startY) < 4) return;
             dragging = true;
           }
-          const hit = hitTest(m.clientX, m.clientY);
+          const hit = aimed(id, m.clientX, m.clientY);
           if (hit) showIndicator(hit);
           else if (indicator) indicator.hidden = true;
         };
         const stop = (m) => {
+          window.removeEventListener("keydown", onKey, true);
           grip.removeEventListener("pointermove", move);
           grip.removeEventListener("pointerup", stop);
           grip.removeEventListener("pointercancel", stop);
-          const dropped = dragging && m.type !== "pointercancel";
+          const dropped = dragging && !cancelled && m.type !== "pointercancel";
           dragging = false;
           if (indicator) indicator.hidden = true;
           if (!dropped) return;
-          const hit = hitTest(m.clientX, m.clientY);
+          const hit = aimed(id, m.clientX, m.clientY);
           if (!hit) return;
-          const before2 = visualLocate(id), result2 = insertPanel(editing(), id, hit);
+          const before2 = visualLocate(id), result2 = placePanel(editing(), id, hit);
           if (!result2.changed) return;
           commit2(
             result2,
-            dragMessage(id, before2, locate(result2.layout.regions, id))
+            dragMessage(id, before2, locate(result2.layout.regions, id), hit)
           );
           focusPanel(id);
         };
@@ -9916,59 +10620,55 @@ dialog details {
         grip.addEventListener("pointercancel", stop);
       });
     }
-    function endOf(name2) {
-      const plan = visualPlan();
-      const stacks = plan?.[name2] || [];
-      if (!stacks.length) return { region: name2, stack: 0, index: 0 };
-      return {
-        region: name2,
-        stack: stacks.length - 1,
-        index: stacks[stacks.length - 1].length
-      };
+    function zoneOf(rect, x, y) {
+      const px2 = (x - rect.left) / Math.max(1, rect.width), py = (y - rect.top) / Math.max(1, rect.height), dx = Math.min(px2, 1 - px2), dy = Math.min(py, 1 - py);
+      if (dx > 0.26 && dy > 0.26) return "centre";
+      if (dx < dy) return px2 < 0.5 ? "left" : "right";
+      return py < 0.5 ? "above" : "below";
+    }
+    function aimed(id, x, y) {
+      const hit = hitTest(x, y);
+      if (!hit || hit.target === id) return hit && hit.target !== id ? hit : hit?.zone === "end" ? hit : null;
+      try {
+        if (!placePanel(editing(), id, hit).changed) return null;
+      } catch {
+        return null;
+      }
+      return hit;
     }
     function hitTest(x, y) {
       const bounds = main.getBoundingClientRect();
       if (x < bounds.left || x > bounds.right || y < bounds.top || y > bounds.bottom)
         return null;
       const el = document.elementFromPoint(x, y);
+      const fromPanel = (panelId, zone) => {
+        const loc = visualLocate(panelId);
+        if (!loc) return null;
+        return { region: loc.region, zone, target: panelId };
+      };
       if (el?.classList?.contains("panel-split")) {
         const prev = el.previousElementSibling;
-        const loc = prev?.dataset.panel ? visualLocate(prev.dataset.panel) : null;
-        if (loc) return { region: loc.region, stack: loc.stack, index: loc.index + 1 };
+        const panelId = prev?.dataset?.panel || prev?.querySelector?.("[data-panel]")?.dataset.panel;
+        if (panelId) return fromPanel(panelId, el.classList.contains("v") ? "right" : "below");
       }
-      if (el?.id === "splitLeft") return endOf("left");
-      if (el?.id === "splitRight") return endOf("right");
-      if (el?.id === "dockHandle") return endOf("bottom");
+      if (el?.id === "splitLeft") return { region: "left", zone: "end" };
+      if (el?.id === "splitRight") return { region: "right", zone: "end" };
+      if (el?.id === "dockHandle") return { region: "bottom", zone: "end" };
+      const tab = el?.closest?.(".panel-tab");
+      if (tab?.dataset.tab) return fromPanel(tab.dataset.tab, "centre");
       const panel = el?.closest?.("[data-panel]");
       if (panel && main.contains(panel) && !panel.closest("#panelPark")) {
-        const loc = visualLocate(panel.dataset.panel);
-        if (!loc) return null;
         const rect = panel.getBoundingClientRect();
-        const after2 = y > rect.top + rect.height / 2;
-        return {
-          region: loc.region,
-          stack: loc.stack,
-          index: loc.index + (after2 ? 1 : 0)
-        };
+        return fromPanel(panel.dataset.panel, zoneOf(rect, x, y));
       }
       const regionEl = el?.closest?.("[data-region]");
-      if (regionEl && main.contains(regionEl)) {
-        const name2 = regionEl.dataset.region, plan = visualPlan(), stacks = plan?.[name2] || [];
-        if (!stacks.length) return { region: name2, stack: 0, index: 0 };
-        const stackEls = [...regionEl.querySelectorAll(":scope > .stacks > .stack")];
-        let stack = stackEls.length - 1;
-        stackEls.forEach((node2, i) => {
-          const rect = node2.getBoundingClientRect();
-          if (x >= rect.left && x <= rect.right) stack = i;
-        });
-        return { region: name2, stack, index: (stacks[stack] || []).length };
-      }
+      if (regionEl && main.contains(regionEl))
+        return { region: regionEl.dataset.region, zone: "end" };
       if (regions.bottom.hidden && y > bounds.bottom - 48)
-        return { region: "bottom", stack: 0, index: 0 };
-      if (regions.left.hidden && x < bounds.left + 28)
-        return { region: "left", stack: 0, index: 0 };
+        return { region: "bottom", zone: "end" };
+      if (regions.left.hidden && x < bounds.left + 28) return { region: "left", zone: "end" };
       if (regions.right.hidden && x > bounds.right - 28)
-        return { region: "right", stack: 0, index: 0 };
+        return { region: "right", zone: "end" };
       return null;
     }
     function showIndicator(hit) {
@@ -9986,39 +10686,64 @@ dialog details {
     }
     function indicatorBox(hit) {
       const region = regions[hit.region];
-      if (region.hidden) {
-        const rect2 = main.getBoundingClientRect();
+      if (region.hidden || !hit.target) {
+        const rect2 = region.hidden ? main.getBoundingClientRect() : region.getBoundingClientRect();
         if (hit.region === "bottom")
-          return { left: rect2.left, top: rect2.bottom - 4, width: rect2.width, height: 4 };
+          return { left: rect2.left, top: (region.hidden ? rect2.bottom : rect2.bottom) - 6, width: rect2.width, height: 6 };
         if (hit.region === "left")
-          return { left: rect2.left, top: rect2.top, width: 4, height: rect2.height };
-        return { left: rect2.right - 4, top: rect2.top, width: 4, height: rect2.height };
+          return { left: rect2.left, top: rect2.top, width: region.hidden ? 6 : rect2.width, height: region.hidden ? rect2.height : 6 };
+        return {
+          left: region.hidden ? rect2.right - 6 : rect2.left,
+          top: rect2.top,
+          width: region.hidden ? 6 : rect2.width,
+          height: region.hidden ? rect2.height : 6
+        };
       }
-      const stack = region.querySelectorAll(":scope > .stacks > .stack")[hit.stack];
-      const items = stack ? [...stack.querySelectorAll(":scope > [data-panel]")] : [];
-      const panel = items[hit.index] || items.at(-1);
-      if (!panel) {
-        const rect2 = (stack || region).getBoundingClientRect();
-        return { left: rect2.left, top: rect2.top, width: rect2.width, height: 4 };
-      }
-      const rect = panel.getBoundingClientRect(), after2 = hit.index >= items.length;
+      const panel = panels[hit.target];
+      if (!panel || !panel.isConnected) return null;
+      const rect = panel.getBoundingClientRect();
+      if (hit.zone === "centre")
+        return {
+          left: rect.left + 6,
+          top: rect.top + 6,
+          width: Math.max(8, rect.width - 12),
+          height: Math.max(8, rect.height - 12)
+        };
+      if (hit.zone === "left")
+        return { left: rect.left, top: rect.top, width: Math.max(8, rect.width / 2), height: rect.height };
+      if (hit.zone === "right")
+        return {
+          left: rect.left + rect.width / 2,
+          top: rect.top,
+          width: Math.max(8, rect.width / 2),
+          height: rect.height
+        };
+      if (hit.zone === "above")
+        return { left: rect.left, top: rect.top, width: rect.width, height: Math.max(8, rect.height / 2) };
       return {
         left: rect.left,
-        top: (after2 ? rect.bottom : rect.top) - 2,
+        top: rect.top + rect.height / 2,
         width: rect.width,
-        height: 4
+        height: Math.max(8, rect.height / 2)
       };
     }
-    function dragMessage(id, before2, after2) {
+    function dragMessage(id, before2, after2, hit) {
       const title = panelTitle(id);
       if (!before2 || !after2) return title + " moved.";
       if (before2.region !== after2.region)
         return title + " moved to " + regionSpoken(after2.region) + ".";
-      if (before2.stack === after2.stack && after2.index < before2.index)
-        return title + " moved up.";
-      if (before2.stack === after2.stack && after2.index > before2.index)
-        return title + " moved down.";
-      return title + " moved to " + regionSpoken(after2.region) + ".";
+      if (hit?.zone === "centre" && hit.target)
+        return title + " tabbed with " + panelTitle(hit.target) + ".";
+      if ((hit?.zone === "above" || hit?.zone === "below") && after2.index !== before2.index)
+        return title + " moved " + (after2.index < before2.index ? "up" : "down") + ".";
+      const where = {
+        left: "to the left of",
+        right: "to the right of",
+        above: "above",
+        below: "below"
+      }[hit?.zone];
+      if (where && hit.target) return title + " placed " + where + " " + panelTitle(hit.target) + ".";
+      return title + " moved.";
     }
     for (const panel of Object.values(panels)) {
       adorn(panel);
@@ -10059,6 +10784,7 @@ dialog details {
       setCollapsed(id, on, byPerson = true) {
         if (!PANELS.includes(id)) return;
         const previous = layout2, folds = [...collapsed], touchedIds = [...touched];
+        if (byPerson && ready2) remember();
         if (on) collapsed.add(id);
         else collapsed.delete(id);
         if (byPerson) touched.add(id);
@@ -10070,7 +10796,10 @@ dialog details {
             collapsed: nextCollapsed,
             touched: PANELS.filter((item) => touched.has(item))
           };
-          if (!persist()) failSave(previous, folds, touchedIds);
+          if (!persist()) {
+            undoStack.pop();
+            failSave(previous, folds, touchedIds);
+          }
         }
         renderCollapse();
         refreshSplits();
@@ -10082,10 +10811,16 @@ dialog details {
       setLocked,
       toggleHidden,
       reset: reset2,
+      canUndoLayout: () => undoStack.length > 0,
+      canRedoLayout: () => redoStack.length > 0,
+      undoLayout,
+      redoLayout,
       refresh() {
         const next = presented();
         if (next === preset) {
           applySizes({ replace: false });
+          containTallPanels();
+          reclaimDock();
           return false;
         }
         applyCurrent();
@@ -10104,7 +10839,11 @@ dialog details {
       write: (v) => px("--dock-h", v),
       locked: () => layout2.locked,
       announce,
-      commit: (v) => saveSize("dock", v)
+      commit: (v) => {
+        saveSize("dock", v);
+        containTallPanels();
+        reclaimDock();
+      }
     });
     applyCurrent();
     fit2();
@@ -10948,13 +11687,10 @@ dialog details {
     return { modifier: modifier2, theme: theme2, saved: !!value };
   }
 
-  // src/sample.js
-  var sample_default = "data:image/png;base64,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";
-
   // src/app.js
   var $ = (id) => document.getElementById(id);
   var pause = makePause();
-  var VERSION = "3.5.1";
+  var VERSION = "3.6.0";
   var w = 0;
   var h = 0;
   var name = "";
@@ -10987,6 +11723,8 @@ dialog details {
   var fitMode = true;
   var panX = 0;
   var panY = 0;
+  var showArtworkBounds = false;
+  var boundsCache = null;
   var space = false;
   var drag = null;
   var lastResultEdit = -1;
@@ -11329,6 +12067,7 @@ dialog details {
           canvas.width = canvas.height = 0;
         $("fileName").textContent = "No images open";
         $("fileDims").textContent = "";
+        $("emptyEditor").hidden = false;
         $("svgSizeGroup").hidden = true;
         $("coverage").textContent = "Open an image to begin.";
         $("resultNote").textContent = "";
@@ -12106,6 +12845,7 @@ dialog details {
       fitMode = true;
       $("fileName").textContent = name;
       $("fileDims").textContent = w + " \xD7 " + h + (decoded.still ? " \xB7 first frame" : "");
+      $("emptyEditor").hidden = true;
       stash();
       sync();
       prepareCurrent();
@@ -13214,17 +13954,62 @@ dialog details {
     e.target.value = "";
     if (list.length) runBatch(list);
   };
+  function artworkBox() {
+    const key = imageId + ":" + w + "x" + h;
+    if (boundsCache?.key === key) return boundsCache.box;
+    let minX = w, minY = h, maxX = -1, maxY = -1;
+    for (let i = 0, n = w * h; i < n; i++) {
+      if (!pixels[i * 4 + 3]) continue;
+      const x = i % w, y = i / w | 0;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    const box = maxX < 0 ? { x: 0, y: 0, w, h } : { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+    boundsCache = { key, box };
+    return box;
+  }
+  var boundGuides = [];
+  function ensureGuides() {
+    if (boundGuides.length) return;
+    for (const space2 of document.querySelectorAll(".canvas-space")) {
+      const guide = document.createElement("div");
+      guide.className = "artwork-bounds";
+      guide.hidden = true;
+      guide.setAttribute("aria-hidden", "true");
+      space2.append(guide);
+      boundGuides.push(guide);
+    }
+  }
+  function placeArtworkBounds(box) {
+    ensureGuides();
+    const show = !!(showArtworkBounds && box);
+    const dx = box ? (box.x + box.w / 2 - w / 2) * zoom : 0, dy = box ? (box.y + box.h / 2 - h / 2) * zoom : 0;
+    for (const guide of boundGuides) {
+      guide.hidden = !show;
+      if (!show) continue;
+      guide.style.width = box.w * zoom + "px";
+      guide.style.height = box.h * zoom + "px";
+      guide.style.transform = `translate(calc(-50% + ${panX + dx}px),calc(-50% + ${panY + dy}px))`;
+    }
+  }
   function layout() {
-    if (!w) return;
-    const pane = after.parentElement, tools = $("stageTools"), floating = getComputedStyle(tools).position === "absolute", spare = edit.outline.on ? 40 : 0, marginY = (floating ? 2 * Math.max(tools.offsetHeight + 18, 46) : 40) + spare;
+    if (!w) {
+      placeArtworkBounds(null);
+      return;
+    }
+    const pane = after.parentElement, tools = $("stageTools"), floating = getComputedStyle(tools).position === "absolute", spare = edit.outline.on ? 40 : 0, top = floating ? tools.offsetHeight + 10 : 8, bottom = floating ? Math.max(
+      pane.parentElement.querySelector(".canvas-label")?.offsetHeight || 0,
+      document.querySelector(".backgrounds")?.offsetHeight || 0
+    ) + 14 : 8, box = artworkBox();
     pane.closest(".stage").style.setProperty("--tools-h", tools.offsetHeight + "px");
     if (fitMode) {
-      zoom = Math.min(
-        (pane.clientWidth - 40 - spare) / w,
-        (pane.clientHeight - marginY) / h
-      );
-      zoom = Math.max(0.01, zoom);
-      panX = panY = 0;
+      const freeW = Math.max(1, pane.clientWidth - 16 - spare), freeH = Math.max(1, pane.clientHeight - top - bottom - spare);
+      zoom = Math.max(0.01, Math.min(freeW / box.w, freeH / box.h));
+      const shiftY = (top - bottom) / 2;
+      panX = -(box.x + box.w / 2 - w / 2) * zoom;
+      panY = -(box.y + box.h / 2 - h / 2) * zoom + shiftY;
     }
     for (const c of [before, after, wipeCanvas]) {
       c.style.width = w * zoom + "px";
@@ -13234,6 +14019,7 @@ dialog details {
     $("viewport").classList.toggle("pixelated", !fitMode && zoom >= 2);
     $("zoomReadout").textContent = Math.round(zoom * 100) + "%";
     placeOutline();
+    placeArtworkBounds(box);
   }
   function setZoom(value, anchor) {
     if (!w) return;
@@ -13282,7 +14068,9 @@ dialog details {
     const image = result?.pixels || pixels;
     for (let yy = -4; yy <= 4; yy++)
       for (let xx = -4; xx <= 4; xx++) {
-        const x = clamp(p.x + xx, 0, w - 1), y = clamp(p.y + yy, 0, h - 1), i = (y * w + x) * 4, cx = 3 + (xx + 4) * 14, cy = 3 + (yy + 4) * 14;
+        const x = p.x + xx, y = p.y + yy, cx = 3 + (xx + 4) * 14, cy = 3 + (yy + 4) * 14;
+        if (x < 0 || y < 0 || x >= w || y >= h) continue;
+        const i = (y * w + x) * 4;
         if (image[i + 3]) {
           ctx.fillStyle = toHex(...image.subarray(i, i + 3));
           ctx.fillRect(cx, cy, 14, 14);
@@ -13302,9 +14090,12 @@ dialog details {
     ctx.fillText(`${p.x},${p.y} ${toHex(...to)}`, 5, 143);
     ctx.fillText(`Alpha ${Math.round(to[3] / 255 * 100)}%`, 5, 157);
     canvas.hidden = false;
-    const touch = e.pointerType === "touch";
-    canvas.style.left = clamp(e.clientX - box.left + (touch ? -66 : 18), 0, box.width - 134) + "px";
-    canvas.style.top = clamp(e.clientY - box.top + (touch ? -214 : 18), 0, box.height - 166) + "px";
+    const touch = e.pointerType === "touch", lw = canvas.offsetWidth || 134, lh = canvas.offsetHeight || 166;
+    let left = e.clientX - box.left + (touch ? -66 : 18), top = e.clientY - box.top + (touch ? -214 : 18);
+    if (!touch && left + lw > box.width) left = e.clientX - box.left - 18 - lw;
+    if (!touch && top + lh > box.height) top = e.clientY - box.top - 18 - lh;
+    canvas.style.left = clamp(left, 0, Math.max(0, box.width - lw)) + "px";
+    canvas.style.top = clamp(top, 0, Math.max(0, box.height - lh)) + "px";
   }
   var touches = /* @__PURE__ */ new Map();
   var pinch = null;
@@ -13396,6 +14187,7 @@ dialog details {
       const p = point(e, c);
       if (p && (e.pointerType !== "touch" || drag?.pointer === e.pointerId && !drag.pan && tool === "pick"))
         loupe(e, c);
+      else $("loupe").hidden = true;
       if (p && (tool === "add" || tool === "subtract")) {
         const cursor = $("brushCursor"), r = after.parentElement.getBoundingClientRect();
         cursor.hidden = false;
@@ -13693,6 +14485,26 @@ dialog details {
       e.stopPropagation();
     }
   });
+  (function introduce() {
+    const tip = $("firstUse");
+    let seen = false;
+    try {
+      seen = [
+        "hexshift-introduced",
+        "hexshift-theme",
+        "hexshift-layout",
+        "hexshift-colours"
+      ].some((key) => localStorage.getItem(key) != null);
+    } catch {
+      seen = true;
+    }
+    if (seen) return;
+    tip.hidden = false;
+    try {
+      localStorage.setItem("hexshift-introduced", "1");
+    } catch {
+    }
+  })();
   theme();
   document.addEventListener("keydown", (e) => {
     if (e.key === "F1" && !e.ctrlKey && !e.altKey && !e.shiftKey) {
@@ -14148,6 +14960,16 @@ dialog details {
             enabled: have,
             run: () => $("actual").click()
           },
+          {
+            type: "check",
+            label: "Artwork bounds",
+            checked: () => showArtworkBounds,
+            enabled: have,
+            run: () => {
+              showArtworkBounds = !showArtworkBounds;
+              layout();
+            }
+          },
           { type: "separator" },
           {
             type: "sub",
@@ -14181,6 +15003,18 @@ dialog details {
                 label: "Lock layout",
                 checked: () => workspace.isLocked(),
                 run: () => workspace.setLocked(!workspace.isLocked())
+              },
+              {
+                type: "item",
+                label: "Undo layout",
+                enabled: () => workspace.canUndoLayout(),
+                run: () => workspace.undoLayout()
+              },
+              {
+                type: "item",
+                label: "Redo layout",
+                enabled: () => workspace.canRedoLayout(),
+                run: () => workspace.redoLayout()
               },
               {
                 type: "item",
@@ -14312,25 +15146,16 @@ dialog details {
   startWorker();
   syncTarget();
   setTool("pick");
-  var sampleBytes = Uint8Array.from(
-    atob(sample_default.split(",")[1]),
-    (c) => c.charCodeAt(0)
-  );
-  openBlob(
-    new Blob([sampleBytes], { type: "image/png" }),
-    "red_heart.png",
-    true
-  ).then(() => {
-    const notes = [coloursWarning, workspace.warning].filter(Boolean);
-    if (notes.length) status(notes.join(" "));
-  });
+  buttons();
+  var notes = [coloursWarning, workspace.warning].filter(Boolean);
+  status(notes.length ? notes.join(" ") : "Open an image to begin.");
 })();
 </script>
     <template id="licence-notices"><pre># Third-party notices
 
 ## Microsoft Fluent Emoji
 
-The sample red heart is from https://github.com/microsoft/fluentui-emoji . Copyright (c) Microsoft Corporation. MIT licence; the permission and warranty terms are included in LICENSE.
+The red heart in `src/sample.js`, used by tests and review screenshots, is from https://github.com/microsoft/fluentui-emoji . Copyright (c) Microsoft Corporation. MIT licence; the permission and warranty terms are included in LICENSE. The app does not embed or open that image.
 
 ## Colour theme palettes
 
@@ -14598,6 +15423,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 Original C# port and code by Christian Winnerlein (CodesInChaos), public domain, https://github.com/CodesInChaos/Chaos.NaCl . Poly1305 by Andrew M. (floodyberry), MIT or public domain. Curve25519, Ed25519, Salsa20 and HSalsa20 from SUPERCOP ref10 by Dan Bernstein, public domain (http://bench.cr.yp.to/supercop.html). SHA512 by Christian Winnerlein, public domain.</pre></template>
     <template id="release-notes"><pre># Hex Shift 3
+
+**New in 3.6.0:** The editor opens blank. The getting-started tip is shown once, on a brand-new profile, and an update does not show it again. A bottom dock keeps only the height its panels are using, and a panel made shorter than its contents scrolls inside itself. The picture fits to its painted pixels; **View → Artwork bounds** draws that rectangle for the session, does not export it, and does not save a setting. Slider tracks stay a readable length, and the tool strip wraps instead of covering the picture. The magnifier follows the pointer to both edges of the image. Panels can sit beside a neighbour or share a tab strip: drag onto the middle to group them, or onto an edge to place beside; the **…** menu adds Place left, Place right, Place above, Place below, and Move into tabs. **View → Layout** undoes and redoes those arrangement changes for the session. The arrangement itself is still kept on this device as `hexshift-layout`.
 
 **New in 3.5.1:** Three repairs. Variant previews keep the palette they were made from: switching tabs and choosing another palette no longer exports that other palette, and the line above the previews names the set ("Variants: Discord buttons"). Changing or deleting a saved palette does not change variants already made. If the selection, treatment or outline changed, export refreshes those same previews and then saves them. A panel resized very short scrolls inside itself instead of covering the panel below. Column widths you chose are remembered, and a narrower window fits them around the picture instead of squeezing the picture to nothing; widening the window brings the chosen widths back.
 

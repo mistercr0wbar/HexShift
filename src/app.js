@@ -64,7 +64,6 @@ import {
   resolveTheme,
   parseThemeSetting,
 } from "./themes.js";
-import sample from "./sample.js";
 import { makePause } from "./yield.js";
 const $ = (id) => document.getElementById(id),
   pause = makePause(),
@@ -104,6 +103,8 @@ let zoom = 1,
   fitMode = true,
   panX = 0,
   panY = 0,
+  showArtworkBounds = false,
+  boundsCache = null,
   space = false,
   drag = null,
   lastResultEdit = -1,
@@ -475,6 +476,7 @@ async function closeDocument(id) {
         canvas.width = canvas.height = 0;
       $("fileName").textContent = "No images open";
       $("fileDims").textContent = "";
+      $("emptyEditor").hidden = false;
       $("svgSizeGroup").hidden = true;
       $("coverage").textContent = "Open an image to begin.";
       $("resultNote").textContent = "";
@@ -1383,6 +1385,7 @@ async function openBlob(blob, fileName, isSample = false, redraw = false) {
     $("fileName").textContent = name;
     $("fileDims").textContent =
       w + " × " + h + (decoded.still ? " · first frame" : "");
+    $("emptyEditor").hidden = true;
     stash();
     sync();
     prepareCurrent();
@@ -2760,30 +2763,87 @@ $("batchInput").onchange = (e) => {
   e.target.value = "";
   if (list.length) runBatch(list);
 };
+// Painted pixels of the source image. A fully clear image uses the whole frame.
+// Colour edits do not change this alpha, so the scan waits for the next image.
+function artworkBox() {
+  const key = imageId + ":" + w + "x" + h;
+  if (boundsCache?.key === key) return boundsCache.box;
+  let minX = w,
+    minY = h,
+    maxX = -1,
+    maxY = -1;
+  for (let i = 0, n = w * h; i < n; i++) {
+    if (!pixels[i * 4 + 3]) continue;
+    const x = i % w,
+      y = (i / w) | 0;
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  const box =
+    maxX < 0
+      ? { x: 0, y: 0, w, h }
+      : { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+  boundsCache = { key, box };
+  return box;
+}
+const boundGuides = [];
+function ensureGuides() {
+  if (boundGuides.length) return;
+  for (const space of document.querySelectorAll(".canvas-space")) {
+    const guide = document.createElement("div");
+    guide.className = "artwork-bounds";
+    guide.hidden = true;
+    guide.setAttribute("aria-hidden", "true");
+    space.append(guide);
+    boundGuides.push(guide);
+  }
+}
+function placeArtworkBounds(box) {
+  ensureGuides();
+  const show = !!(showArtworkBounds && box);
+  const dx = box ? (box.x + box.w / 2 - w / 2) * zoom : 0,
+    dy = box ? (box.y + box.h / 2 - h / 2) * zoom : 0;
+  for (const guide of boundGuides) {
+    guide.hidden = !show;
+    if (!show) continue;
+    guide.style.width = box.w * zoom + "px";
+    guide.style.height = box.h * zoom + "px";
+    guide.style.transform = `translate(calc(-50% + ${panX + dx}px),calc(-50% + ${panY + dy}px))`;
+  }
+}
 function layout() {
-  if (!w) return;
+  if (!w) {
+    placeArtworkBounds(null);
+    return;
+  }
   const pane = after.parentElement,
     tools = $("stageTools"),
     floating = getComputedStyle(tools).position === "absolute",
-    // Floating tools sit over the top of the canvas on wide layouts, and the
-    // labels and background chips over its bottom; fitting leaves room for both
-    // so they never cover the artwork. The tools may wrap onto a second row on a
-    // narrow stage, so their real height is used.
+    // The tool strip and the labels sit over the picture. Fit uses the room
+    // they actually take, not a second copy of the tool strip.
     // An outline needs room past the image's edges. How much is set by the outline
     // being on, never by its width, so dragging the width never rescales the picture.
     spare = edit.outline.on ? 40 : 0,
-    marginY =
-      (floating ? 2 * Math.max(tools.offsetHeight + 18, 46) : 40) + spare;
+    top = floating ? tools.offsetHeight + 10 : 8,
+    bottom = floating
+      ? Math.max(
+          pane.parentElement.querySelector(".canvas-label")?.offsetHeight || 0,
+          document.querySelector(".backgrounds")?.offsetHeight || 0,
+        ) + 14
+      : 8,
+    box = artworkBox();
   pane
     .closest(".stage")
     .style.setProperty("--tools-h", tools.offsetHeight + "px");
   if (fitMode) {
-    zoom = Math.min(
-      (pane.clientWidth - 40 - spare) / w,
-      (pane.clientHeight - marginY) / h,
-    );
-    zoom = Math.max(0.01, zoom);
-    panX = panY = 0;
+    const freeW = Math.max(1, pane.clientWidth - 16 - spare),
+      freeH = Math.max(1, pane.clientHeight - top - bottom - spare);
+    zoom = Math.max(0.01, Math.min(freeW / box.w, freeH / box.h));
+    const shiftY = (top - bottom) / 2;
+    panX = -(box.x + box.w / 2 - w / 2) * zoom;
+    panY = -(box.y + box.h / 2 - h / 2) * zoom + shiftY;
   }
   for (const c of [before, after, wipeCanvas]) {
     c.style.width = w * zoom + "px";
@@ -2795,6 +2855,7 @@ function layout() {
   $("viewport").classList.toggle("pixelated", !fitMode && zoom >= 2);
   $("zoomReadout").textContent = Math.round(zoom * 100) + "%";
   placeOutline();
+  placeArtworkBounds(box);
 }
 function setZoom(value, anchor) {
   if (!w) return;
@@ -2863,11 +2924,14 @@ function loupe(e, c) {
   const image = result?.pixels || pixels;
   for (let yy = -4; yy <= 4; yy++)
     for (let xx = -4; xx <= 4; xx++) {
-      const x = clamp(p.x + xx, 0, w - 1),
-        y = clamp(p.y + yy, 0, h - 1),
-        i = (y * w + x) * 4,
+      const x = p.x + xx,
+        y = p.y + yy,
         cx = 3 + (xx + 4) * 14,
         cy = 3 + (yy + 4) * 14;
+      // Cells past the frame stay the loupe's own background, on both axes.
+      // Repeating the edge pixel hid the boundary the pointer was trying to hit.
+      if (x < 0 || y < 0 || x >= w || y >= h) continue;
+      const i = (y * w + x) * 4;
       if (image[i + 3]) {
         ctx.fillStyle = toHex(...image.subarray(i, i + 3));
         ctx.fillRect(cx, cy, 14, 14);
@@ -2889,12 +2953,18 @@ function loupe(e, c) {
   ctx.fillText(`Alpha ${Math.round((to[3] / 255) * 100)}%`, 5, 157);
   canvas.hidden = false;
   // On touch the loupe sits above the finger, which would hide it otherwise.
-  const touch = e.pointerType === "touch";
-  canvas.style.left =
-    clamp(e.clientX - box.left + (touch ? -66 : 18), 0, box.width - 134) + "px";
-  canvas.style.top =
-    clamp(e.clientY - box.top + (touch ? -214 : 18), 0, box.height - 166) +
-    "px";
+  // With a mouse it sits down and to the right, and flips to the other side
+  // when that side would leave the view. The pointer is never pulled in,
+  // so the last pixel on either edge stays under the cursor.
+  const touch = e.pointerType === "touch",
+    lw = canvas.offsetWidth || 134,
+    lh = canvas.offsetHeight || 166;
+  let left = e.clientX - box.left + (touch ? -66 : 18),
+    top = e.clientY - box.top + (touch ? -214 : 18);
+  if (!touch && left + lw > box.width) left = e.clientX - box.left - 18 - lw;
+  if (!touch && top + lh > box.height) top = e.clientY - box.top - 18 - lh;
+  canvas.style.left = clamp(left, 0, Math.max(0, box.width - lw)) + "px";
+  canvas.style.top = clamp(top, 0, Math.max(0, box.height - lh)) + "px";
 }
 // Two fingers on the canvas pinch to zoom and drag to pan, around the point
 // between them.
@@ -2993,13 +3063,15 @@ for (const c of [before, after]) {
       if (pinch && touches.size >= 2) return movePinch();
     }
     const p = point(e, c);
-    // Touch shows the loupe only while a finger is down to pick.
+    // Touch shows the loupe only while a finger is down to pick. Off the
+    // picture, on the empty space around it, the loupe hides on both axes.
     if (
       p &&
       (e.pointerType !== "touch" ||
         (drag?.pointer === e.pointerId && !drag.pan && tool === "pick"))
     )
       loupe(e, c);
+    else $("loupe").hidden = true;
     if (p && (tool === "add" || tool === "subtract")) {
       const cursor = $("brushCursor"),
         r = after.parentElement.getBoundingClientRect();
@@ -3344,6 +3416,28 @@ $("themeMenu").addEventListener("keydown", (e) => {
     e.stopPropagation();
   }
 });
+// A brand-new profile sees the tip once. Anyone who already has a theme,
+// layout or colours, and every later launch, does not. Checked before theme()
+// writes, so this launch cannot look like a returning one.
+(function introduce() {
+  const tip = $("firstUse");
+  let seen = false;
+  try {
+    seen = [
+      "hexshift-introduced",
+      "hexshift-theme",
+      "hexshift-layout",
+      "hexshift-colours",
+    ].some((key) => localStorage.getItem(key) != null);
+  } catch {
+    seen = true;
+  }
+  if (seen) return;
+  tip.hidden = false;
+  try {
+    localStorage.setItem("hexshift-introduced", "1");
+  } catch {}
+})();
 theme();
 document.addEventListener("keydown", (e) => {
   if (e.key === "F1" && !e.ctrlKey && !e.altKey && !e.shiftKey) {
@@ -3875,6 +3969,16 @@ createMenubar({
           enabled: have,
           run: () => $("actual").click(),
         },
+        {
+          type: "check",
+          label: "Artwork bounds",
+          checked: () => showArtworkBounds,
+          enabled: have,
+          run: () => {
+            showArtworkBounds = !showArtworkBounds;
+            layout();
+          },
+        },
         { type: "separator" },
         {
           type: "sub",
@@ -3910,6 +4014,18 @@ createMenubar({
               label: "Lock layout",
               checked: () => workspace.isLocked(),
               run: () => workspace.setLocked(!workspace.isLocked()),
+            },
+            {
+              type: "item",
+              label: "Undo layout",
+              enabled: () => workspace.canUndoLayout(),
+              run: () => workspace.undoLayout(),
+            },
+            {
+              type: "item",
+              label: "Redo layout",
+              enabled: () => workspace.canRedoLayout(),
+              run: () => workspace.redoLayout(),
             },
             {
               type: "item",
@@ -4042,14 +4158,6 @@ documentTabs = createTabs({
 startWorker();
 syncTarget();
 setTool("pick");
-const sampleBytes = Uint8Array.from(atob(sample.split(",")[1]), (c) =>
-  c.charCodeAt(0),
-);
-openBlob(
-  new Blob([sampleBytes], { type: "image/png" }),
-  "red_heart.png",
-  true,
-).then(() => {
-  const notes = [coloursWarning, workspace.warning].filter(Boolean);
-  if (notes.length) status(notes.join(" "));
-});
+buttons();
+const notes = [coloursWarning, workspace.warning].filter(Boolean);
+status(notes.length ? notes.join(" ") : "Open an image to begin.");
