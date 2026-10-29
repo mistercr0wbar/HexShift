@@ -263,12 +263,18 @@
                       </button>
                     </div>
                   </div>
-                  <p id="advancedHeld" class="readout" hidden>
-                    An advanced edit is still on this image.
-                    <button id="openAdvanced" class="text-button" type="button">
-                      Open Advanced
-                    </button>
-                  </p>
+                  <div
+                    id="advancedHeld"
+                    class="advanced-held"
+                    hidden
+                    role="region"
+                    aria-labelledby="advancedHeldLead"
+                  >
+                    <p id="advancedHeldLead">
+                      Simple is hiding settings that still change this image.
+                    </p>
+                    <ul id="advancedReasons"></ul>
+                  </div>
                   <div id="seeds" class="seed-list">
                     <span class="muted">Nothing picked yet</span>
                   </div>
@@ -531,6 +537,22 @@
               </button>
             </div>
             <div id="viewport" class="viewport checker" data-view="side">
+              <div
+                id="importNotice"
+                class="import-notice"
+                hidden
+                role="region"
+                aria-labelledby="importNoticeTitle"
+                aria-live="polite"
+              >
+                <div class="import-notice-copy">
+                  <p id="importNoticeTitle">Some files could not be opened.</p>
+                  <ul id="importNoticeList"></ul>
+                </div>
+                <button id="dismissImport" class="text-button" type="button">
+                  Dismiss
+                </button>
+              </div>
               <p id="emptyEditor" class="empty-editor">Open an image to begin.</p>
               <div class="pane before">
                 <div class="canvas-space">

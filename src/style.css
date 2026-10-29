@@ -450,6 +450,39 @@ summary::marker {
 .mode-ask[hidden] {
   display: none;
 }
+.advanced-held {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--ground);
+  color: var(--ink);
+}
+.advanced-held[hidden] {
+  display: none;
+}
+.advanced-held p,
+.advanced-held li {
+  margin: 0;
+}
+.advanced-held ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.advanced-held li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: baseline;
+}
+.advanced-held #advancedHeldLead {
+  color: var(--muted);
+}
 .topbar {
   display: flex;
   flex-wrap: wrap;
@@ -1543,6 +1576,62 @@ summary::marker {
   font-size: 14px;
   color: var(--muted);
   pointer-events: none;
+}
+.empty-editor.quiet {
+  visibility: hidden;
+}
+/* Import failures wrap here. The status bar stays one fixed line. */
+.import-notice {
+  position: absolute;
+  z-index: 4;
+  left: 12px;
+  right: 12px;
+  top: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  max-height: calc(100% - 24px);
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  pointer-events: auto;
+  box-shadow: var(--shadow);
+}
+.import-notice[hidden] {
+  display: none;
+}
+.import-notice-copy {
+  flex: 1;
+  min-width: 0;
+}
+.import-notice p,
+.import-notice li {
+  margin: 0 0 6px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.import-notice ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.import-notice li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.import-file {
+  font-weight: 600;
+}
+.viewport:has(#emptyEditor:not([hidden])) .import-notice {
+  top: 50%;
+  left: 50%;
+  right: auto;
+  width: min(36rem, calc(100% - 32px));
+  transform: translate(-50%, -50%);
 }
 .viewport {
   position: relative;
