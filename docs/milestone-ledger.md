@@ -61,7 +61,7 @@ The Windows report of an unexpected Advanced state was not reproduced against th
 
 - Scope: a standalone GIF and animated-WebP page, with partial-frame compositing, and a written no-go. See `docs/animation-prototype.md`. It does not block 3.11.0, 3.12.0 or 3.13.0, and it does not add animation to those releases or promise it in v4.
 - State: **implemented** on `grok/animation-prototype`. Not merged. Not a product release. Recommendation: **no-go**. The pinned codec reports libwebp 1.1.0 (package README says v1.0.2), which is older than the CVE-2023-4863 fix in 1.3.2. The Windows host was not run.
-- Commit: this branch. Product version stays 3.13.0. Portable shell stays `146cbe8a5f493454`.
+- Commit: `c36642f87206f14ccd386dd6f29f6fe49642e1b7` on `grok/animation-prototype`, plus `fdc792e` which puts the release workflow back. Not on `main`. Product version stays 3.13.0. Portable shell stays `146cbe8a5f493454`. CI's generated-file check still names `HexShift.html` and `sw.js` only.
 - Tests, 29 October 2026, this machine, Node v24.20.0:
   - `npm test`: 122 passed, 0 failed. That includes the 8 animation tests.
   - `npm audit --audit-level=low`: 0 vulnerabilities.
