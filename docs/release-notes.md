@@ -1,6 +1,6 @@
 # Hex Shift 3
 
-**Fixed in 3.14.1:** Static SVGs whose IDs match browser property names, such as `scroll`, now open. Internal IDs are renamed together with their references so gradients, filters, masks, clipping and linked artwork keep drawing correctly. SVG security checks remain in place.
+**Fixed in 3.14.2:** Static SVGs whose IDs match browser property names, such as `scroll`, now open. Internal IDs are renamed together with their references so gradients, filters, masks, clipping and linked artwork keep drawing correctly. SVG security checks remain in place.
 
 **New in 3.14.0:** A polygon point can be dragged. The pointer changes when it is over a point, and the point follows the pointer. Letting go records one undo. Escape while dragging a finished point puts that point back. A click on the first point of a polygon you are still drawing still closes it. Backspace and Escape still cancel only the unfinished polygon.
 

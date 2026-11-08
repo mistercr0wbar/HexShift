@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ZfKz1WwOQu1SVT8HMZJ641ci9N6hTwKSArVXpv3oPU4='; style-src 'sha256-CrJVCbwZTUbK42tk145JYZkptYxbJWjQcrkDrrLD9vg='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-747jPbtXm9LTU5UhKa8fHXjgvorz1xTtdHO9k9AAJQo='; style-src 'sha256-CrJVCbwZTUbK42tk145JYZkptYxbJWjQcrkDrrLD9vg='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta
       name="theme-color"
@@ -5250,7 +5250,7 @@ dialog details {
     };
   }
 
-  // ../../../../dev/HexShift/node_modules/dompurify/dist/purify.es.mjs
+  // node_modules/dompurify/dist/purify.es.mjs
   function _OverloadYield(e, d) {
     this.v = e, this.k = d;
   }
@@ -12738,7 +12738,7 @@ dialog details {
   // src/app.js
   var $ = (id) => document.getElementById(id);
   var pause = makePause();
-  var VERSION = "3.14.1";
+  var VERSION = "3.14.2";
   var w = 0;
   var h = 0;
   var name = "";
@@ -17660,7 +17660,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 Original C# port and code by Christian Winnerlein (CodesInChaos), public domain, https://github.com/CodesInChaos/Chaos.NaCl . Poly1305 by Andrew M. (floodyberry), MIT or public domain. Curve25519, Ed25519, Salsa20 and HSalsa20 from SUPERCOP ref10 by Dan Bernstein, public domain (http://bench.cr.yp.to/supercop.html). SHA512 by Christian Winnerlein, public domain.</pre></template>
     <template id="release-notes"><pre># Hex Shift 3
 
-**Fixed in 3.14.1:** Static SVGs whose IDs match browser property names, such as `scroll`, now open. Internal IDs are renamed together with their references so gradients, filters, masks, clipping and linked artwork keep drawing correctly. SVG security checks remain in place.
+**Fixed in 3.14.2:** Static SVGs whose IDs match browser property names, such as `scroll`, now open. Internal IDs are renamed together with their references so gradients, filters, masks, clipping and linked artwork keep drawing correctly. SVG security checks remain in place.
 
 **New in 3.14.0:** A polygon point can be dragged. The pointer changes when it is over a point, and the point follows the pointer. Letting go records one undo. Escape while dragging a finished point puts that point back. A click on the first point of a polygon you are still drawing still closes it. Backspace and Escape still cancel only the unfinished polygon.
 

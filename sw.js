@@ -1,6 +1,6 @@
 // This origin can host other projects: never touch their requests or caches.
 const PREFIX = "hexshift-shell-",
-  CACHE = PREFIX + "a3e69b4d18bde079",
+  CACHE = PREFIX + "1a9959caa489eae0",
   LEGACY = "hexshift-v1";
 const ROOT = new URL("./", self.location.href),
   SHELL = [
