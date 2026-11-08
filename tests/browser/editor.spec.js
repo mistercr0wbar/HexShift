@@ -988,6 +988,77 @@ test("SVG geometry, styles, gradients and hostile XML limits", async ({
     await expect(page.locator("#fileDims")).toContainText("512 × 256");
   }
 });
+test("SVG IDs matching browser properties preserve artwork and internal references", async ({
+  page,
+}) => {
+  const artwork = (ids) =>
+    svg(
+      `<style>#${ids.shape}{fill:url(#${ids.link})}</style>
+     <defs>
+       <linearGradient id="${ids.gradient}"><stop stop-color="#f00"/><stop offset="1" stop-color="#00f"/></linearGradient>
+       <linearGradient id="${ids.href}" href="#${ids.gradient}"/>
+       <linearGradient id="${ids.link}" xlink:href="#${ids.href}"/>
+       <clipPath id="${ids.clip}"><rect width="5" height="5"/></clipPath>
+       <mask id="${ids.mask}" mask-type="alpha"><rect width="10" height="5" fill="#fff"/></mask>
+       <filter id="${ids.filter}"><feOffset dx="1"/></filter>
+     </defs>
+     <rect id="${ids.shape}" width="10" height="5" clip-path="url('#${ids.clip}')" mask="url(#${ids.mask})" filter="url(#${ids.filter})"/>`,
+      `id="${ids.root}" xmlns:xlink="http://www.w3.org/1999/xlink"`,
+    );
+  const samples = () =>
+    page.locator("#resultCanvas").evaluate((canvas) => {
+      const ctx = canvas.getContext("2d");
+      return [20, 100, 200, 400].map((x) => [
+        ...ctx.getImageData(x, 128, 1, 1).data,
+      ]);
+    });
+  const names = [
+    "root",
+    "gradient",
+    "href",
+    "link",
+    "clip",
+    "mask",
+    "filter",
+    "shape",
+  ];
+  await page
+    .locator("#fileInput")
+    .setInputFiles(
+      artwork(Object.fromEntries(names.map((name) => [name, "safe-" + name]))),
+    );
+  await expect(page.locator("#fileDims")).toContainText("512 × 256");
+  await ready(page);
+  const expected = await samples();
+  expect(expected[0][3]).toBe(0);
+  expect(expected[1][0]).toBeGreaterThan(150);
+  expect(expected[1][3]).toBe(255);
+  expect(expected[2][2]).toBeGreaterThan(50);
+  expect(expected[3][3]).toBe(0);
+  const input = artwork(
+    Object.fromEntries(
+      names.map((name, i) => [
+        name,
+        [
+          "scroll",
+          "attributes",
+          "constructor",
+          "hexshift-svg-1",
+          "children",
+          "location",
+          "__proto__",
+          "hasOwnProperty",
+        ][i],
+      ]),
+    ),
+  );
+  input.name = "scroll (1F4DC).svg";
+  await page.locator("#fileInput").setInputFiles(input);
+  await expect(page.locator("#fileName")).toHaveText(input.name);
+  await ready(page);
+  await expect(page.locator("#status")).not.toContainText("Could not open");
+  expect(await samples()).toEqual(expected);
+});
 test("SVGs exported by Illustrator, Inkscape and icon tools open and draw", async ({
   page,
 }) => {

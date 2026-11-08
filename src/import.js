@@ -828,7 +828,7 @@ export function guardSvg(text, edge = 512) {
         a.localName === "href"
           ? a.value.match(/^#([\w.-]+)$/)
           : a.value.match(/^url\(\s*['"]?#([\w.-]+)['"]?\s*\)$/);
-      if (ref) references.push({ el, id: ref[1] });
+      if (ref) references.push({ el, attribute: a, id: ref[1] });
     }
     // Written back after the attribute check so `style` itself is never admitted raw.
     if (kept.length) el.setAttribute("style", kept.join(";"));
@@ -854,6 +854,20 @@ export function guardSvg(text, edge = 512) {
     done.add(el);
   }
   for (const el of all) visit(el);
+  // Browser property names (e.g. `scroll` or `attributes`) are valid SVG IDs
+  // but DOMPurify rejects them to prevent DOM clobbering. Namespace every ID
+  // after styles and <use> have been resolved, keeping fragment links in sync.
+  const safeIds = new Map();
+  for (const [id, el] of ids) {
+    const safe = "hexshift-svg-" + (safeIds.size + 1);
+    safeIds.set(id, safe);
+    el.setAttribute("id", safe);
+  }
+  for (const { attribute, id } of references)
+    attribute.value =
+      attribute.localName === "href"
+        ? "#" + safeIds.get(id)
+        : "url(#" + safeIds.get(id) + ")";
   const box = (root.getAttribute("viewBox") || "")
       .trim()
       .split(/[\s,]+/)

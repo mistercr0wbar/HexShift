@@ -1,5 +1,7 @@
 # Hex Shift 3
 
+**Fixed in 3.14.1:** Static SVGs whose IDs match browser property names, such as `scroll`, now open. Internal IDs are renamed together with their references so gradients, filters, masks, clipping and linked artwork keep drawing correctly. SVG security checks remain in place.
+
 **New in 3.14.0:** A polygon point can be dragged. The pointer changes when it is over a point, and the point follows the pointer. Letting go records one undo. Escape while dragging a finished point puts that point back. A click on the first point of a polygon you are still drawing still closes it. Backspace and Escape still cancel only the unfinished polygon.
 
 **New in 3.13.0:** An image that is larger than Hex Shift can edit, but no larger than 16,777,216 pixels, 16,384 pixels on a side and 16 MiB, can be downscaled while it is decoded. Hex Shift shows the original size and the size it would open, with Smooth selected and Nearest available. That choice is not the export scaling. It asks first, and it does not open the file if you cancel or if this browser cannot resize during decoding. Animated images, GIF and SVG are not offered this. Files to ZIP still reports an oversized file and does not ask. The edited image is still at most 4,194,304 pixels and 8,192 pixels on a side.
