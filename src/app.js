@@ -56,6 +56,7 @@ import {
   omissionSummary,
   parseRecipeFile,
   recipeStep,
+  remainingRecipeSteps,
   replay,
   writeRecipe,
 } from "./recipe.js";
@@ -66,7 +67,12 @@ import {
   parseSession,
   writeSession,
 } from "./session.js";
-import { screenPicker, systemColours, updateChannel } from "./host.js";
+import {
+  screenPicker,
+  systemColours,
+  updateChannel,
+  watchSave,
+} from "./host.js";
 import { createMenubar } from "./menu.js";
 import { createWorkspace } from "./workspace.js";
 import { PANELS, panelTitle } from "./layout.js";
@@ -150,10 +156,12 @@ let polygonHold = null;
 function closeSlop(pointerType) {
   return pointerType === "touch" ? 12 : 8;
 }
-let statusTimer = 0;
+let statusTimer = 0,
+  statusRevision = 0;
 // `fade` clears the message after that many ms, if nothing has replaced it.
 function status(message, { fade = 0 } = {}) {
   const line = $("status");
+  statusRevision++;
   clearTimeout(statusTimer);
   line.classList.remove("fading");
   line.textContent = message;
@@ -1758,19 +1766,15 @@ async function save(copy = false) {
           ? outputName(name, "zip", tag, settings.size)
           : named[0].name,
         over = files.filter((f) => f.limit && f.blob.size > f.limit);
-      download(blob, filename);
-      status(
-        "Prepared " +
-          filename +
-          " (" +
-          formatBytes(blob.size) +
-          "). " +
-          (over.length
-            ? "It is over the " +
+      download(
+        blob,
+        filename,
+        formatBytes(blob.size),
+        over.length
+          ? "It is over the " +
               presetById(settings.size).label.split(" · ")[0] +
-              " size limit. "
-            : "") +
-          "Choose where to save it.",
+              " size limit."
+          : "",
       );
     }
   } catch (e) {
@@ -1780,20 +1784,43 @@ async function save(copy = false) {
     buttons();
   }
 }
-// Hands a file to the browser's download (Save As in the Windows app).
-function download(blob, filename) {
+// Browser download preferences decide whether a location prompt appears.
+// The Windows host reports the outcome of its own Save As dialog.
+function download(blob, filename, details = "", warning = "") {
   const url = URL.createObjectURL(blob);
+  let revision;
+  function report(message) {
+    status(
+      "Prepared " +
+        filename +
+        (details ? " (" + details + ")" : "") +
+        ". " +
+        message +
+        (warning ? " " + warning : ""),
+    );
+    revision = statusRevision;
+  }
+  const stop = watchSave(url, (message) => {
+    if (statusRevision === revision) report(message);
+  });
+  report(
+    stop
+      ? "Waiting for Windows Save As…"
+      : "Download requested. Check your browser’s downloads.",
+  );
+  const a = document.createElement("a");
   try {
-    const a = document.createElement("a");
     a.href = url;
     a.download = filename;
     document.body.append(a);
     a.click();
-    a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 30000);
   } catch (e) {
+    stop?.();
     URL.revokeObjectURL(url);
-    throw e;
+    report("Could not start the download: " + e.message);
+  } finally {
+    a.remove();
   }
 }
 function displayPixels(data, selection) {
@@ -2438,7 +2465,6 @@ $("savePalette").onclick = () => {
     }),
     filename,
   );
-  status("Prepared " + filename + ". Choose where to save it.");
 };
 // Picking a colour from the screen. The Windows app shows its own picker, because
 // WebView2 cancels the browser's EyeDropper before it opens; elsewhere EyeDropper
@@ -2677,15 +2703,10 @@ async function exportVariants() {
         (set.id.startsWith("user-") ? "palette" : set.id) +
         ".zip";
     if (!valid()) throw Error("The image changed. Export the variants again.");
-    download(blob, filename);
-    status(
-      "Prepared " +
-        filename +
-        " (" +
-        formatBytes(blob.size) +
-        ", " +
-        files.length +
-        " files). Choose where to save it.",
+    download(
+      blob,
+      filename,
+      formatBytes(blob.size) + ", " + files.length + " files",
     );
   } catch (e) {
     status("Could not export variants: " + e.message);
@@ -2799,17 +2820,10 @@ async function saveRecipe() {
       type: "application/json",
     }),
     filename,
-  );
-  status(
-    "Prepared " +
-      filename +
-      " (" +
-      (again.steps.length
-        ? again.steps.length +
-          (again.steps.length === 1 ? " step). " : " steps). ")
-        : "outline only). ") +
-      (summary.text ? summary.text + " " : "") +
-      "Choose where to save it.",
+    again.steps.length
+      ? again.steps.length + (again.steps.length === 1 ? " step" : " steps")
+      : "outline only",
+    summary.text,
   );
 }
 // Applies a recipe on top of the current preview, as one undoable change.
@@ -2979,6 +2993,7 @@ async function applyToDocuments(all = false) {
     }
     stash();
     const sourceOutline = edit.outline.on ? { ...edit.outline } : null;
+    let applied = 0;
     for (const [i, doc] of targets.entries()) {
       batchProgress(
         "Applying recipe " +
@@ -2992,12 +3007,31 @@ async function applyToDocuments(all = false) {
       if (cancelled()) return;
       const priorSteps = documentSteps(doc, preview),
         base = preview.changed ? preview.pixels : doc.pixels,
-        // The source already shows this recipe. Bake its preview once rather
-        // than applying a relative colour shift a second time.
-        out =
+        outline = doc.edit.outline,
+        outlineChanged =
+          sourceOutline &&
+          (!outline.on ||
+            outline.widthPct !== sourceOutline.widthPct ||
+            outline.colour !== sourceOutline.colour),
+        // The source already shows the recipe. A destination may also
+        // contain some or all of it from a previous batch.
+        remaining =
           doc === source
-            ? base.slice()
-            : await replay(doc.w, doc.h, base, steps, pause, cancelled);
+            ? []
+            : remainingRecipeSteps(
+                preview.changed && priorSteps.at(-1)?.omissions?.length
+                  ? doc.edit.steps
+                  : priorSteps,
+                steps,
+              );
+      if (
+        !remaining.length &&
+        !outlineChanged &&
+        (doc !== source || !preview.changed)
+      ) continue;
+      const out = remaining.length
+        ? await replay(doc.w, doc.h, base, remaining, pause, cancelled)
+        : base;
       if (cancelled()) return;
       const old = {
         pixels: doc.pixels,
@@ -3012,7 +3046,7 @@ async function applyToDocuments(all = false) {
           newRow(1, { ...nextParams, dh: 0, ds: 0, dl: 0, manual: false }),
         ],
         active: 0,
-        steps: doc === source ? priorSteps : [...priorSteps, ...steps],
+        steps: [...priorSteps, ...remaining],
         outline: sourceOutline ? { ...sourceOutline } : { ...doc.edit.outline },
       };
       doc.history.record(
@@ -3028,6 +3062,7 @@ async function applyToDocuments(all = false) {
       doc.result = null;
       doc.revision++;
       doc.variants = null;
+      applied++;
       trimHistories(documents, source);
       if (doc === source) {
         // Keep the live references in sync even if cancellation follows.
@@ -3037,9 +3072,12 @@ async function applyToDocuments(all = false) {
     }
     if (!cancelled())
       batchProgress(
-        "Applied recipe to " +
-          targets.length +
-          " tabs. Undo is available in each tab.",
+        applied
+          ? "Applied recipe to " +
+              applied +
+              (applied === 1 ? " tab." : " tabs.") +
+              " Undo is available in each tab."
+          : "These tabs already have this recipe.",
       );
   } catch (e) {
     if (!cancelled()) status("Could not apply to tabs: " + e.message);
@@ -3087,13 +3125,12 @@ async function exportDocuments() {
     }
     const blob = await zip(files);
     if (cancelled()) return;
-    download(blob, "hexshift-tabs.zip");
-    batchProgress(
-      "Prepared hexshift-tabs.zip (" +
-        files.length +
-        " files, " +
-        formatBytes(blob.size) +
-        "). Choose where to save it.",
+    $("batchNote").textContent =
+      "Prepared hexshift-tabs.zip (" + files.length + " files).";
+    download(
+      blob,
+      "hexshift-tabs.zip",
+      files.length + " files, " + formatBytes(blob.size),
     );
   } catch (e) {
     if (!cancelled()) status("Could not export tabs: " + e.message);
@@ -3187,7 +3224,6 @@ async function runBatch(list) {
       filename = "hexshift-batch.zip",
       done = list.length - errors.length;
     if (cancelled()) return;
-    download(blob, filename);
     $("batchNote").textContent =
       (summary.text ? summary.text + " " : "") +
       "Done: " +
@@ -3196,13 +3232,7 @@ async function runBatch(list) {
       list.length +
       (list.length === 1 ? " image" : " images") +
       (errors.length ? ". errors.txt in the ZIP lists the others." : ".");
-    status(
-      "Prepared " +
-        filename +
-        " (" +
-        formatBytes(blob.size) +
-        "). Choose where to save it.",
-    );
+    download(blob, filename, formatBytes(blob.size));
   } catch (e) {
     if (!cancelled()) status("Batch failed: " + e.message);
   } finally {
@@ -4009,43 +4039,40 @@ async function saveSession() {
   if (!documents.length || batchAbort) return;
   commit("Adjust colour");
   stash();
-  const records = [];
-  for (const doc of documents) {
-    let svg = null;
-    if (doc.svgSource)
-      svg = {
-        edge: doc.svgSource.edge,
-        text: await doc.svgSource.blob.text(),
-      };
-    records.push({
-      name: doc.name,
-      width: doc.w,
-      height: doc.h,
-      still: !!doc.still,
-      original: doc.original,
-      pixels: doc.pixels,
-      overrides: doc.overrides,
-      edit: doc.edit,
-      svg,
-      view: doc.view,
-      export: doc.exportChoices || currentExport(),
-      variant: doc.variants?.set ? cloneVariantSet(doc.variants.set) : null,
-    });
-  }
-  let text;
+  const active = documents.indexOf(activeDocument),
+    filename =
+      safeStem(documents.length === 1 ? name : "hexshift") + ".hexshift";
   try {
-    text = writeSession({
-      active: Math.max(0, documents.indexOf(activeDocument)),
-      documents: records,
-    });
+    // Capture every tab before reading any SVG asynchronously.
+    const records = await Promise.all(
+      documents.map(async (doc) => {
+        const svgSource = doc.svgSource;
+        const record = {
+          name: doc.name,
+          width: doc.w,
+          height: doc.h,
+          still: !!doc.still,
+          original: doc.original,
+          pixels: doc.pixels,
+          overrides: doc.overrides.slice(),
+          edit: structuredClone(doc.edit),
+          view: doc.view,
+          export: doc.exportChoices || currentExport(),
+          variant: doc.variants?.set ? cloneVariantSet(doc.variants.set) : null,
+        };
+        return {
+          ...record,
+          svg: svgSource
+            ? { edge: svgSource.edge, text: await svgSource.blob.text() }
+            : null,
+        };
+      }),
+    );
+    const text = writeSession({ active, documents: records });
+    download(new Blob([text], { type: SESSION_MIME }), filename);
   } catch (e) {
     status("Could not save the session: " + e.message);
-    return;
   }
-  const filename =
-    safeStem(documents.length === 1 ? name : "hexshift") + ".hexshift";
-  download(new Blob([text], { type: SESSION_MIME }), filename);
-  status("Prepared " + filename + ". Choose where to save it.");
 }
 async function openSessionFile(file) {
   if (batchAbort) {

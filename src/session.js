@@ -125,10 +125,11 @@ function cleanSteps(steps, w, h) {
     if (!Array.isArray(step?.rows))
       throw Error("A baked colour step is unreadable.");
     const cleaned = {
-      rows: step.rows.map((row) => ({
-        params: cleanParams(row?.params),
-        seeds: cleanSeeds(row?.seeds, w, h),
-      })),
+      rows: step.rows.map((row) => {
+        const params = cleanParams(row?.params);
+        if (row.params.matchTarget === true) params.matchTarget = true;
+        return { params, seeds: cleanSeeds(row?.seeds, w, h) };
+      }),
     };
     // Named reasons survive. An empty list means this step left nothing
     // spatial out. Absence, and a bare approximation flag, stay as they are.

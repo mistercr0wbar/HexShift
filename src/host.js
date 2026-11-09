@@ -85,6 +85,42 @@ export function updateChannel(onState) {
   };
 }
 
+const SAVE_MESSAGES = {
+  choosing: "Choose a location in Windows Save As.",
+  saving: "Saving the file…",
+  saved: "File saved.",
+  cancelled: "Save cancelled.",
+  failed: "Windows could not save the file. Try again.",
+  busy: "Finish the other Save As dialog, then try again.",
+};
+export function watchSave(url, onMessage) {
+  const webview = window.chrome?.webview;
+  if (!webview) return null;
+  const timer = setTimeout(() => {
+    stop();
+    onMessage("Windows did not respond to the save request. Try again.");
+  }, 10000);
+  function stop() {
+    clearTimeout(timer);
+    webview.removeEventListener("message", receive);
+  }
+  function receive(event) {
+    const d = event.data;
+    if (
+      d?.type !== "save-state" ||
+      d.url !== url ||
+      typeof d.phase !== "string" ||
+      !Object.hasOwn(SAVE_MESSAGES, d.phase)
+    )
+      return;
+    clearTimeout(timer);
+    if (d.phase !== "choosing" && d.phase !== "saving") stop();
+    onMessage(SAVE_MESSAGES[d.phase]);
+  }
+  webview.addEventListener("message", receive);
+  return stop;
+}
+
 // Returns a function that starts a screen pick, or null when picking from the
 // screen isn't possible. onPicked gets "#RRGGBB", or null when nothing was
 // picked; onError gets an unexpected failure.

@@ -29,6 +29,7 @@ function cleanParams(source) {
     ? source.ramp.map((v) => String(v).toUpperCase())
     : null;
   p.connected = false;
+  if (source.matchTarget === true) p.matchTarget = true;
   validateParams(p);
   if (
     !/^#[\dA-F]{6}$/.test(p.target) ||
@@ -42,6 +43,7 @@ const keep = (p) => {
   for (const key of [...NUMBERS, ...Object.keys(CHOICES), ...FLAGS, "target"])
     out[key] = p[key];
   if (p.ramp) out.ramp = p.ramp.slice();
+  if (p.matchTarget === true) out.matchTarget = true;
   return out;
 };
 // Named reasons a recipe cannot repeat a spatial limit. Order is stable.
@@ -123,7 +125,10 @@ export function recipeStep(rows, pixels, width, labels) {
   for (const row of rows) {
     if (!row.seeds.length) continue;
     step.rows.push({
-      params: keep(row.params),
+      params: keep({
+        ...row.params,
+        matchTarget: row.params.mode === "shift" && !row.params.manual,
+      }),
       seeds: row.seeds.map((s) =>
         s.hex
           ? { hex: s.hex }
@@ -139,6 +144,22 @@ export function recipeStep(rows, pixels, width, labels) {
     });
   }
   return step;
+}
+// Keep the prefix a tab already received, including when it has edits of
+// its own between batches.
+export function remainingRecipeSteps(applied, recipe) {
+  const key = (step) =>
+    JSON.stringify([
+      step.rows.map((row) => [keep(row.params), row.seeds]),
+      step.omissions ?? (step.approximate === true ? "generic" : "unknown"),
+    ]);
+  const next = recipe.map(key);
+  let count = 0;
+  for (const step of applied) {
+    if (count === next.length) break;
+    if (key(step) === next[count]) count++;
+  }
+  return recipe.slice(count);
 }
 // A recipe can carry the outline too: { widthPct, colour }. Version 1 is colour
 // steps and no outline, so older copies can still read it. Version 2 is colour

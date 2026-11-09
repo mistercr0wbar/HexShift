@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Web.Script.Serialization;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -25,6 +26,7 @@ namespace HexShift
         readonly ScreenPicker picker = new ScreenPicker();
         bool pageAllowsClose;
         bool closePending;
+        bool saveDialogPending;
 
         [DllImport("dwmapi.dll")]
         static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
@@ -135,7 +137,10 @@ namespace HexShift
             {
                 // Reading the clipboard requires the normal explicit paste gesture.
                 // Async clipboard write does not require ClipboardRead permission.
-                args.State = CoreWebView2PermissionState.Deny;
+                // Async exports can arrive after the click gesture expires.
+                // Every download still passes the local blob and MIME checks.
+                args.State = AllowsAutomaticDownloads(core.Source, args.Uri, args.PermissionKind)
+                    ? CoreWebView2PermissionState.Allow : CoreWebView2PermissionState.Deny;
                 args.SavesInProfile = false;
                 args.Handled = true;
             };
@@ -188,6 +193,12 @@ namespace HexShift
             return IsAppDocument(document) && IsAppBlob(url) && mime != null && ExportTypes.ContainsKey(mime);
         }
 
+        internal static bool AllowsAutomaticDownloads(string document, string request, CoreWebView2PermissionKind kind)
+        {
+            return kind == CoreWebView2PermissionKind.MultipleAutomaticDownloads
+                && IsAppDocument(document) && IsAppDocument(request);
+        }
+
         internal static bool IsAppBlob(string url)
         {
             const string prefix = "blob:" + Origin + "/";
@@ -223,44 +234,98 @@ namespace HexShift
         // The page's Download button becomes a normal Save As dialog.
         void OnDownloadStarting(object sender, CoreWebView2DownloadStartingEventArgs e)
         {
-            string mime = e.DownloadOperation.MimeType;
-            if (!IsExportDownload(web.CoreWebView2.Source, e.DownloadOperation.Uri, mime))
-            { e.Cancel = true; e.Handled = true; return; }
+            CoreWebView2DownloadOperation operation = e.DownloadOperation;
+            string mime = operation.MimeType;
+            string url = operation.Uri;
+            string document = web.CoreWebView2.Source;
+            bool allowed = IsExportDownload(document, url, mime);
+            e.Handled = true;
+            if (!allowed || saveDialogPending)
+            {
+                e.Cancel = true;
+                if (IsAppDocument(document) && IsAppBlob(url))
+                    ReportSave(url, allowed ? "busy" : "failed");
+                return;
+            }
             string[] type = ExportTypes[mime];
             string extension = type[0];
             CoreWebView2Deferral deferral = e.GetDeferral();
-            e.Handled = true;
             string suggested = "";
             try { suggested = Path.GetFileNameWithoutExtension(e.ResultFilePath) + extension; } catch (Exception) { }
-            BeginInvoke(new Action(delegate
+            saveDialogPending = true;
+            try
             {
-                try
+                BeginInvoke(new Action(delegate { ShowExportDialog(e, deferral, operation, url, type, suggested); }));
+            }
+            catch (InvalidOperationException)
+            {
+                e.Cancel = true;
+                saveDialogPending = false;
+                deferral.Complete();
+                ReportSave(url, "failed");
+            }
+        }
+
+        void ShowExportDialog(CoreWebView2DownloadStartingEventArgs e, CoreWebView2Deferral deferral,
+            CoreWebView2DownloadOperation operation, string url, string[] type, string suggested)
+        {
+            string extension = type[0];
+            try
+            {
+                using (SaveFileDialog dlg = new SaveFileDialog())
                 {
-                    using (SaveFileDialog dlg = new SaveFileDialog())
+                    dlg.Title = type[2];
+                    dlg.FileName = string.IsNullOrEmpty(suggested) ? "emoji-shifted" + extension : suggested;
+                    dlg.Filter = type[1];
+                    dlg.DefaultExt = extension.Substring(1);
+                    dlg.AddExtension = true;
+                    dlg.OverwritePrompt = true;
+                    // Validate before accepting so the overwrite prompt covers the actual destination.
+                    dlg.FileOk += delegate(object s, System.ComponentModel.CancelEventArgs args)
                     {
-                        dlg.Title = type[2];
-                        dlg.FileName = string.IsNullOrEmpty(suggested) ? "emoji-shifted" + extension : suggested;
-                        dlg.Filter = type[1];
-                        dlg.DefaultExt = extension.Substring(1);
-                        dlg.AddExtension = true;
-                        dlg.OverwritePrompt = true;
-                        // Validate before accepting: changing the extension after Save As
-                        // would bypass its overwrite prompt for the actual destination.
-                        dlg.FileOk += delegate(object s, System.ComponentModel.CancelEventArgs args)
+                        if (!HasExportExtension(dlg.FileName, extension))
                         {
-                            if (!HasExportExtension(dlg.FileName, extension))
-                            {
-                                args.Cancel = true;
-                                MessageBox.Show(this, "Choose a filename ending in " + extension + ".", "Hex Shift", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                            }
-                        };
-                        if (dlg.ShowDialog(this) == DialogResult.OK) e.ResultFilePath = dlg.FileName;
-                        else e.Cancel = true;
+                            args.Cancel = true;
+                            MessageBox.Show(this, "Choose a filename ending in " + extension + ".", "Hex Shift", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        }
+                    };
+                    ReportSave(url, "choosing");
+                    if (dlg.ShowDialog(this) != DialogResult.OK)
+                    {
+                        e.Cancel = true;
+                        ReportSave(url, "cancelled");
+                        return;
                     }
+                    e.ResultFilePath = dlg.FileName;
+                    EventHandler<object> stateChanged = null;
+                    stateChanged = delegate
+                    {
+                        CoreWebView2DownloadState state = operation.State;
+                        if (state == CoreWebView2DownloadState.InProgress) return;
+                        operation.StateChanged -= stateChanged;
+                        ReportSave(url, state == CoreWebView2DownloadState.Completed ? "saved" : "failed");
+                    };
+                    operation.StateChanged += stateChanged;
+                    ReportSave(url, "saving");
                 }
-                catch (Exception) { e.Cancel = true; }
-                finally { deferral.Complete(); }
-            }));
+            }
+            catch (Exception)
+            {
+                e.Cancel = true;
+                ReportSave(url, "failed");
+            }
+            finally
+            {
+                saveDialogPending = false;
+                deferral.Complete();
+            }
+        }
+
+        void ReportSave(string url, string phase)
+        {
+            if (IsDisposed || Disposing) return;
+            try { PostToPage(new JavaScriptSerializer().Serialize(new { type = "save-state", url, phase })); }
+            catch (InvalidOperationException) { }
         }
 
         void OnNewWindow(object sender, CoreWebView2NewWindowRequestedEventArgs e)

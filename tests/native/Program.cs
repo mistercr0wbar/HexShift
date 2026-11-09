@@ -31,6 +31,14 @@ class HostTests
         Check(!(bool)Call("MainForm", "IsExportDownload", "https://evil/", blob, "image/png"), "Untrusted download document");
         Check(!(bool)Call("MainForm", "IsExportDownload", "https://hexshift.invalid/", "https://evil/a.png", "image/png"), "Remote download denied");
         Check(!(bool)Call("MainForm", "IsExportDownload", "https://hexshift.invalid/", "blob:https://hexshift.invalid/invalid", "image/png"), "Malformed blob denied");
+        MethodInfo permission = app.GetType("HexShift.MainForm").GetMethod("AllowsAutomaticDownloads", BindingFlags.Static | BindingFlags.NonPublic);
+        Type permissionKind = permission.GetParameters()[2].ParameterType;
+        object automatic = Enum.Parse(permissionKind, "MultipleAutomaticDownloads");
+        string trusted = "https://hexshift.invalid/";
+        Check((bool)Call("MainForm", "AllowsAutomaticDownloads", trusted, trusted, automatic), "Repeated exports can reach Save As");
+        Check(!(bool)Call("MainForm", "AllowsAutomaticDownloads", trusted, "https://evil/", automatic), "Foreign requests cannot enable automatic downloads");
+        Check(!(bool)Call("MainForm", "AllowsAutomaticDownloads", "https://evil/", trusted, automatic), "Foreign documents cannot enable automatic downloads");
+        Check(!(bool)Call("MainForm", "AllowsAutomaticDownloads", trusted, trusted, Enum.Parse(permissionKind, "ClipboardRead")), "Other browser permissions remain denied");
         Check((bool)Call("MainForm", "HasExportExtension", "image.PNG", ".png"), "PNG extension allowed");
         Check((bool)Call("MainForm", "HasExportExtension", "image.webp", ".webp"), "WebP extension allowed");
         Check((bool)Call("MainForm", "HasExportExtension", "pack.ZIP", ".zip"), "ZIP extension allowed");

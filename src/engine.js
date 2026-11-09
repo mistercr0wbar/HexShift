@@ -8,6 +8,7 @@ import {
   fromModel,
   anchorRemap,
   saturationRemap,
+  deltasFor,
 } from "./colour.js";
 import { mainDeltas, rampSamples, rampShift } from "./tones.js";
 export const MAX_PIXELS = 4194304;
@@ -498,6 +499,27 @@ function anchorColour(image, sel) {
     }
   return total ? sum.map((v) => Math.round(v / total)) : null;
 }
+// A recipe's seeds are swatches from another image. Use the closest colour
+// actually matched by its last represented seed as this image's anchor.
+async function recipeAnchor(image, sel, check) {
+  let colour = -1,
+    seed = -1,
+    distance = Infinity;
+  for (let c = 0; c < sel.weight.length; c++) {
+    if ((c & 16383) === 0) await check();
+    const k = sel.nearest[c];
+    if (!sel.weight[c] || k < seed) continue;
+    const d = sampleDistance(image.hsl, c * 4, sel.source[k].v);
+    if (k > seed || d < distance) {
+      colour = c;
+      seed = k;
+      distance = d;
+    }
+  }
+  return colour < 0
+    ? anchorColour(image, sel)
+    : image.colours.subarray(colour * 3, colour * 3 + 3);
+}
 // Shift: every shade takes the target hue (anchor + dh), so a red-to-pink
 // heart becomes one blue rather than violet-to-azure; shading lives in
 // saturation and lightness. With shading protection the anchor's saturation
@@ -828,14 +850,29 @@ async function editRow(image, p, seeds, overrides, check, polygon = null) {
   const pixels = new Uint8ClampedArray(data),
     effective = new Float32Array(n),
     target = parseHex(p.target),
-    anchor = p.mode === "shift" && sel.count ? anchorColour(image, sel) : null,
+    anchor =
+      p.mode === "shift" && sel.count
+        ? p.matchTarget
+          ? await recipeAnchor(image, sel, check)
+          : anchorColour(image, sel)
+        : null,
     unmixing = p.mode === "transparent" && p.cleanEdges && sel.source.length,
     cache = new Map();
   let shift,
     capped = false;
+  const adjustment =
+    anchor && p.matchTarget
+      ? { ...p, ...deltasFor(anchor, target, p.model) }
+      : p;
   // A shift that asks for no change (the target is the sample's own colour)
   // changes nothing, so a row can claim its colours without recolouring them.
-  if (anchor && !p.ramp?.length && !p.dh && !p.ds && !p.dl)
+  if (
+    anchor &&
+    !p.ramp?.length &&
+    !adjustment.dh &&
+    !adjustment.ds &&
+    !adjustment.dl
+  )
     shift = (rgb) => rgb;
   else if (anchor) {
     // A ramp (skin tones) maps the selection's shades onto its colours; with
@@ -852,7 +889,7 @@ async function editRow(image, p, seeds, overrides, check, polygon = null) {
     if (ramped) shift = ramped;
     else
       ({ shift, capped } = shifter(
-        p.ramp?.length ? { ...p, ...mainDeltas(p, anchor) } : p,
+        p.ramp?.length ? { ...p, ...mainDeltas(p, anchor) } : adjustment,
         anchor,
       ));
   }

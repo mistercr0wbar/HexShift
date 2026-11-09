@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-747jPbtXm9LTU5UhKa8fHXjgvorz1xTtdHO9k9AAJQo='; style-src 'sha256-CrJVCbwZTUbK42tk145JYZkptYxbJWjQcrkDrrLD9vg='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-UWBk1aNH01P5DxI+V5Wdb6g5fNT0jOK508nkFksi9Gg='; style-src 'sha256-CrJVCbwZTUbK42tk145JYZkptYxbJWjQcrkDrrLD9vg='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta
       name="theme-color"
@@ -4649,6 +4649,21 @@ dialog details {
       }
     return total ? sum.map((v) => Math.round(v / total)) : null;
   }
+  async function recipeAnchor(image, sel, check) {
+    let colour = -1, seed = -1, distance = Infinity;
+    for (let c = 0; c < sel.weight.length; c++) {
+      if ((c & 16383) === 0) await check();
+      const k = sel.nearest[c];
+      if (!sel.weight[c] || k < seed) continue;
+      const d = sampleDistance(image.hsl, c * 4, sel.source[k].v);
+      if (k > seed || d < distance) {
+        colour = c;
+        seed = k;
+        distance = d;
+      }
+    }
+    return colour < 0 ? anchorColour(image, sel) : image.colours.subarray(colour * 3, colour * 3 + 3);
+  }
   function shifter(p, anchorRgb) {
     const [ah, as, al] = toModel(anchorRgb, p.model), neutral = rgbToHsl(...anchorRgb)[3] < NEUTRAL2, rawS = as + p.ds / 100, rawL = al + p.dl / 100, ts = clamp(rawS, 0, 1), tl = clamp(rawL, 0, 1), th = ah + p.dh;
     const shift = (rgb) => {
@@ -4845,9 +4860,10 @@ dialog details {
   async function editRow(image, p, seeds2, overrides2, check, polygon = null) {
     const { width: w2, height: h2, data, ids, colours } = image, n = w2 * h2;
     const sel = await selectMask(image, p, seeds2, overrides2, check, polygon), { mask } = sel;
-    const pixels2 = new Uint8ClampedArray(data), effective = new Float32Array(n), target = parseHex(p.target), anchor = p.mode === "shift" && sel.count ? anchorColour(image, sel) : null, unmixing = p.mode === "transparent" && p.cleanEdges && sel.source.length, cache = /* @__PURE__ */ new Map();
+    const pixels2 = new Uint8ClampedArray(data), effective = new Float32Array(n), target = parseHex(p.target), anchor = p.mode === "shift" && sel.count ? p.matchTarget ? await recipeAnchor(image, sel, check) : anchorColour(image, sel) : null, unmixing = p.mode === "transparent" && p.cleanEdges && sel.source.length, cache = /* @__PURE__ */ new Map();
     let shift, capped = false;
-    if (anchor && !p.ramp?.length && !p.dh && !p.ds && !p.dl)
+    const adjustment = anchor && p.matchTarget ? { ...p, ...deltasFor(anchor, target, p.model) } : p;
+    if (anchor && !p.ramp?.length && !adjustment.dh && !adjustment.ds && !adjustment.dl)
       shift = (rgb) => rgb;
     else if (anchor) {
       let ramped = null;
@@ -4862,7 +4878,7 @@ dialog details {
       if (ramped) shift = ramped;
       else
         ({ shift, capped } = shifter(
-          p.ramp?.length ? { ...p, ...mainDeltas(p, anchor) } : p,
+          p.ramp?.length ? { ...p, ...mainDeltas(p, anchor) } : adjustment,
           anchor
         ));
     }
@@ -8963,6 +8979,7 @@ dialog details {
     if ("target" in source) p.target = String(source.target).toUpperCase();
     p.ramp = Array.isArray(source.ramp) ? source.ramp.map((v) => String(v).toUpperCase()) : null;
     p.connected = false;
+    if (source.matchTarget === true) p.matchTarget = true;
     validateParams(p);
     if (!/^#[\dA-F]{6}$/.test(p.target) || p.ramp?.some((v) => !/^#[\dA-F]{6}$/.test(v)))
       throw Error("Recipe colours must be #RRGGBB.");
@@ -8973,6 +8990,7 @@ dialog details {
     for (const key of [...NUMBERS, ...Object.keys(CHOICES), ...FLAGS, "target"])
       out[key] = p[key];
     if (p.ramp) out.ramp = p.ramp.slice();
+    if (p.matchTarget === true) out.matchTarget = true;
     return out;
   };
   var OMISSION_REASONS = ["brush", "connected", "polygon"];
@@ -9036,7 +9054,10 @@ dialog details {
     for (const row of rows) {
       if (!row.seeds.length) continue;
       step.rows.push({
-        params: keep(row.params),
+        params: keep({
+          ...row.params,
+          matchTarget: row.params.mode === "shift" && !row.params.manual
+        }),
         seeds: row.seeds.map(
           (s) => s.hex ? { hex: s.hex } : {
             hex: toHex(
@@ -9050,6 +9071,19 @@ dialog details {
       });
     }
     return step;
+  }
+  function remainingRecipeSteps(applied, recipe) {
+    const key = (step) => JSON.stringify([
+      step.rows.map((row) => [keep(row.params), row.seeds]),
+      step.omissions ?? (step.approximate === true ? "generic" : "unknown")
+    ]);
+    const next = recipe.map(key);
+    let count = 0;
+    for (const step of applied) {
+      if (count === next.length) break;
+      if (key(step) === next[count]) count++;
+    }
+    return recipe.slice(count);
   }
   var OUTLINE_MIN = 0.5;
   var OUTLINE_MAX = 15;
@@ -9254,10 +9288,11 @@ dialog details {
       if (!Array.isArray(step?.rows))
         throw Error("A baked colour step is unreadable.");
       const cleaned = {
-        rows: step.rows.map((row) => ({
-          params: cleanParams2(row?.params),
-          seeds: cleanSeeds(row?.seeds, w2, h2)
-        }))
+        rows: step.rows.map((row) => {
+          const params2 = cleanParams2(row?.params);
+          if (row.params.matchTarget === true) params2.matchTarget = true;
+          return { params: params2, seeds: cleanSeeds(row?.seeds, w2, h2) };
+        })
       };
       if (Array.isArray(step.omissions))
         cleaned.omissions = cleanStepOmissions(step.omissions);
@@ -9529,6 +9564,36 @@ dialog details {
       setAuto: (on) => webview.postMessage(on ? "auto-updates-on" : "auto-updates-off"),
       request: () => webview.postMessage("update-state")
     };
+  }
+  var SAVE_MESSAGES = {
+    choosing: "Choose a location in Windows Save As.",
+    saving: "Saving the file\u2026",
+    saved: "File saved.",
+    cancelled: "Save cancelled.",
+    failed: "Windows could not save the file. Try again.",
+    busy: "Finish the other Save As dialog, then try again."
+  };
+  function watchSave(url, onMessage) {
+    const webview = window.chrome?.webview;
+    if (!webview) return null;
+    const timer = setTimeout(() => {
+      stop();
+      onMessage("Windows did not respond to the save request. Try again.");
+    }, 1e4);
+    function stop() {
+      clearTimeout(timer);
+      webview.removeEventListener("message", receive2);
+    }
+    function receive2(event) {
+      const d = event.data;
+      if (d?.type !== "save-state" || d.url !== url || typeof d.phase !== "string" || !Object.hasOwn(SAVE_MESSAGES, d.phase))
+        return;
+      clearTimeout(timer);
+      if (d.phase !== "choosing" && d.phase !== "saving") stop();
+      onMessage(SAVE_MESSAGES[d.phase]);
+    }
+    webview.addEventListener("message", receive2);
+    return stop;
   }
   function screenPicker(onPicked, onError) {
     const webview = window.chrome?.webview;
@@ -12738,7 +12803,7 @@ dialog details {
   // src/app.js
   var $ = (id) => document.getElementById(id);
   var pause = makePause();
-  var VERSION = "3.14.2";
+  var VERSION = "3.14.3";
   var w = 0;
   var h = 0;
   var name = "";
@@ -12799,8 +12864,10 @@ dialog details {
     return pointerType === "touch" ? 12 : 8;
   }
   var statusTimer = 0;
+  var statusRevision = 0;
   function status(message, { fade = 0 } = {}) {
     const line2 = $("status");
+    statusRevision++;
     clearTimeout(statusTimer);
     line2.classList.remove("fading");
     line2.textContent = message;
@@ -13681,7 +13748,7 @@ dialog details {
     let url;
     try {
       url = URL.createObjectURL(
-        new Blob(['(()=>{var U=(t,e,n)=>Math.min(n,Math.max(e,t)),$=(t,e)=>Math.abs((t-e+540)%360-180),Y=(t,e)=>(t-e+540)%360-180;function j(t,e,n){t/=255,e/=255,n/=255;let o=Math.max(t,e,n),i=Math.min(t,e,n),r=o-i,a=(o+i)/2,l=0;return r&&(l=o===t?(e-n)/r%6:o===e?(n-t)/r+2:(t-e)/r+4),[(l*60+360)%360,r?r/(1-Math.abs(2*a-1)):0,a,r]}function Mt(t,e,n){t=(t%360+360)%360,e=U(e,0,1),n=U(n,0,1);let o=(1-Math.abs(2*n-1))*e,i=o*(1-Math.abs(t/60%2-1)),r=n-o/2,[a,l,f]=t<60?[o,i,0]:t<120?[i,o,0]:t<180?[0,o,i]:t<240?[0,i,o]:t<300?[i,0,o]:[o,0,i];return[a,l,f].map(u=>Math.round((u+r)*255))}function C(t){let e=String(t).trim().replace(/^#/,"");return/^[\\da-f]{3}$/i.test(e)&&(e=[...e].map(n=>n+n).join("")),/^[\\da-f]{6}$/i.test(e)?[0,2,4].map(n=>parseInt(e.slice(n,n+2),16)):null}var et=(t,e,n)=>"#"+[t,e,n].map(o=>U(Math.round(o),0,255).toString(16).padStart(2,"0")).join("").toUpperCase(),V=Float32Array.from({length:256},(t,e)=>{let n=e/255;return n<=.04045?n/12.92:((n+.055)/1.055)**2.4}),bt=t=>255*(t<=.0031308?12.92*t:1.055*Math.max(0,t)**(1/2.4)-.055);function It(t,e,n){let o=V[t],i=V[e],r=V[n],a=Math.cbrt(.4122214708*o+.5363325363*i+.0514459929*r),l=Math.cbrt(.2119034982*o+.6806995451*i+.1073969566*r),f=Math.cbrt(.0883024619*o+.2817188376*i+.6299787005*r),u=.2104542553*a+.793617785*l-.0040720468*f,c=1.9779984951*a-2.428592205*l+.4505937099*f,h=.0259040371*a+.7827717662*l-.808675766*f;return[u,Math.hypot(c,h),(Math.atan2(h,c)*180/Math.PI+360)%360]}function z(t,e,n){let o=e*Math.cos(n*Math.PI/180),i=e*Math.sin(n*Math.PI/180),r=(t+.3963377774*o+.2158037573*i)**3,a=(t-.1055613458*o-.0638541728*i)**3,l=(t-.0894841775*o-1.291485548*i)**3;return[4.0767416621*r-3.3077115913*a+.2309699292*l,-1.2684380046*r+2.6097574011*a-.3413193965*l,-.0041960863*r-.7034186147*a+1.707614701*l]}var tt=t=>t.every(e=>e>=-1e-4&&e<=1+1e-4);function At(t,e,n){t=U(t,0,1),e=Math.max(0,e);let o=z(t,e,n);if(!tt(o)){let i=0,r=e;for(let a=0;a<16;a++){let l=(i+r)/2;tt(z(t,l,n))?i=l:r=l}o=z(t,i,n)}return o.map(i=>U(Math.round(bt(i)),0,255))}var nt=.4;function _(t,e){if(e==="hsl"){let[r,a,l]=j(...t);return[r,a,l]}let[n,o,i]=It(...t);return[i,Math.min(1,o/nt),n]}var X=(t,e,n,o)=>o==="hsl"?Mt(t,e,n):At(n,e*nt,t);function rt(t,e,n){let[o,i,r]=_(t,n),[a,l,f]=_(e,n);return{dh:Y(a,o),ds:(l-i)*100,dl:(f-r)*100}}function J(t,e,n){return t<=e?e>0?t*n/e:n:e<1?n+(t-e)*(1-n)/(1-e):n}var ot=(t,e,n)=>n<e?t*n/e:J(t,e,n);var Et=.06;function kt(t,e){let n=t.length,o=[],i=new Array(n);for(let r=0;r<n-1;r++)o.push((e[r+1]-e[r])/(t[r+1]-t[r]));i[0]=o[0],i[n-1]=o[n-2];for(let r=1;r<n-1;r++)i[r]=o[r-1]*o[r]>0?(o[r-1]+o[r])/2:0;for(let r=0;r<n-1;r++){if(o[r]===0){i[r]=i[r+1]=0;continue}let a=i[r]/o[r],l=i[r+1]/o[r],f=a*a+l*l;if(f>9){let u=3/Math.sqrt(f);i[r]=u*a*o[r],i[r+1]=u*l*o[r]}}return r=>{if(r<=t[0])return e[0];if(r>=t[n-1])return e[n-1];let a=0;for(;r>t[a+1];)a++;let l=t[a+1]-t[a],f=(r-t[a])/l,u=f*f,c=u*f;return(2*c-3*u+1)*e[a]+(c-2*u+f)*l*i[a]+(3*u-2*c)*e[a+1]+(c-u)*l*i[a+1]}}function Q(t,e){return n=>{if(n<=t[0])return e[0];let o=t.length;if(n>=t[o-1])return e[o-1];let i=0;for(;n>t[i+1];)i++;return e[i]+(e[i+1]-e[i])*(n-t[i])/(t[i+1]-t[i])}}function Nt(t,e){let n=[...t].sort((a,l)=>a.l-l.l),o=n.reduce((a,l)=>a+l.weight,0);if(!o)return[];let i=[];for(let a=0,l=0,f=0;a<e;a++){let u=0,c=0,h=o*(a+1)/e;for(;f<n.length&&l+n[f].weight/2<=h;f++)u+=n[f].l*n[f].weight,c+=n[f].weight,l+=n[f].weight;c&&i.push(u/c)}let r=[];for(let a=0;a<32;a++){r=i.map(()=>[]);for(let u of n){let c=0;for(let h=1;h<i.length;h++)Math.abs(u.l-i[h])<Math.abs(u.l-i[c])&&(c=h);r[c].push(u)}r=r.filter(u=>u.length);let l=r.map(u=>u.reduce((c,h)=>c+h.l*h.weight,0)/u.reduce((c,h)=>c+h.weight,0)),f=l.length===i.length&&l.every((u,c)=>u===i[c]);if(i=l,f)break}return r.map(at)}function at(t){let e=t.reduce((a,l)=>a+l.weight,0),n=0,o=0,i=0,r=0;for(let a of t){let l=a.h*Math.PI/180,f=a.weight*Math.max(a.s,1e-6);n+=Math.cos(l)*f,o+=Math.sin(l)*f,i+=a.l*a.weight,r+=a.s*a.weight}return{h:(Math.atan2(o,n)*180/Math.PI+360)%360,s:r/e,l:i/e,weight:e,neutral:t.every(a=>a.neutral),members:t}}function it(t,e,n){let o=t.ramp.map(M=>_(C(M),t.model)).sort((M,E)=>M[2]-E[2]),i=Nt(e,o.length),r=[];for(let M of i)r.length&&M.l-r.at(-1).l<1/255?r.push(at([...r.pop().members,...M.members])):r.push(M);if(r.length<2)return null;let a=r.length,l=r.map((M,E)=>o[Math.round(E*(o.length-1)/(a-1))]),f=r.map(M=>M.l),u=l.map(M=>M[2]),c=[],h=[];f[0]>0&&(c.push(0),h.push(0)),c.push(...f),h.push(...u),f.at(-1)<1&&(c.push(1),h.push(1));let d=kt(c,h),A=r.every(M=>M.neutral),p=[];r.forEach((M,E)=>{let S=A?l[E][0]:Y(l[E][0],M.h);if(E){for(;S-p[E-1]>180;)S-=360;for(;S-p[E-1]<-180;)S+=360}p.push(S)});let F=Q(f,p),T=A?Q(f,l.map(M=>M[1])):Q(f,l.map((M,E)=>Math.log(U(M[1]/Math.max(r[E].s,.01),1/64,64))));return M=>{let[E,S,v]=_(M,t.model);return X(A?F(v):E+F(v),A?U(T(v),0,1):U(S*Math.exp(T(v)),0,1),U(d(v),0,1),t.model)}}function st(t,e,n){let o=[];for(let i=0;i<e.length;i++)if(e[i]>0){let r=[t[i*3],t[i*3+1],t[i*3+2]],[a,l,f]=_(r,n);o.push({h:a,s:l,l:f,weight:e[i],neutral:j(...r)[3]<Et})}return o}var lt=(t,e)=>rt(e,C(t.ramp[0]),t.model);var Ft=4194304,q=.06,St=2,Tt=.2;function vt(t,e,n){if(!Number.isInteger(t)||!Number.isInteger(e)||t<1||e<1||t>8192||e>8192||t*e>Ft||!(n instanceof Uint8ClampedArray)||n.length!==t*e*4)throw Error("Invalid image dimensions or pixel buffer.")}var Rt=16,ht=64,Ut=128,dt=.12,ft=4*dt,ct=99;function Dt(t,e,n){if(!Array.isArray(t)||t.length>ht||t.some(o=>typeof o?.hex=="string"?!/^#[\\dA-F]{6}$/i.test(o.hex):!Number.isInteger(o?.x)||!Number.isInteger(o.y)||o.x<0||o.y<0||o.x>=e||o.y>=n))throw Error("Invalid colour samples.")}function Pt(t){let e={hueTol:[0,180],shadeTol:[0,100],soft:[0,100],feather:[0,8],dh:[-180,180],ds:[-100,100],dl:[-100,100]};for(let[n,[o,i]]of Object.entries(e))if(!Number.isFinite(t[n])||t[n]<o||t[n]>i)throw Error("Invalid processing parameter: "+n);if(!["shift","flat","transparent"].includes(t.mode)||!["oklch","hsl"].includes(t.model)||!C(t.target)||typeof t.protect!="boolean"||typeof t.connected!="boolean"||typeof t.cleanEdges!="boolean")throw Error("Invalid colour operation.");if(t.ramp!=null&&(!Array.isArray(t.ramp)||t.ramp.length<1||t.ramp.length>8||t.ramp.some(n=>typeof n!="string"||!C(n))))throw Error("Invalid colour ramp.")}function mt(t,e,n){if(!Array.isArray(t)||t.length<3||t.length>Ut||t.some(o=>!Number.isInteger(o?.x)||!Number.isInteger(o?.y)||o.x<0||o.y<0||o.x>=e||o.y>=n))throw Error("Invalid polygon.")}function Ot(t,e,n){let o=new Uint8Array(t*e),i=n.length;if(i<3)return o;let r=f=>f.x+.5,a=f=>f.y+.5,l=(f,u)=>{f>=0&&u>=0&&f<t&&u<e&&(o[u*t+f]=1)};for(let f=0;f<i;f++)l(n[f].x,n[f].y);for(let f=0;f<e;f++){let u=f+.5,c=[];for(let h=0;h<i;h++){let d=n[h],A=n[(h+1)%i],p=a(d),F=a(A),T=r(d),M=r(A);if(p===F){if(p===u){let E=Math.min(d.x,A.x),S=Math.max(d.x,A.x);for(let v=E;v<=S;v++)l(v,f)}continue}p>u!=F>u&&c.push(T+(u-p)*(M-T)/(F-p))}c.sort((h,d)=>h-d);for(let h=0;h+1<c.length;h+=2){let d=Math.ceil(c[h]-.5-1e-8),A=Math.floor(c[h+1]-.5+1e-8);for(let p=Math.max(0,d);p<=Math.min(t-1,A);p++)l(p,f)}}return o}function _t(t,e,n,o,i){if(!Array.isArray(t)||t.length<1||t.length>Rt)throw Error("Invalid colour map.");let r=new Set,a=0;for(let l of t){if(!Number.isInteger(l?.id)||l.id<1||l.id>127||r.has(l.id))throw Error("Invalid colour map.");r.add(l.id),Pt(l.params),Dt(l.seeds,o,i),l.polygon!=null&&mt(l.polygon,o,i),a+=l.seeds.length}if(a>ht)throw Error("Invalid colour samples.");if(!Number.isInteger(n)||n<0||n>=t.length)throw Error("Invalid colour map.");if(!(e instanceof Int8Array)||e.length!==o*i)throw Error("Invalid selection buffer.");for(let l=0;l<e.length;l++)if(e[l]&&e[l]!==-1&&!r.has(e[l]))throw Error("Invalid brush override.")}async function pt(t,e,n,o=async()=>{},i=()=>!1){vt(t,e,n);let r=t*e,a=new Int32Array(r),l=[],f=new Map,u=r>1<<20,c=u?new Int32Array(1<<24):new Map,h=0;for(let p=0;p<r;p++){if((p&16383)===0&&(await o(),i()))throw Error("Cancelled");let F=p*4;if(!n[F+3]){a[p]=-1;continue}let T=n[F]<<16|n[F+1]<<8|n[F+2],M=(u?c[T]:c.get(T))||0;M||(M=++h,u?c[T]=M:c.set(T,M),l.push(n[F],n[F+1],n[F+2])),a[p]=M-1;let E=(n[F]>>4)*256+(n[F+1]>>4)*16+(n[F+2]>>4),S=f.get(E);S?S.weight+=n[F+3]:f.set(E,{weight:n[F+3],x:p%t,y:Math.floor(p/t),hex:et(...n.subarray(F,F+3))})}let d=Uint8Array.from(l),A=new Float32Array(h*4);for(let p=0;p<h;p++){if((p&16383)===0&&(await o(),i()))throw Error("Cancelled");A.set(j(d[p*3],d[p*3+1],d[p*3+2]),p*4)}return{width:t,height:e,data:n,ids:a,colours:d,hsl:A,palette:[...f.values()].sort((p,F)=>F.weight-p.weight).slice(0,12)}}function Ct(t,e){let{width:n,ids:o,hsl:i,colours:r}=t,a=[];for(let l of e){if(typeof l.hex=="string"){let c=C(l.hex);a.push({i:-1,rgb:c,v:Float32Array.from(j(...c))});continue}let f=l.y*n+l.x,u=o[f];u>=0&&a.push({i:f,rgb:[r[u*3],r[u*3+1],r[u*3+2]],v:i.subarray(u*4,u*4+4)})}return a}function jt(t,e,n){if(t[e+3]<q)return Math.abs(t[e+2]-n[2])/2;let o=Math.max(Math.abs(t[e+1]-n[1]),Math.abs(t[e+2]-n[2]));return $(t[e],n[0])/45+o/2}async function qt(t,e,n,o,i,r=null){let{width:a,height:l,data:f,ids:u,hsl:c,colours:h}=t,d=a*l,A=c.length/4;r!=null&&mt(r,a,l);let p=Ct(t,n),F=new Float32Array(A),T=new Float32Array(A).fill(ct),M=new Uint8Array(A);if(p.length)for(let b=0;b<A;b++){(b&16383)===0&&await i();let w=b*4,k=c[w+3]<q,N=1/0,s=1/0,I=ct,y=-1,g=0;for(let m=0;m<p.length;m++){let x=p[m].v,R=k?Math.abs(c[w+2]-x[2]):Math.max(Math.abs(c[w+1]-x[1]),Math.abs(c[w+2]-x[2])),P=$(c[w],x[0])/180+R;if(P<s&&(s=P,g=m),k!==x[3]<q)continue;I=Math.min(I,jt(c,w,x));let K=$(c[w],x[0]),W=Math.max(k?0:e.hueTol?K/e.hueTol:K<.5?0:1/0,e.shadeTol?R/(e.shadeTol/100):R<.004?0:1/0);W<N&&(N=W,y=m)}M[b]=y>=0?y:g,T[b]=I,N<=1&&(F[b]=e.soft?Math.min(1,(1-N)/(e.soft/100)):1)}let E=new Float32Array(d);for(let b=0;b<d;b++)(b&16383)===0&&await i(),u[b]>=0&&(E[b]=F[u[b]]);if(r){let b=Ot(a,l,r);for(let w=0;w<d;w++)(w&16383)===0&&await i(),b[w]||(E[w]=0)}if(e.connected&&p.length){let b=new Uint8Array(d),w=new Int32Array(d),k=0,N=0;for(let{i:s}of p)s>=0&&E[s]>0&&!b[s]&&(b[s]=1,w[N++]=s);for(;k<N;){(k&16383)===0&&await i();let s=w[k++],I=s%a,y=Math.floor(s/a);for(let g=-1;g<=1;g++)for(let m=-1;m<=1;m++){let x=I+m,R=y+g,P=R*a+x;x>=0&&x<a&&R>=0&&R<l&&!b[P]&&E[P]>0&&(b[P]=1,w[N++]=P)}}for(let s=0;s<d;s++)(s&16383)===0&&await i(),b[s]||(E[s]=0)}for(let b=0;b<d;b++){if((b&16383)===0&&await i(),o[b]!==0&&o[b]!==1&&o[b]!==-1)throw Error("Invalid brush override.");o[b]&&(E[b]=f[b*4+3]&&o[b]>0?1:0)}let S=Math.round(e.feather);if(S){let b=new Float32Array(d);for(let w=0;w<l;w++){(w&15)===0&&await i();let k=0;for(let N=-S;N<=S;N++)k+=E[w*a+U(N,0,a-1)];for(let N=0;N<a;N++)b[w*a+N]=k/(S*2+1),k+=E[w*a+U(N+S+1,0,a-1)]-E[w*a+U(N-S,0,a-1)]}for(let w=0;w<a;w++){(w&15)===0&&await i();let k=0;for(let N=-S;N<=S;N++)k+=b[U(N,0,l-1)*a+w];for(let N=0;N<l;N++)E[N*a+w]=f[(N*a+w)*4+3]?k/(S*2+1):0,k+=b[U(N+S+1,0,l-1)*a+w]-b[U(N-S,0,l-1)*a+w]}}let v=0,D=0;for(let b=0;b<d;b++)(b&16383)===0&&await i(),f[b*4+3]&&D++,E[b]>0&&v++;return{mask:E,weight:F,score:T,nearest:M,source:p,count:v,opaque:D}}async function ut(t,e,n,o){let i=t*e,r=new Uint8Array(i);for(let a=0;a<i;a++)(a&16383)===0&&await o(),n(a)&&(r[a]=1);for(let a=2;a<=St+1;a++)for(let l=0;l<i;l++){if((l&16383)===0&&await o(),r[l])continue;let f=l%t,u=(l-f)/t;for(let c=-1;c<=1&&!r[l];c++)for(let h=-1;h<=1;h++){let d=f+h,A=u+c,p=A*t+d;if(d>=0&&d<t&&A>=0&&A<e&&r[p]&&r[p]<a){r[l]=a;break}}}return r}function Ht(t,e){let{data:n}=t;if(e.source.length)return e.source.at(-1).rgb;let o=[0,0,0],i=0;for(let r=0;r<e.mask.length;r++)if(e.mask[r]>0){for(let a=0;a<3;a++)o[a]+=n[r*4+a]*e.mask[r];i+=e.mask[r]}return i?o.map(r=>Math.round(r/i)):null}function Lt(t,e){let[n,o,i]=_(e,t.model),r=j(...e)[3]<q,a=o+t.ds/100,l=i+t.dl/100,f=U(a,0,1),u=U(l,0,1),c=n+t.dh;return{shift:d=>{let[,A,p]=_(d,t.model);return X(c,r?f:t.protect?ot(A,o,f):U(A+t.ds/100,0,1),t.protect?J(p,i,u):U(p+t.dl/100,0,1),t.model)},capped:a!==f||l!==u}}function Kt(t,e){let n=0;for(let o=0;o<3;o++){let i=t[o]/255,r=e[o]/255;i>r?n=Math.max(n,(i-r)/(1-r)):i<r&&(n=Math.max(n,(r-i)/r))}return n=Math.round(n*255)/255,n?[...[0,1,2].map(o=>U(Math.round((t[o]-(1-n)*e[o])/n),0,255)),n]:[0,0,0,0]}var Wt=(t,e)=>async()=>{if(await t(),e())throw Error("Cancelled")};async function gt(t,e,n,o,i=async()=>{},r=()=>!1){let{width:a,height:l,data:f,ids:u}=t,c=a*l;_t(e,n,o,a,l);let h=Wt(i,r),d=new Uint8ClampedArray(f),A=new Float32Array(4*c),p=new Float32Array(c),F=new Float32Array(c),T=new Float32Array(c),M=new Uint8Array(c),E=new Int8Array(c).fill(-1),S=new Int8Array(c),v=[],D=null;for(let[w,k]of e.entries()){for(let s=0;s<c;s++)(s&16383)===0&&await h(),S[s]=n[s]===k.id?1:n[s]?-1:0;let N=await Xt(t,k.params,k.seeds,S,h,k.polygon??null);v.push(N.count),w===o&&(D=N);for(let s=0;s<c;s++){(s&16383)===0&&await h();let I=N.weight[s];if(!(I>0))continue;let y=n[s]===k.id||u[s]<0?0:N.score[u[s]],g=s*4;if(M[s]&&y>F[s]+ft)continue;if(!M[s]||y<F[s]-ft){d.set(N.pixels.subarray(g,g+4),g),F[s]=y,M[s]=1;for(let x=0;x<4;x++)A[g+x]=I*N.pixels[g+x];p[s]=T[s]=I,E[s]=w;continue}let m=I*Math.exp(-(y-F[s])/dt);M[s]++;for(let x=0;x<4;x++)A[g+x]+=m*N.pixels[g+x];p[s]+=m,m>T[s]&&(T[s]=m,E[s]=w)}}for(let w=0;w<c;w++)if((w&16383)===0&&await h(),M[w]>1&&p[w]>0)for(let k=0;k<4;k++)d[w*4+k]=A[w*4+k]/p[w];e.length>1&&await $t(t,e,E,d,h);let b=0;for(let w=0;w<c;w++){(w&16383)===0&&await h();let k=w*4;(d[k]!==f[k]||d[k+1]!==f[k+1]||d[k+2]!==f[k+2]||d[k+3]!==f[k+3])&&b++}return{pixels:d,mask:D.mask,owner:E,counts:v,count:D.count,opaque:D.opaque,changed:b,capped:D.capped}}var B=2,G=3;async function $t(t,e,n,o,i){let{width:r,height:a,data:l}=t,f=e.map(h=>h.params.mode!=="transparent"),u=[],c=(h,d)=>l[h*4+d];for(let h=0;h<a;h++){(h&15)===0&&await i();for(let d=0;d<r;d++){let A=h*r+d,p=n[A];if(p<0||!f[p])continue;let F=-1;for(let s=-B;s<=B&&F<0;s++)for(let I=-B;I<=B;I++){let y=d+I,g=h+s;if(y<0||g<0||y>=r||g>=a)continue;let m=n[g*r+y];if(m>=0&&m!==p&&f[m]){F=m;break}}if(F<0)continue;let T=[[],[]];for(let s=-G;s<=G;s++)for(let I=-G;I<=G;I++){let y=d+I,g=h+s;if(y<0||g<0||y>=r||g>=a)continue;let m=g*r+y;l[m*4+3]&&(n[m]===p?T[0].push(m):n[m]===F&&T[1].push(m))}let M=-1,E=-1;for(let s of T[1]){let I=0;for(let y=0;y<3;y++)I+=(c(s,y)-c(A,y))**2;I>E&&(E=I,M=s)}let S=-1,v=0,D=0;for(let s of T[0]){let I=[0,1,2].map(x=>c(s,x)-c(M,x)),y=I[0]**2+I[1]**2+I[2]**2;if(y<3*32**2)continue;let g=0;for(let x=0;x<3;x++)g+=(c(A,x)-c(M,x))*I[x];if(g/=y,g>.97||g<.03)continue;let m=0;for(let x=0;x<3;x++)m+=(c(A,x)-(c(M,x)+g*I[x]))**2;m<=.04*y&&y>D&&(S=s,v=g,D=y)}if(S<0)continue;let b=[0,1,2].map(s=>c(S,s)),w=s=>{let I=0;for(let y=0;y<3;y++)I+=(c(s,y)-b[y])**2;return I},k=!1;for(let s=-1;s<=1&&!k;s++)for(let I=-1;I<=1;I++){let y=d+I,g=h+s,m=g*r+y;if(y>=0&&g>=0&&y<r&&g<a&&n[m]===p&&l[m*4+3]&&w(m)<w(A)-.01*D){k=!0;break}}if(!k)continue;let N=!0;for(let s=0;s<3;s++)N&&=o[S*4+s]===c(S,s)&&o[M*4+s]===c(M,s);N||u.push(A,...[0,1,2].map(s=>o[S*4+s]*v+o[M*4+s]*(1-v)))}}for(let h=0;h<u.length;h+=4)for(let d=0;d<3;d++)o[u[h]*4+d]=u[h+1+d]}async function Xt(t,e,n,o,i,r=null){let{width:a,height:l,data:f,ids:u,colours:c}=t,h=a*l,d=await qt(t,e,n,o,i,r),{mask:A}=d,p=new Uint8ClampedArray(f),F=new Float32Array(h),T=C(e.target),M=e.mode==="shift"&&d.count?Ht(t,d):null,E=e.mode==="transparent"&&e.cleanEdges&&d.source.length,S=new Map,v,D=!1;if(M&&!e.ramp?.length&&!e.dh&&!e.ds&&!e.dl)v=s=>s;else if(M){let s=null;if(e.ramp?.length>1){let I=new Float64Array(c.length/3);for(let y=0;y<h;y++)(y&16383)===0&&await i(),A[y]>0&&u[y]>=0&&(I[u[y]]+=A[y]);s=it(e,st(c,I,e.model))}s?v=s:{shift:v,capped:D}=Lt(e.ramp?.length?{...e,...lt(e,M)}:e,M)}let b=(s,I=d.nearest[s])=>{let y=s*64+I,g=S.get(y);if(!g){let m=[c[s*3],c[s*3+1],c[s*3+2]];e.mode==="flat"?g=T:E?g=Kt(m,d.source[I].rgb):g=v(m),S.set(y,g)}return g},w=new Int8Array(E?h:0).fill(-1);if(E)for(let s=0;s<h;s++){if((s&16383)===0&&await i(),A[s]>0||u[s]<0||o[s]<0||d.weight[u[s]]>0)continue;let I=s%a,y=(s-I)/a;for(let g=-1;g<=1&&w[s]<0;g++)for(let m=-1;m<=1;m++){let x=I+m,R=y+g,P=R*a+x;if(x>=0&&x<a&&R>=0&&R<l&&A[P]>0&&u[P]>=0){w[s]=d.nearest[u[P]];break}}}let k=new Uint8Array(M&&e.mode==="shift"&&d.source.length&&!e.feather?h:0);if(k.length){let{hsl:s}=t,I=new Uint8Array(s.length/4),y=await ut(a,l,m=>A[m]>0,i),g=await ut(a,l,m=>u[m]>=0&&(s[u[m]*4+3]<q||s[u[m]*4+2]<Tt),i);for(let m=0;m<I.length;m++){(m&16383)===0&&await i();let x=m*4,R=d.source[d.nearest[m]].v;if(s[x+3]<q||R[3]<q)continue;let P=$(s[x],R[0]),K=Math.max(Math.abs(s[x+1]-R[1]),Math.abs(s[x+2]-R[2])),W=e.hueTol?P/e.hueTol:P<.5?0:1/0,xt=e.shadeTol?K/(e.shadeTol/100):K<.004?0:1/0;I[m]=W<=1&&xt>=W?1:0}for(let m=0;m<h;m++){(m&16383)===0&&await i();let x=u[m];x>=0&&A[m]<1&&o[m]>=0&&!(A[m]<=0&&d.weight[x]>0)&&I[x]&&y[m]&&g[m]&&(k[m]=1)}}let N=0;for(let s=0;s<h;s++){(s&16383)===0&&await i();let I=E&&w[s]>=0,y=I||k[s]?1:A[s];if(y<=0)continue;F[s]=y;let g=s*4;if(e.mode==="transparent"){let m=!E||o[s]>0?null:I?b(u[s],w[s]):b(u[s]);if(m){let x=1-y*(1-m[3]);if(x>0)for(let R=0;R<3;R++)p[g+R]=(f[g+R]*(1-y)+m[R]*m[3]*y)/x;p[g+3]=Math.round(f[g+3]*x)}else p[g+3]=Math.round(f[g+3]*(1-y));p[g+3]||p.fill(0,g,g+4)}else{let m=b(u[s]);for(let x=0;x<3;x++)p[g+x]=f[g+x]+(m[x]-f[g+x])*y}(p[g]!==f[g]||p[g+1]!==f[g+1]||p[g+2]!==f[g+2]||p[g+3]!==f[g+3])&&N++}return{pixels:p,mask:A,weight:F,score:d.score,count:d.count,opaque:d.opaque,changed:N,capped:e.mode==="shift"&&D}}function yt(t=12){let e=0;return()=>{if(!(performance.now()-e<t))return new Promise(n=>{let o=new MessageChannel;o.port1.onmessage=()=>{o.port1.close(),e=performance.now(),n()},o.port2.postMessage(0)})}}var H=null,Z=null,L=0,wt=yt(),O=new Map;self.onmessage=async({data:t})=>{if(t.type==="release"){for(let n of O.keys())n.startsWith(t.documentId+":")&&O.delete(n);Z?.startsWith(t.documentId+":")&&(L++,H=null,Z=null);return}let e=++L;try{if(!Number.isSafeInteger(t.imageId)||!Number.isSafeInteger(t.editId))throw Error("Invalid request identifiers.");if(t.type==="cancel")return;if(t.type==="image"){H=null,Z=t.cacheKey;let o=O.get(t.cacheKey);if(o||(o=await pt(t.width,t.height,t.pixels,wt,()=>e!==L)),e!==L)return;if(typeof t.cacheKey=="string"){let i=t.cacheKey.split(":")[0]+":";for(let r of O.keys())r.startsWith(i)&&O.delete(r);for(O.delete(t.cacheKey),O.set(t.cacheKey,o);O.size>3;)O.delete(O.keys().next().value)}H={...o,id:t.imageId},self.postMessage({type:"ready",imageId:t.imageId,editId:t.editId,palette:H.palette});return}if(t.type!=="edit"||!H||H.id!==t.imageId)throw Error("Unknown image or operation.");let n=await gt(H,t.rows,t.overrides,t.active,wt,()=>e!==L);e===L&&self.postMessage({type:"result",imageId:t.imageId,editId:t.editId,...n},[n.pixels.buffer,n.mask.buffer,n.owner.buffer])}catch(n){e===L&&self.postMessage({type:"error",imageId:t.imageId,editId:t.editId,message:n.message})}};})();\n'], { type: "text/javascript" })
+        new Blob(['(()=>{var D=(t,e,n)=>Math.min(n,Math.max(e,t)),$=(t,e)=>Math.abs((t-e+540)%360-180),J=(t,e)=>(t-e+540)%360-180;function q(t,e,n){t/=255,e/=255,n/=255;let o=Math.max(t,e,n),i=Math.min(t,e,n),r=o-i,a=(o+i)/2,s=0;return r&&(s=o===t?(e-n)/r%6:o===e?(n-t)/r+2:(t-e)/r+4),[(s*60+360)%360,r?r/(1-Math.abs(2*a-1)):0,a,r]}function At(t,e,n){t=(t%360+360)%360,e=D(e,0,1),n=D(n,0,1);let o=(1-Math.abs(2*n-1))*e,i=o*(1-Math.abs(t/60%2-1)),r=n-o/2,[a,s,l]=t<60?[o,i,0]:t<120?[i,o,0]:t<180?[0,o,i]:t<240?[0,i,o]:t<300?[i,0,o]:[o,0,i];return[a,s,l].map(h=>Math.round((h+r)*255))}function C(t){let e=String(t).trim().replace(/^#/,"");return/^[\\da-f]{3}$/i.test(e)&&(e=[...e].map(n=>n+n).join("")),/^[\\da-f]{6}$/i.test(e)?[0,2,4].map(n=>parseInt(e.slice(n,n+2),16)):null}var rt=(t,e,n)=>"#"+[t,e,n].map(o=>D(Math.round(o),0,255).toString(16).padStart(2,"0")).join("").toUpperCase(),z=Float32Array.from({length:256},(t,e)=>{let n=e/255;return n<=.04045?n/12.92:((n+.055)/1.055)**2.4}),Et=t=>255*(t<=.0031308?12.92*t:1.055*Math.max(0,t)**(1/2.4)-.055);function kt(t,e,n){let o=z[t],i=z[e],r=z[n],a=Math.cbrt(.4122214708*o+.5363325363*i+.0514459929*r),s=Math.cbrt(.2119034982*o+.6806995451*i+.1073969566*r),l=Math.cbrt(.0883024619*o+.2817188376*i+.6299787005*r),h=.2104542553*a+.793617785*s-.0040720468*l,f=1.9779984951*a-2.428592205*s+.4505937099*l,m=.0259040371*a+.7827717662*s-.808675766*l;return[h,Math.hypot(f,m),(Math.atan2(m,f)*180/Math.PI+360)%360]}function Y(t,e,n){let o=e*Math.cos(n*Math.PI/180),i=e*Math.sin(n*Math.PI/180),r=(t+.3963377774*o+.2158037573*i)**3,a=(t-.1055613458*o-.0638541728*i)**3,s=(t-.0894841775*o-1.291485548*i)**3;return[4.0767416621*r-3.3077115913*a+.2309699292*s,-1.2684380046*r+2.6097574011*a-.3413193965*s,-.0041960863*r-.7034186147*a+1.707614701*s]}var nt=t=>t.every(e=>e>=-1e-4&&e<=1+1e-4);function Ft(t,e,n){t=D(t,0,1),e=Math.max(0,e);let o=Y(t,e,n);if(!nt(o)){let i=0,r=e;for(let a=0;a<16;a++){let s=(i+r)/2;nt(Y(t,s,n))?i=s:r=s}o=Y(t,i,n)}return o.map(i=>D(Math.round(Et(i)),0,255))}var ot=.4;function j(t,e){if(e==="hsl"){let[r,a,s]=q(...t);return[r,a,s]}let[n,o,i]=kt(...t);return[i,Math.min(1,o/ot),n]}var X=(t,e,n,o)=>o==="hsl"?At(t,e,n):Ft(n,e*ot,t);function B(t,e,n){let[o,i,r]=j(t,n),[a,s,l]=j(e,n);return{dh:J(a,o),ds:(s-i)*100,dl:(l-r)*100}}function Q(t,e,n){return t<=e?e>0?t*n/e:n:e<1?n+(t-e)*(1-n)/(1-e):n}var at=(t,e,n)=>n<e?t*n/e:Q(t,e,n);var Nt=.06;function Tt(t,e){let n=t.length,o=[],i=new Array(n);for(let r=0;r<n-1;r++)o.push((e[r+1]-e[r])/(t[r+1]-t[r]));i[0]=o[0],i[n-1]=o[n-2];for(let r=1;r<n-1;r++)i[r]=o[r-1]*o[r]>0?(o[r-1]+o[r])/2:0;for(let r=0;r<n-1;r++){if(o[r]===0){i[r]=i[r+1]=0;continue}let a=i[r]/o[r],s=i[r+1]/o[r],l=a*a+s*s;if(l>9){let h=3/Math.sqrt(l);i[r]=h*a*o[r],i[r+1]=h*s*o[r]}}return r=>{if(r<=t[0])return e[0];if(r>=t[n-1])return e[n-1];let a=0;for(;r>t[a+1];)a++;let s=t[a+1]-t[a],l=(r-t[a])/s,h=l*l,f=h*l;return(2*f-3*h+1)*e[a]+(f-2*h+l)*s*i[a]+(3*h-2*f)*e[a+1]+(f-h)*s*i[a+1]}}function Z(t,e){return n=>{if(n<=t[0])return e[0];let o=t.length;if(n>=t[o-1])return e[o-1];let i=0;for(;n>t[i+1];)i++;return e[i]+(e[i+1]-e[i])*(n-t[i])/(t[i+1]-t[i])}}function St(t,e){let n=[...t].sort((a,s)=>a.l-s.l),o=n.reduce((a,s)=>a+s.weight,0);if(!o)return[];let i=[];for(let a=0,s=0,l=0;a<e;a++){let h=0,f=0,m=o*(a+1)/e;for(;l<n.length&&s+n[l].weight/2<=m;l++)h+=n[l].l*n[l].weight,f+=n[l].weight,s+=n[l].weight;f&&i.push(h/f)}let r=[];for(let a=0;a<32;a++){r=i.map(()=>[]);for(let h of n){let f=0;for(let m=1;m<i.length;m++)Math.abs(h.l-i[m])<Math.abs(h.l-i[f])&&(f=m);r[f].push(h)}r=r.filter(h=>h.length);let s=r.map(h=>h.reduce((f,m)=>f+m.l*m.weight,0)/h.reduce((f,m)=>f+m.weight,0)),l=s.length===i.length&&s.every((h,f)=>h===i[f]);if(i=s,l)break}return r.map(it)}function it(t){let e=t.reduce((a,s)=>a+s.weight,0),n=0,o=0,i=0,r=0;for(let a of t){let s=a.h*Math.PI/180,l=a.weight*Math.max(a.s,1e-6);n+=Math.cos(s)*l,o+=Math.sin(s)*l,i+=a.l*a.weight,r+=a.s*a.weight}return{h:(Math.atan2(o,n)*180/Math.PI+360)%360,s:r/e,l:i/e,weight:e,neutral:t.every(a=>a.neutral),members:t}}function st(t,e,n){let o=t.ramp.map(M=>j(C(M),t.model)).sort((M,E)=>M[2]-E[2]),i=St(e,o.length),r=[];for(let M of i)r.length&&M.l-r.at(-1).l<1/255?r.push(it([...r.pop().members,...M.members])):r.push(M);if(r.length<2)return null;let a=r.length,s=r.map((M,E)=>o[Math.round(E*(o.length-1)/(a-1))]),l=r.map(M=>M.l),h=s.map(M=>M[2]),f=[],m=[];l[0]>0&&(f.push(0),m.push(0)),f.push(...l),m.push(...h),l.at(-1)<1&&(f.push(1),m.push(1));let p=Tt(f,m),A=r.every(M=>M.neutral),g=[];r.forEach((M,E)=>{let T=A?s[E][0]:J(s[E][0],M.h);if(E){for(;T-g[E-1]>180;)T-=360;for(;T-g[E-1]<-180;)T+=360}g.push(T)});let N=Z(l,g),v=A?Z(l,s.map(M=>M[1])):Z(l,s.map((M,E)=>Math.log(D(M[1]/Math.max(r[E].s,.01),1/64,64))));return M=>{let[E,T,R]=j(M,t.model);return X(A?N(R):E+N(R),A?D(v(R),0,1):D(T*Math.exp(v(R)),0,1),D(p(R),0,1),t.model)}}function lt(t,e,n){let o=[];for(let i=0;i<e.length;i++)if(e[i]>0){let r=[t[i*3],t[i*3+1],t[i*3+2]],[a,s,l]=j(r,n);o.push({h:a,s,l,weight:e[i],neutral:q(...r)[3]<Nt})}return o}var ft=(t,e)=>B(e,C(t.ramp[0]),t.model);var vt=4194304,H=.06,Rt=2,Ut=.2;function Dt(t,e,n){if(!Number.isInteger(t)||!Number.isInteger(e)||t<1||e<1||t>8192||e>8192||t*e>vt||!(n instanceof Uint8ClampedArray)||n.length!==t*e*4)throw Error("Invalid image dimensions or pixel buffer.")}var Pt=16,dt=64,Ot=128,mt=.12,ct=4*mt,ut=99;function _t(t,e,n){if(!Array.isArray(t)||t.length>dt||t.some(o=>typeof o?.hex=="string"?!/^#[\\dA-F]{6}$/i.test(o.hex):!Number.isInteger(o?.x)||!Number.isInteger(o.y)||o.x<0||o.y<0||o.x>=e||o.y>=n))throw Error("Invalid colour samples.")}function jt(t){let e={hueTol:[0,180],shadeTol:[0,100],soft:[0,100],feather:[0,8],dh:[-180,180],ds:[-100,100],dl:[-100,100]};for(let[n,[o,i]]of Object.entries(e))if(!Number.isFinite(t[n])||t[n]<o||t[n]>i)throw Error("Invalid processing parameter: "+n);if(!["shift","flat","transparent"].includes(t.mode)||!["oklch","hsl"].includes(t.model)||!C(t.target)||typeof t.protect!="boolean"||typeof t.connected!="boolean"||typeof t.cleanEdges!="boolean")throw Error("Invalid colour operation.");if(t.ramp!=null&&(!Array.isArray(t.ramp)||t.ramp.length<1||t.ramp.length>8||t.ramp.some(n=>typeof n!="string"||!C(n))))throw Error("Invalid colour ramp.")}function pt(t,e,n){if(!Array.isArray(t)||t.length<3||t.length>Ot||t.some(o=>!Number.isInteger(o?.x)||!Number.isInteger(o?.y)||o.x<0||o.y<0||o.x>=e||o.y>=n))throw Error("Invalid polygon.")}function Ct(t,e,n){let o=new Uint8Array(t*e),i=n.length;if(i<3)return o;let r=l=>l.x+.5,a=l=>l.y+.5,s=(l,h)=>{l>=0&&h>=0&&l<t&&h<e&&(o[h*t+l]=1)};for(let l=0;l<i;l++)s(n[l].x,n[l].y);for(let l=0;l<e;l++){let h=l+.5,f=[];for(let m=0;m<i;m++){let p=n[m],A=n[(m+1)%i],g=a(p),N=a(A),v=r(p),M=r(A);if(g===N){if(g===h){let E=Math.min(p.x,A.x),T=Math.max(p.x,A.x);for(let R=E;R<=T;R++)s(R,l)}continue}g>h!=N>h&&f.push(v+(h-g)*(M-v)/(N-g))}f.sort((m,p)=>m-p);for(let m=0;m+1<f.length;m+=2){let p=Math.ceil(f[m]-.5-1e-8),A=Math.floor(f[m+1]-.5+1e-8);for(let g=Math.max(0,p);g<=Math.min(t-1,A);g++)s(g,l)}}return o}function qt(t,e,n,o,i){if(!Array.isArray(t)||t.length<1||t.length>Pt)throw Error("Invalid colour map.");let r=new Set,a=0;for(let s of t){if(!Number.isInteger(s?.id)||s.id<1||s.id>127||r.has(s.id))throw Error("Invalid colour map.");r.add(s.id),jt(s.params),_t(s.seeds,o,i),s.polygon!=null&&pt(s.polygon,o,i),a+=s.seeds.length}if(a>dt)throw Error("Invalid colour samples.");if(!Number.isInteger(n)||n<0||n>=t.length)throw Error("Invalid colour map.");if(!(e instanceof Int8Array)||e.length!==o*i)throw Error("Invalid selection buffer.");for(let s=0;s<e.length;s++)if(e[s]&&e[s]!==-1&&!r.has(e[s]))throw Error("Invalid brush override.")}async function gt(t,e,n,o=async()=>{},i=()=>!1){Dt(t,e,n);let r=t*e,a=new Int32Array(r),s=[],l=new Map,h=r>1<<20,f=h?new Int32Array(1<<24):new Map,m=0;for(let g=0;g<r;g++){if((g&16383)===0&&(await o(),i()))throw Error("Cancelled");let N=g*4;if(!n[N+3]){a[g]=-1;continue}let v=n[N]<<16|n[N+1]<<8|n[N+2],M=(h?f[v]:f.get(v))||0;M||(M=++m,h?f[v]=M:f.set(v,M),s.push(n[N],n[N+1],n[N+2])),a[g]=M-1;let E=(n[N]>>4)*256+(n[N+1]>>4)*16+(n[N+2]>>4),T=l.get(E);T?T.weight+=n[N+3]:l.set(E,{weight:n[N+3],x:g%t,y:Math.floor(g/t),hex:rt(...n.subarray(N,N+3))})}let p=Uint8Array.from(s),A=new Float32Array(m*4);for(let g=0;g<m;g++){if((g&16383)===0&&(await o(),i()))throw Error("Cancelled");A.set(q(p[g*3],p[g*3+1],p[g*3+2]),g*4)}return{width:t,height:e,data:n,ids:a,colours:p,hsl:A,palette:[...l.values()].sort((g,N)=>N.weight-g.weight).slice(0,12)}}function Ht(t,e){let{width:n,ids:o,hsl:i,colours:r}=t,a=[];for(let s of e){if(typeof s.hex=="string"){let f=C(s.hex);a.push({i:-1,rgb:f,v:Float32Array.from(q(...f))});continue}let l=s.y*n+s.x,h=o[l];h>=0&&a.push({i:l,rgb:[r[h*3],r[h*3+1],r[h*3+2]],v:i.subarray(h*4,h*4+4)})}return a}function yt(t,e,n){if(t[e+3]<H)return Math.abs(t[e+2]-n[2])/2;let o=Math.max(Math.abs(t[e+1]-n[1]),Math.abs(t[e+2]-n[2]));return $(t[e],n[0])/45+o/2}async function Lt(t,e,n,o,i,r=null){let{width:a,height:s,data:l,ids:h,hsl:f,colours:m}=t,p=a*s,A=f.length/4;r!=null&&pt(r,a,s);let g=Ht(t,n),N=new Float32Array(A),v=new Float32Array(A).fill(ut),M=new Uint8Array(A);if(g.length)for(let b=0;b<A;b++){(b&16383)===0&&await i();let w=b*4,k=f[w+3]<H,F=1/0,c=1/0,u=ut,I=-1,x=0;for(let y=0;y<g.length;y++){let d=g[y].v,S=k?Math.abs(f[w+2]-d[2]):Math.max(Math.abs(f[w+1]-d[1]),Math.abs(f[w+2]-d[2])),U=$(f[w],d[0])/180+S;if(U<c&&(c=U,x=y),k!==d[3]<H)continue;u=Math.min(u,yt(f,w,d));let _=$(f[w],d[0]),W=Math.max(k?0:e.hueTol?_/e.hueTol:_<.5?0:1/0,e.shadeTol?S/(e.shadeTol/100):S<.004?0:1/0);W<F&&(F=W,I=y)}M[b]=I>=0?I:x,v[b]=u,F<=1&&(N[b]=e.soft?Math.min(1,(1-F)/(e.soft/100)):1)}let E=new Float32Array(p);for(let b=0;b<p;b++)(b&16383)===0&&await i(),h[b]>=0&&(E[b]=N[h[b]]);if(r){let b=Ct(a,s,r);for(let w=0;w<p;w++)(w&16383)===0&&await i(),b[w]||(E[w]=0)}if(e.connected&&g.length){let b=new Uint8Array(p),w=new Int32Array(p),k=0,F=0;for(let{i:c}of g)c>=0&&E[c]>0&&!b[c]&&(b[c]=1,w[F++]=c);for(;k<F;){(k&16383)===0&&await i();let c=w[k++],u=c%a,I=Math.floor(c/a);for(let x=-1;x<=1;x++)for(let y=-1;y<=1;y++){let d=u+y,S=I+x,U=S*a+d;d>=0&&d<a&&S>=0&&S<s&&!b[U]&&E[U]>0&&(b[U]=1,w[F++]=U)}}for(let c=0;c<p;c++)(c&16383)===0&&await i(),b[c]||(E[c]=0)}for(let b=0;b<p;b++){if((b&16383)===0&&await i(),o[b]!==0&&o[b]!==1&&o[b]!==-1)throw Error("Invalid brush override.");o[b]&&(E[b]=l[b*4+3]&&o[b]>0?1:0)}let T=Math.round(e.feather);if(T){let b=new Float32Array(p);for(let w=0;w<s;w++){(w&15)===0&&await i();let k=0;for(let F=-T;F<=T;F++)k+=E[w*a+D(F,0,a-1)];for(let F=0;F<a;F++)b[w*a+F]=k/(T*2+1),k+=E[w*a+D(F+T+1,0,a-1)]-E[w*a+D(F-T,0,a-1)]}for(let w=0;w<a;w++){(w&15)===0&&await i();let k=0;for(let F=-T;F<=T;F++)k+=b[D(F,0,s-1)*a+w];for(let F=0;F<s;F++)E[F*a+w]=l[(F*a+w)*4+3]?k/(T*2+1):0,k+=b[D(F+T+1,0,s-1)*a+w]-b[D(F-T,0,s-1)*a+w]}}let R=0,P=0;for(let b=0;b<p;b++)(b&16383)===0&&await i(),l[b*4+3]&&P++,E[b]>0&&R++;return{mask:E,weight:N,score:v,nearest:M,source:g,count:R,opaque:P}}async function ht(t,e,n,o){let i=t*e,r=new Uint8Array(i);for(let a=0;a<i;a++)(a&16383)===0&&await o(),n(a)&&(r[a]=1);for(let a=2;a<=Rt+1;a++)for(let s=0;s<i;s++){if((s&16383)===0&&await o(),r[s])continue;let l=s%t,h=(s-l)/t;for(let f=-1;f<=1&&!r[s];f++)for(let m=-1;m<=1;m++){let p=l+m,A=h+f,g=A*t+p;if(p>=0&&p<t&&A>=0&&A<e&&r[g]&&r[g]<a){r[s]=a;break}}}return r}function wt(t,e){let{data:n}=t;if(e.source.length)return e.source.at(-1).rgb;let o=[0,0,0],i=0;for(let r=0;r<e.mask.length;r++)if(e.mask[r]>0){for(let a=0;a<3;a++)o[a]+=n[r*4+a]*e.mask[r];i+=e.mask[r]}return i?o.map(r=>Math.round(r/i)):null}async function Kt(t,e,n){let o=-1,i=-1,r=1/0;for(let a=0;a<e.weight.length;a++){(a&16383)===0&&await n();let s=e.nearest[a];if(!e.weight[a]||s<i)continue;let l=yt(t.hsl,a*4,e.source[s].v);(s>i||l<r)&&(o=a,i=s,r=l)}return o<0?wt(t,e):t.colours.subarray(o*3,o*3+3)}function Wt(t,e){let[n,o,i]=j(e,t.model),r=q(...e)[3]<H,a=o+t.ds/100,s=i+t.dl/100,l=D(a,0,1),h=D(s,0,1),f=n+t.dh;return{shift:p=>{let[,A,g]=j(p,t.model);return X(f,r?l:t.protect?at(A,o,l):D(A+t.ds/100,0,1),t.protect?Q(g,i,h):D(g+t.dl/100,0,1),t.model)},capped:a!==l||s!==h}}function $t(t,e){let n=0;for(let o=0;o<3;o++){let i=t[o]/255,r=e[o]/255;i>r?n=Math.max(n,(i-r)/(1-r)):i<r&&(n=Math.max(n,(r-i)/r))}return n=Math.round(n*255)/255,n?[...[0,1,2].map(o=>D(Math.round((t[o]-(1-n)*e[o])/n),0,255)),n]:[0,0,0,0]}var Xt=(t,e)=>async()=>{if(await t(),e())throw Error("Cancelled")};async function xt(t,e,n,o,i=async()=>{},r=()=>!1){let{width:a,height:s,data:l,ids:h}=t,f=a*s;qt(e,n,o,a,s);let m=Xt(i,r),p=new Uint8ClampedArray(l),A=new Float32Array(4*f),g=new Float32Array(f),N=new Float32Array(f),v=new Float32Array(f),M=new Uint8Array(f),E=new Int8Array(f).fill(-1),T=new Int8Array(f),R=[],P=null;for(let[w,k]of e.entries()){for(let c=0;c<f;c++)(c&16383)===0&&await m(),T[c]=n[c]===k.id?1:n[c]?-1:0;let F=await Gt(t,k.params,k.seeds,T,m,k.polygon??null);R.push(F.count),w===o&&(P=F);for(let c=0;c<f;c++){(c&16383)===0&&await m();let u=F.weight[c];if(!(u>0))continue;let I=n[c]===k.id||h[c]<0?0:F.score[h[c]],x=c*4;if(M[c]&&I>N[c]+ct)continue;if(!M[c]||I<N[c]-ct){p.set(F.pixels.subarray(x,x+4),x),N[c]=I,M[c]=1;for(let d=0;d<4;d++)A[x+d]=u*F.pixels[x+d];g[c]=v[c]=u,E[c]=w;continue}let y=u*Math.exp(-(I-N[c])/mt);M[c]++;for(let d=0;d<4;d++)A[x+d]+=y*F.pixels[x+d];g[c]+=y,y>v[c]&&(v[c]=y,E[c]=w)}}for(let w=0;w<f;w++)if((w&16383)===0&&await m(),M[w]>1&&g[w]>0)for(let k=0;k<4;k++)p[w*4+k]=A[w*4+k]/g[w];e.length>1&&await Bt(t,e,E,p,m);let b=0;for(let w=0;w<f;w++){(w&16383)===0&&await m();let k=w*4;(p[k]!==l[k]||p[k+1]!==l[k+1]||p[k+2]!==l[k+2]||p[k+3]!==l[k+3])&&b++}return{pixels:p,mask:P.mask,owner:E,counts:R,count:P.count,opaque:P.opaque,changed:b,capped:P.capped}}var G=2,V=3;async function Bt(t,e,n,o,i){let{width:r,height:a,data:s}=t,l=e.map(m=>m.params.mode!=="transparent"),h=[],f=(m,p)=>s[m*4+p];for(let m=0;m<a;m++){(m&15)===0&&await i();for(let p=0;p<r;p++){let A=m*r+p,g=n[A];if(g<0||!l[g])continue;let N=-1;for(let c=-G;c<=G&&N<0;c++)for(let u=-G;u<=G;u++){let I=p+u,x=m+c;if(I<0||x<0||I>=r||x>=a)continue;let y=n[x*r+I];if(y>=0&&y!==g&&l[y]){N=y;break}}if(N<0)continue;let v=[[],[]];for(let c=-V;c<=V;c++)for(let u=-V;u<=V;u++){let I=p+u,x=m+c;if(I<0||x<0||I>=r||x>=a)continue;let y=x*r+I;s[y*4+3]&&(n[y]===g?v[0].push(y):n[y]===N&&v[1].push(y))}let M=-1,E=-1;for(let c of v[1]){let u=0;for(let I=0;I<3;I++)u+=(f(c,I)-f(A,I))**2;u>E&&(E=u,M=c)}let T=-1,R=0,P=0;for(let c of v[0]){let u=[0,1,2].map(d=>f(c,d)-f(M,d)),I=u[0]**2+u[1]**2+u[2]**2;if(I<3*32**2)continue;let x=0;for(let d=0;d<3;d++)x+=(f(A,d)-f(M,d))*u[d];if(x/=I,x>.97||x<.03)continue;let y=0;for(let d=0;d<3;d++)y+=(f(A,d)-(f(M,d)+x*u[d]))**2;y<=.04*I&&I>P&&(T=c,R=x,P=I)}if(T<0)continue;let b=[0,1,2].map(c=>f(T,c)),w=c=>{let u=0;for(let I=0;I<3;I++)u+=(f(c,I)-b[I])**2;return u},k=!1;for(let c=-1;c<=1&&!k;c++)for(let u=-1;u<=1;u++){let I=p+u,x=m+c,y=x*r+I;if(I>=0&&x>=0&&I<r&&x<a&&n[y]===g&&s[y*4+3]&&w(y)<w(A)-.01*P){k=!0;break}}if(!k)continue;let F=!0;for(let c=0;c<3;c++)F&&=o[T*4+c]===f(T,c)&&o[M*4+c]===f(M,c);F||h.push(A,...[0,1,2].map(c=>o[T*4+c]*R+o[M*4+c]*(1-R)))}}for(let m=0;m<h.length;m+=4)for(let p=0;p<3;p++)o[h[m]*4+p]=h[m+1+p]}async function Gt(t,e,n,o,i,r=null){let{width:a,height:s,data:l,ids:h,colours:f}=t,m=a*s,p=await Lt(t,e,n,o,i,r),{mask:A}=p,g=new Uint8ClampedArray(l),N=new Float32Array(m),v=C(e.target),M=e.mode==="shift"&&p.count?e.matchTarget?await Kt(t,p,i):wt(t,p):null,E=e.mode==="transparent"&&e.cleanEdges&&p.source.length,T=new Map,R,P=!1,b=M&&e.matchTarget?{...e,...B(M,v,e.model)}:e;if(M&&!e.ramp?.length&&!b.dh&&!b.ds&&!b.dl)R=u=>u;else if(M){let u=null;if(e.ramp?.length>1){let I=new Float64Array(f.length/3);for(let x=0;x<m;x++)(x&16383)===0&&await i(),A[x]>0&&h[x]>=0&&(I[h[x]]+=A[x]);u=st(e,lt(f,I,e.model))}u?R=u:{shift:R,capped:P}=Wt(e.ramp?.length?{...e,...ft(e,M)}:b,M)}let w=(u,I=p.nearest[u])=>{let x=u*64+I,y=T.get(x);if(!y){let d=[f[u*3],f[u*3+1],f[u*3+2]];e.mode==="flat"?y=v:E?y=$t(d,p.source[I].rgb):y=R(d),T.set(x,y)}return y},k=new Int8Array(E?m:0).fill(-1);if(E)for(let u=0;u<m;u++){if((u&16383)===0&&await i(),A[u]>0||h[u]<0||o[u]<0||p.weight[h[u]]>0)continue;let I=u%a,x=(u-I)/a;for(let y=-1;y<=1&&k[u]<0;y++)for(let d=-1;d<=1;d++){let S=I+d,U=x+y,_=U*a+S;if(S>=0&&S<a&&U>=0&&U<s&&A[_]>0&&h[_]>=0){k[u]=p.nearest[h[_]];break}}}let F=new Uint8Array(M&&e.mode==="shift"&&p.source.length&&!e.feather?m:0);if(F.length){let{hsl:u}=t,I=new Uint8Array(u.length/4),x=await ht(a,s,d=>A[d]>0,i),y=await ht(a,s,d=>h[d]>=0&&(u[h[d]*4+3]<H||u[h[d]*4+2]<Ut),i);for(let d=0;d<I.length;d++){(d&16383)===0&&await i();let S=d*4,U=p.source[p.nearest[d]].v;if(u[S+3]<H||U[3]<H)continue;let _=$(u[S],U[0]),W=Math.max(Math.abs(u[S+1]-U[1]),Math.abs(u[S+2]-U[2])),et=e.hueTol?_/e.hueTol:_<.5?0:1/0,It=e.shadeTol?W/(e.shadeTol/100):W<.004?0:1/0;I[d]=et<=1&&It>=et?1:0}for(let d=0;d<m;d++){(d&16383)===0&&await i();let S=h[d];S>=0&&A[d]<1&&o[d]>=0&&!(A[d]<=0&&p.weight[S]>0)&&I[S]&&x[d]&&y[d]&&(F[d]=1)}}let c=0;for(let u=0;u<m;u++){(u&16383)===0&&await i();let I=E&&k[u]>=0,x=I||F[u]?1:A[u];if(x<=0)continue;N[u]=x;let y=u*4;if(e.mode==="transparent"){let d=!E||o[u]>0?null:I?w(h[u],k[u]):w(h[u]);if(d){let S=1-x*(1-d[3]);if(S>0)for(let U=0;U<3;U++)g[y+U]=(l[y+U]*(1-x)+d[U]*d[3]*x)/S;g[y+3]=Math.round(l[y+3]*S)}else g[y+3]=Math.round(l[y+3]*(1-x));g[y+3]||g.fill(0,y,y+4)}else{let d=w(h[u]);for(let S=0;S<3;S++)g[y+S]=l[y+S]+(d[S]-l[y+S])*x}(g[y]!==l[y]||g[y+1]!==l[y+1]||g[y+2]!==l[y+2]||g[y+3]!==l[y+3])&&c++}return{pixels:g,mask:A,weight:N,score:p.score,count:p.count,opaque:p.opaque,changed:c,capped:e.mode==="shift"&&P}}function Mt(t=12){let e=0;return()=>{if(!(performance.now()-e<t))return new Promise(n=>{let o=new MessageChannel;o.port1.onmessage=()=>{o.port1.close(),e=performance.now(),n()},o.port2.postMessage(0)})}}var L=null,tt=null,K=0,bt=Mt(),O=new Map;self.onmessage=async({data:t})=>{if(t.type==="release"){for(let n of O.keys())n.startsWith(t.documentId+":")&&O.delete(n);tt?.startsWith(t.documentId+":")&&(K++,L=null,tt=null);return}let e=++K;try{if(!Number.isSafeInteger(t.imageId)||!Number.isSafeInteger(t.editId))throw Error("Invalid request identifiers.");if(t.type==="cancel")return;if(t.type==="image"){L=null,tt=t.cacheKey;let o=O.get(t.cacheKey);if(o||(o=await gt(t.width,t.height,t.pixels,bt,()=>e!==K)),e!==K)return;if(typeof t.cacheKey=="string"){let i=t.cacheKey.split(":")[0]+":";for(let r of O.keys())r.startsWith(i)&&O.delete(r);for(O.delete(t.cacheKey),O.set(t.cacheKey,o);O.size>3;)O.delete(O.keys().next().value)}L={...o,id:t.imageId},self.postMessage({type:"ready",imageId:t.imageId,editId:t.editId,palette:L.palette});return}if(t.type!=="edit"||!L||L.id!==t.imageId)throw Error("Unknown image or operation.");let n=await xt(L,t.rows,t.overrides,t.active,bt,()=>e!==K);e===K&&self.postMessage({type:"result",imageId:t.imageId,editId:t.editId,...n},[n.pixels.buffer,n.mask.buffer,n.owner.buffer])}catch(n){e===K&&self.postMessage({type:"error",imageId:t.imageId,editId:t.editId,message:n.message})}};})();\n'], { type: "text/javascript" })
       );
       worker = new Worker(url);
       worker.onmessage = ({ data: m }) => receive(m);
@@ -14189,9 +14256,11 @@ dialog details {
           name: outputName(name, f.format, tag, f.suffix),
           blob: f.blob
         })), blob = pack ? await zip(named) : named[0].blob, filename = pack ? outputName(name, "zip", tag, settings.size) : named[0].name, over = files.filter((f) => f.limit && f.blob.size > f.limit);
-        download(blob, filename);
-        status(
-          "Prepared " + filename + " (" + formatBytes(blob.size) + "). " + (over.length ? "It is over the " + presetById(settings.size).label.split(" \xB7 ")[0] + " size limit. " : "") + "Choose where to save it."
+        download(
+          blob,
+          filename,
+          formatBytes(blob.size),
+          over.length ? "It is over the " + presetById(settings.size).label.split(" \xB7 ")[0] + " size limit." : ""
         );
       }
     } catch (e) {
@@ -14201,19 +14270,34 @@ dialog details {
       buttons();
     }
   }
-  function download(blob, filename) {
+  function download(blob, filename, details = "", warning = "") {
     const url = URL.createObjectURL(blob);
+    let revision;
+    function report(message) {
+      status(
+        "Prepared " + filename + (details ? " (" + details + ")" : "") + ". " + message + (warning ? " " + warning : "")
+      );
+      revision = statusRevision;
+    }
+    const stop = watchSave(url, (message) => {
+      if (statusRevision === revision) report(message);
+    });
+    report(
+      stop ? "Waiting for Windows Save As\u2026" : "Download requested. Check your browser\u2019s downloads."
+    );
+    const a = document.createElement("a");
     try {
-      const a = document.createElement("a");
       a.href = url;
       a.download = filename;
       document.body.append(a);
       a.click();
-      a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 3e4);
     } catch (e) {
+      stop?.();
       URL.revokeObjectURL(url);
-      throw e;
+      report("Could not start the download: " + e.message);
+    } finally {
+      a.remove();
     }
   }
   function displayPixels(data, selection) {
@@ -14745,7 +14829,6 @@ dialog details {
       }),
       filename
     );
-    status("Prepared " + filename + ". Choose where to save it.");
   };
   var screenPickApply = setTarget;
   function screenPicked(hex3) {
@@ -14935,9 +15018,10 @@ dialog details {
       }
       const blob = await zip(files), filename = safeStem(name) + "-variants-" + (set.id.startsWith("user-") ? "palette" : set.id) + ".zip";
       if (!valid()) throw Error("The image changed. Export the variants again.");
-      download(blob, filename);
-      status(
-        "Prepared " + filename + " (" + formatBytes(blob.size) + ", " + files.length + " files). Choose where to save it."
+      download(
+        blob,
+        filename,
+        formatBytes(blob.size) + ", " + files.length + " files"
       );
     } catch (e) {
       status("Could not export variants: " + e.message);
@@ -15032,10 +15116,9 @@ dialog details {
       new Blob([writeRecipe(again.steps, again.outline)], {
         type: "application/json"
       }),
-      filename
-    );
-    status(
-      "Prepared " + filename + " (" + (again.steps.length ? again.steps.length + (again.steps.length === 1 ? " step). " : " steps). ") : "outline only). ") + (summary.text ? summary.text + " " : "") + "Choose where to save it."
+      filename,
+      again.steps.length ? again.steps.length + (again.steps.length === 1 ? " step" : " steps") : "outline only",
+      summary.text
     );
   }
   async function applyRecipe(file) {
@@ -15179,13 +15262,19 @@ dialog details {
       }
       stash();
       const sourceOutline = edit.outline.on ? { ...edit.outline } : null;
+      let applied = 0;
       for (const [i, doc] of targets.entries()) {
         batchProgress(
           "Applying recipe " + (i + 1) + " of " + targets.length + ": " + doc.name
         );
         const preview = await documentPreview(doc, cancelled);
         if (cancelled()) return;
-        const priorSteps = documentSteps(doc, preview), base = preview.changed ? preview.pixels : doc.pixels, out = doc === source ? base.slice() : await replay(doc.w, doc.h, base, steps, pause, cancelled);
+        const priorSteps = documentSteps(doc, preview), base = preview.changed ? preview.pixels : doc.pixels, outline2 = doc.edit.outline, outlineChanged = sourceOutline && (!outline2.on || outline2.widthPct !== sourceOutline.widthPct || outline2.colour !== sourceOutline.colour), remaining = doc === source ? [] : remainingRecipeSteps(
+          preview.changed && priorSteps.at(-1)?.omissions?.length ? doc.edit.steps : priorSteps,
+          steps
+        );
+        if (!remaining.length && !outlineChanged && (doc !== source || !preview.changed)) continue;
+        const out = remaining.length ? await replay(doc.w, doc.h, base, remaining, pause, cancelled) : base;
         if (cancelled()) return;
         const old = {
           pixels: doc.pixels,
@@ -15200,7 +15289,7 @@ dialog details {
             newRow(1, { ...nextParams, dh: 0, ds: 0, dl: 0, manual: false })
           ],
           active: 0,
-          steps: doc === source ? priorSteps : [...priorSteps, ...steps],
+          steps: [...priorSteps, ...remaining],
           outline: sourceOutline ? { ...sourceOutline } : { ...doc.edit.outline }
         };
         doc.history.record(
@@ -15216,6 +15305,7 @@ dialog details {
         doc.result = null;
         doc.revision++;
         doc.variants = null;
+        applied++;
         trimHistories(documents, source);
         if (doc === source) {
           invalidateDocumentWork();
@@ -15224,7 +15314,7 @@ dialog details {
       }
       if (!cancelled())
         batchProgress(
-          "Applied recipe to " + targets.length + " tabs. Undo is available in each tab."
+          applied ? "Applied recipe to " + applied + (applied === 1 ? " tab." : " tabs.") + " Undo is available in each tab." : "These tabs already have this recipe."
         );
     } catch (e) {
       if (!cancelled()) status("Could not apply to tabs: " + e.message);
@@ -15265,9 +15355,11 @@ dialog details {
       }
       const blob = await zip(files);
       if (cancelled()) return;
-      download(blob, "hexshift-tabs.zip");
-      batchProgress(
-        "Prepared hexshift-tabs.zip (" + files.length + " files, " + formatBytes(blob.size) + "). Choose where to save it."
+      $("batchNote").textContent = "Prepared hexshift-tabs.zip (" + files.length + " files).";
+      download(
+        blob,
+        "hexshift-tabs.zip",
+        files.length + " files, " + formatBytes(blob.size)
       );
     } catch (e) {
       if (!cancelled()) status("Could not export tabs: " + e.message);
@@ -15354,11 +15446,8 @@ dialog details {
         });
       const blob = await zip(files), filename = "hexshift-batch.zip", done = list.length - errors.length;
       if (cancelled()) return;
-      download(blob, filename);
       $("batchNote").textContent = (summary.text ? summary.text + " " : "") + "Done: " + done + " of " + list.length + (list.length === 1 ? " image" : " images") + (errors.length ? ". errors.txt in the ZIP lists the others." : ".");
-      status(
-        "Prepared " + filename + " (" + formatBytes(blob.size) + "). Choose where to save it."
-      );
+      download(blob, filename, formatBytes(blob.size));
     } catch (e) {
       if (!cancelled()) status("Batch failed: " + e.message);
     } finally {
@@ -16029,42 +16118,35 @@ dialog details {
     if (!documents.length || batchAbort) return;
     commit("Adjust colour");
     stash();
-    const records = [];
-    for (const doc of documents) {
-      let svg2 = null;
-      if (doc.svgSource)
-        svg2 = {
-          edge: doc.svgSource.edge,
-          text: await doc.svgSource.blob.text()
-        };
-      records.push({
-        name: doc.name,
-        width: doc.w,
-        height: doc.h,
-        still: !!doc.still,
-        original: doc.original,
-        pixels: doc.pixels,
-        overrides: doc.overrides,
-        edit: doc.edit,
-        svg: svg2,
-        view: doc.view,
-        export: doc.exportChoices || currentExport(),
-        variant: doc.variants?.set ? cloneVariantSet(doc.variants.set) : null
-      });
-    }
-    let text2;
+    const active = documents.indexOf(activeDocument), filename = safeStem(documents.length === 1 ? name : "hexshift") + ".hexshift";
     try {
-      text2 = writeSession({
-        active: Math.max(0, documents.indexOf(activeDocument)),
-        documents: records
-      });
+      const records = await Promise.all(
+        documents.map(async (doc) => {
+          const svgSource2 = doc.svgSource;
+          const record = {
+            name: doc.name,
+            width: doc.w,
+            height: doc.h,
+            still: !!doc.still,
+            original: doc.original,
+            pixels: doc.pixels,
+            overrides: doc.overrides.slice(),
+            edit: structuredClone(doc.edit),
+            view: doc.view,
+            export: doc.exportChoices || currentExport(),
+            variant: doc.variants?.set ? cloneVariantSet(doc.variants.set) : null
+          };
+          return {
+            ...record,
+            svg: svgSource2 ? { edge: svgSource2.edge, text: await svgSource2.blob.text() } : null
+          };
+        })
+      );
+      const text2 = writeSession({ active, documents: records });
+      download(new Blob([text2], { type: SESSION_MIME }), filename);
     } catch (e) {
       status("Could not save the session: " + e.message);
-      return;
     }
-    const filename = safeStem(documents.length === 1 ? name : "hexshift") + ".hexshift";
-    download(new Blob([text2], { type: SESSION_MIME }), filename);
-    status("Prepared " + filename + ". Choose where to save it.");
   }
   async function openSessionFile(file) {
     if (batchAbort) {
@@ -17659,6 +17741,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 Original C# port and code by Christian Winnerlein (CodesInChaos), public domain, https://github.com/CodesInChaos/Chaos.NaCl . Poly1305 by Andrew M. (floodyberry), MIT or public domain. Curve25519, Ed25519, Salsa20 and HSalsa20 from SUPERCOP ref10 by Dan Bernstein, public domain (http://bench.cr.yp.to/supercop.html). SHA512 by Christian Winnerlein, public domain.</pre></template>
     <template id="release-notes"><pre># Hex Shift 3
+
+**Fixed in 3.14.3:** Windows reports when a save succeeds, is cancelled, or fails. Repeated exports can open Save As, and the web app tells you to check your browser downloads. Applying a colour target across tabs accounts for each tab's starting shade. Repeating a batch skips recipe steps already applied.
 
 **Fixed in 3.14.2:** Static SVGs whose IDs match browser property names, such as `scroll`, now open. Internal IDs are renamed together with their references so gradients, filters, masks, clipping and linked artwork keep drawing correctly. SVG security checks remain in place.
 

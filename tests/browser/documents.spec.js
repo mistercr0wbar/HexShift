@@ -262,6 +262,61 @@ test("Ctrl and Shift selection apply only to the selected range", async ({
   await expect(page.getByRole("tab", { selected: true })).toHaveCount(3);
 });
 
+test("Apply to all tabs reaches the chosen shade on different starting shades", async ({
+  page,
+}) => {
+  await open(page, [
+    await png("destination.png", "#A0A0A0"),
+    await png("source.png", "#C0C0C0"),
+  ]);
+  await page.locator("#palette button").first().click();
+  await page.locator("#targetHex").fill("#787878");
+  await page.locator("#targetHex").press("Tab");
+  await settled(page);
+  await menu(page, "Apply to all tabs");
+  await expect(page.locator("#status")).toContainText(
+    "Applied recipe to 2 tabs",
+  );
+  await page.keyboard.press("Control+1");
+  await ready(page);
+  expect(await pixel(await exported(page))).toEqual([120, 120, 120, 255]);
+});
+
+test("reapplying a tab batch does not stack the same manual lightness shift", async ({
+  page,
+}) => {
+  await open(page, [
+    await png("destination.png", "#B0B0B0"),
+    await png("source.png", "#B0B0B0"),
+  ]);
+  await page.locator("#palette button").first().click();
+  if (
+    (await page.locator("#adjustTitle").getAttribute("aria-expanded")) ===
+    "false"
+  )
+    await page.locator("#adjustTitle").click();
+  await page.locator("#dlNumber").fill("-12");
+  await page.locator("#dlNumber").press("Tab");
+  await settled(page);
+  await menu(page, "Apply to all tabs");
+  await expect(page.locator("#status")).toContainText(
+    "Applied recipe to 2 tabs",
+  );
+  await page.keyboard.press("Control+1");
+  await ready(page);
+  const once = await pixel(await exported(page));
+  expect(once[0]).toBeLessThan(176);
+  await page.keyboard.press("Control+2");
+  await ready(page);
+  await menu(page, "Apply to all tabs");
+  await expect(page.locator("#status")).toHaveText(
+    "These tabs already have this recipe.",
+  );
+  await page.keyboard.press("Control+1");
+  await ready(page);
+  expect(await pixel(await exported(page))).toEqual(once);
+});
+
 test("rapid switches and worker fallback keep pixels in their own tabs", async ({
   page,
 }) => {
@@ -487,7 +542,9 @@ test("a session file restores both tabs and a recipe does not replace them", asy
   await page.getByRole("menuitem", { name: /^Save session/ }).click();
   const saved = await download;
   expect(saved.suggestedFilename()).toBe("hexshift.hexshift");
-  await expect(page.locator("#status")).toContainText("Choose where to save it.");
+  await expect(page.locator("#status")).toContainText(
+    "Check your browser’s downloads.",
+  );
   await expect(page.getByRole("tab")).toHaveCount(2);
   const buffer = await readFile(await saved.path());
   await page.reload();
@@ -515,4 +572,54 @@ test("a session file restores both tabs and a recipe does not replace them", asy
   await expect(page.locator("#status")).toContainText("recipe, not a session");
   await expect(page.locator("#fileName")).toHaveText("blue.png");
   await expect(page.getByRole("tab")).toHaveCount(2);
+});
+
+test("Windows session save reports a missing dialog and confirms a successful retry", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    window.chrome ||= {};
+    const webview = new EventTarget();
+    webview.postMessage = () => {};
+    window.chrome.webview = webview;
+    const click = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function () {
+      if (this.download) window.lastSaveUrl = this.href;
+      else click.call(this);
+    };
+  });
+  await page.reload();
+  await ready(page);
+  await open(page, [await png("work.png")]);
+  await paint(page, "#12AB34");
+  const save = () => page.keyboard.press("Control+Shift+s");
+  await save();
+  await expect(page.locator("#status")).toContainText(
+    "Waiting for Windows Save As",
+  );
+  await expect(page.locator("#status")).toContainText(
+    "Windows did not respond to the save request",
+  );
+  await save();
+  await expect(page.locator("#status")).toContainText(
+    "Waiting for Windows Save As",
+  );
+  const reply = (phase) =>
+    page.evaluate((value) => {
+      window.chrome.webview.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "save-state", url: window.lastSaveUrl, phase: value },
+        }),
+      );
+    }, phase);
+  await reply("choosing");
+  await expect(page.locator("#status")).toContainText(
+    "Choose a location in Windows Save As",
+  );
+  await reply("saving");
+  await expect(page.locator("#status")).toContainText("Saving the file");
+  await reply("saved");
+  await expect(page.locator("#status")).toContainText("File saved.");
+  await expect(page.locator("#fileName")).toHaveText("work.png");
+  await expect(page.locator("#undo")).toBeEnabled();
 });
