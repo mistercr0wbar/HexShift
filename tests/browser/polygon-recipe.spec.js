@@ -517,7 +517,7 @@ test("tab and file repeats ask only when another image would be replayed", async
   await page.locator("#repeatSelected").click();
   await expect(page.locator("#recipeDialog")).toBeHidden();
   await expect(page.locator("#status")).toContainText(
-    "Applied recipe to 1 tabs",
+    "Applied recipe to 1 tab.",
   );
   await settled(page);
 
@@ -529,7 +529,7 @@ test("tab and file repeats ask only when another image would be replayed", async
   await page.locator("#repeatSelected").click();
   await expect(page.locator("#recipeDialog")).toBeHidden();
   await expect(page.locator("#status")).toContainText(
-    "Applied recipe to 1 tabs",
+    "Applied recipe to 1 tab.",
   );
 
   await fresh();

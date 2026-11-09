@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-UWBk1aNH01P5DxI+V5Wdb6g5fNT0jOK508nkFksi9Gg='; style-src 'sha256-CrJVCbwZTUbK42tk145JYZkptYxbJWjQcrkDrrLD9vg='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-J4IVbXiWPRsffY6pVLVYsRSFIsI6wd22rKcKT0J4NCs='; style-src 'sha256-CrJVCbwZTUbK42tk145JYZkptYxbJWjQcrkDrrLD9vg='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta
       name="theme-color"
@@ -12803,7 +12803,7 @@ dialog details {
   // src/app.js
   var $ = (id) => document.getElementById(id);
   var pause = makePause();
-  var VERSION = "3.14.3";
+  var VERSION = "3.14.4";
   var w = 0;
   var h = 0;
   var name = "";
@@ -17742,7 +17742,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 Original C# port and code by Christian Winnerlein (CodesInChaos), public domain, https://github.com/CodesInChaos/Chaos.NaCl . Poly1305 by Andrew M. (floodyberry), MIT or public domain. Curve25519, Ed25519, Salsa20 and HSalsa20 from SUPERCOP ref10 by Dan Bernstein, public domain (http://bench.cr.yp.to/supercop.html). SHA512 by Christian Winnerlein, public domain.</pre></template>
     <template id="release-notes"><pre># Hex Shift 3
 
-**Fixed in 3.14.3:** Windows reports when a save succeeds, is cancelled, or fails. Repeated exports can open Save As, and the web app tells you to check your browser downloads. Applying a colour target across tabs accounts for each tab's starting shade. Repeating a batch skips recipe steps already applied.
+**Fixed in 3.14.4:** Windows reports when a save succeeds, is cancelled, or fails. Repeated exports can open Save As, and the web app tells you to check your browser downloads. Applying a colour target across tabs accounts for each tab's starting shade. Repeating a batch skips recipe steps already applied.
 
 **Fixed in 3.14.2:** Static SVGs whose IDs match browser property names, such as `scroll`, now open. Internal IDs are renamed together with their references so gradients, filters, masks, clipping and linked artwork keep drawing correctly. SVG security checks remain in place.
 
