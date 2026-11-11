@@ -6,7 +6,6 @@ import {
   DEFAULT_THEME,
   resolveTheme,
   parseThemeSetting,
-  amplify,
   contrast,
 } from "../src/themes.js";
 
@@ -20,16 +19,25 @@ const SYSTEMS = [
   {},
 ];
 
-test("five themes, four modifiers, Default first", () => {
+test("six character themes, Neutral and System each have four modifiers", () => {
   assert.deepEqual(
     THEMES.map((t) => t.name),
-    ["Default", "Lude", "Nord", "Everforest", "System"],
+    [
+      "BARCHORD I",
+      "BARCHORD IV",
+      "BARCHORD V",
+      "BARDON",
+      "BARNEY",
+      "BARBIE",
+      "Neutral",
+      "System",
+    ],
   );
   assert.deepEqual(
     MODIFIERS.map((m) => m.name),
     ["Default", "Day", "Night", "Contrast"],
   );
-  assert.equal(DEFAULT_THEME, "default");
+  assert.equal(DEFAULT_THEME, "barchord");
 });
 
 test("every theme and modifier reads at WCAG AA", () => {
@@ -38,7 +46,14 @@ test("every theme and modifier reads at WCAG AA", () => {
       for (const system of theme.system ? SYSTEMS : [undefined]) {
         const { tokens: k } = resolveTheme(theme.id, modifier, system),
           where = `${theme.id} ${modifier} ${JSON.stringify(system ?? "")}`,
-          panels = [k["--ground"], k["--surface"], k["--raised"]],
+          panels = [
+            k["--ground"],
+            k["--surface"],
+            k["--chrome"],
+            k["--raised"],
+            k["--hover"],
+          ],
+          textSurfaces = [...panels, k["--accent-soft"]],
           atLeast = (fg, backgrounds, ratio, what) => {
             for (const bg of backgrounds)
               assert.ok(
@@ -46,44 +61,63 @@ test("every theme and modifier reads at WCAG AA", () => {
                 `${where}: ${what} ${fg} on ${bg} is ${contrast(fg, bg).toFixed(2)}`,
               );
           };
-        atLeast(k["--ink"], [...panels, k["--accent-soft"]], 7, "text");
-        atLeast(k["--muted"], panels, 4.5, "muted text");
+        atLeast(k["--ink"], textSurfaces, 7, "text");
+        atLeast(k["--muted"], textSurfaces, 4.5, "muted text");
+        atLeast(k["--accent-text"], textSurfaces, 4.5, "accent text");
         atLeast(
-          k["--accent-text"],
-          [...panels, k["--accent-soft"]],
+          k["--on-accent"],
+          [k["--accent"], k["--accent-hover"]],
           4.5,
-          "accent text",
+          "text on accent",
         );
-        atLeast(k["--on-accent"], [k["--accent"]], 4.5, "text on accent");
+        atLeast(
+          k["--field-line"],
+          [k["--raised"], k["--hover"]],
+          3,
+          "input boundary",
+        );
+        atLeast(k["--trim"], textSurfaces, 4.5, "trim text");
         atLeast(k["--accent"], panels, 3, "accent fill against panels");
-        atLeast(k["--warn"], [...panels, k["--accent-soft"]], 4.5, "warning");
-        atLeast(k["--focus"], panels, 3, "focus ring");
+        atLeast(k["--warn"], textSurfaces, 4.5, "warning");
+        atLeast(k["--focus"], textSurfaces, 3, "focus ring");
         for (const value of Object.values(k))
           assert.match(value, /^(#[0-9a-f]{6}|0 2px \d+px #[0-9a-f]{8})$/);
       }
 });
 
-test("Contrast is pitch black with the main colour boosted", () => {
+test("Contrast uses black surfaces with bright character or system accents", () => {
   for (const theme of THEMES.filter((t) => !t.system)) {
     const look = resolveTheme(theme.id, "contrast");
     assert.equal(look.tokens["--ground"], "#000000");
     assert.equal(look.tokens["--surface"], "#000000");
+    assert.equal(look.tokens["--chrome"], "#000000");
     assert.ok(look.contrast && look.dark);
     assert.ok(contrast(look.tokens["--accent"], "#000000") >= 8, theme.id);
   }
-  assert.equal(amplify("#e6e6e6"), "#ffffff");
-  // Boosting keeps the hue: orange stays orange, green stays green.
-  const [r, g, b] = amplify("#e8802e")
-    .match(/\w\w/g)
-    .map((v) => parseInt(v, 16));
-  assert.ok(r > g && g > b);
-  // System boosts the Windows accent the same way.
   const red = resolveTheme("system", "contrast", {
     accent: "#e81123",
     dark: true,
   }).tokens;
   assert.equal(red["--ground"], "#000000");
-  assert.equal(red["--accent"], amplify("#e81123"));
+  assert.ok(contrast(red["--accent"], "#000000") >= 8);
+  const [r, g, b] = red["--accent"].match(/\w\w/g).map((v) => parseInt(v, 16));
+  assert.ok(r > g && r > b);
+});
+
+test("character combinations persist across modifiers and the canvas stays neutral", () => {
+  for (const { id: modifier } of MODIFIERS) {
+    const iv = resolveTheme("barchord-iv", modifier).tokens;
+    const v = resolveTheme("barchord-v", modifier).tokens;
+    const barbie = resolveTheme("barbie", modifier).tokens;
+    assert.equal(iv["--chrome"], v["--chrome"]);
+    assert.notEqual(iv["--accent"], v["--accent"]);
+    assert.notEqual(barbie["--accent"], barbie["--trim"]);
+    for (const { id } of THEMES) {
+      const { tokens } = resolveTheme(id, modifier);
+      for (const key of ["--ground", "--checker1", "--checker2"])
+        assert.equal(tokens[key], iv[key], `${id} ${modifier} ${key}`);
+    }
+  }
 });
 
 test("System follows the Windows light or dark app mode", () => {
@@ -103,15 +137,23 @@ test("System follows the Windows light or dark app mode", () => {
 
 test("settings from 3.0 and earlier read as the nearest new look", () => {
   const cases = {
-    "": { modifier: null, theme: "default", saved: false },
+    "": { modifier: null, theme: "barchord", saved: false },
     dark: { modifier: "default", theme: "default", saved: true },
     light: { modifier: "day", theme: "default", saved: true },
     system: { modifier: null, theme: "default", saved: true },
     "dark:graphite": { modifier: "default", theme: "default", saved: true },
-    "light:lewd": { modifier: "day", theme: "lude", saved: true },
+    "light:lewd": { modifier: "day", theme: "barchord-iv", saved: true },
     "dark:contrast": { modifier: "contrast", theme: "default", saved: true },
     "dark:dracula": { modifier: "default", theme: "default", saved: true },
-    "night:nord": { modifier: "night", theme: "nord", saved: true },
+    "night:nord": { modifier: "night", theme: "barney", saved: true },
+    "day:lude": { modifier: "day", theme: "barchord-iv", saved: true },
+    "contrast:everforest": {
+      modifier: "contrast",
+      theme: "bardon",
+      saved: true,
+    },
+    "default:default": { modifier: "default", theme: "default", saved: true },
+    "day:barbie": { modifier: "day", theme: "barbie", saved: true },
     "contrast:system": { modifier: "contrast", theme: "system", saved: true },
   };
   for (const [value, expected] of Object.entries(cases))

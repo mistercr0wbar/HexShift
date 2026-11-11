@@ -1,13 +1,6 @@
-// Colour themes for the interface. A theme is picked together with a modifier:
-// Default (the theme's own look), Day (light), Night (deeper and darker) and
-// Contrast (pitch black, with the theme's main colour boosted as the accent).
-// Each look is given as a few base colours; the rest (hover, borders, readable
-// text on buttons) is worked out here, and every text colour is nudged until it
-// reads at WCAG AA on every surface it sits on, so every look passes the same
-// checks. System builds its looks from the colours the operating system
-// reports (in the Windows app: the accent colour and the light/dark app mode).
-// Nord and Everforest follow their open-source palettes (both MIT; see
-// THIRD_PARTY_NOTICES.md).
+// Character themes use the cr0wbots Accents palette for the uniforms, eyes
+// and insignia in the updated character art. The canvas stays neutral.
+// System takes its accent and app mode from the host when available.
 
 const hex = (h) => h.match(/[0-9a-f]{2}/gi).map((v) => parseInt(v, 16));
 const toHex = (rgb) =>
@@ -78,7 +71,7 @@ function fromHsl(h, s, l) {
 }
 // The Contrast accent: the main colour saturated and brightened until it
 // stands out at 8:1 on black. A colourless main colour becomes white.
-export function amplify(colour) {
+function amplify(colour) {
   const [h, s] = toHsl(colour);
   if (s < 0.12) return "#ffffff";
   const sat = Math.min(1, s * 1.4 + 0.25);
@@ -89,232 +82,210 @@ export function amplify(colour) {
   return fromHsl(h, sat, 0.9);
 }
 
-const DEFAULT_LOOKS = {
-  default: {
-    ground: "#141414",
-    surface: "#1c1c1c",
-    raised: "#262626",
-    line: "#303030",
-    ink: "#ececec",
-    muted: "#a3a3a3",
-    accent: "#e6e6e6",
-    focus: "#ffffff",
-  },
-  day: {
-    ground: "#e9e9e9",
-    surface: "#f6f6f6",
-    raised: "#ffffff",
-    line: "#d9d9d9",
-    ink: "#171717",
-    muted: "#595959",
-    accent: "#1f1f1f",
-    focus: "#000000",
-  },
-  night: {
-    ground: "#080808",
-    surface: "#0f0f0f",
-    raised: "#181818",
-    line: "#242424",
-    ink: "#e8e8e8",
-    muted: "#9c9c9c",
-    accent: "#e0e0e0",
-    focus: "#ffffff",
-  },
-};
-const withAccent = (look, accent, focus) => ({ ...look, accent, focus });
-
-// id, name, and per look: ground (around the canvas), surface (bars, panels),
-// raised (fields, chips), line, ink (text), muted, accent and focus. The
-// Default look's accent is the theme's main colour, which Contrast boosts.
+// Deep, Dark, Base, Light and Lighter, in the same order as the GPL palette.
+const neutral = ["#1a1a1a", "#4d4d4d", "#808080", "#b3b3b3", "#e6e6e6"];
+const red = ["#990d2f", "#bc374a", "#df5866", "#ff7b86", "#ffb3b5"];
+const orange = ["#843900", "#af4e00", "#da650c", "#fd853c", "#ffb892"];
+const gold = ["#6f4900", "#946300", "#ba7e00", "#db9d38", "#fcbd5c"];
+const green = ["#006502", "#1c851a", "#42a43e", "#63c45e", "#84e57d"];
+const blue = ["#005591", "#0072bf", "#1590ec", "#5bb0ff", "#9fcfff"];
+const violet = ["#74298f", "#9248af", "#b267d0", "#d286f2", "#e8b2ff"];
+const magenta = ["#94104f", "#b6386b", "#d95888", "#fc78a6", "#ffb0c8"];
 export const THEMES = [
-  { id: "default", name: "Default", ...DEFAULT_LOOKS },
+  // Pale ceramic armour, red note and iris, amber studio lights.
   {
-    id: "lude",
-    name: "Lude",
-    default: withAccent(DEFAULT_LOOKS.default, "#e8802e", "#6ef0ff"),
-    day: withAccent(DEFAULT_LOOKS.day, "#e8802e", "#007c99"),
-    night: withAccent(DEFAULT_LOOKS.night, "#e8802e", "#6ef0ff"),
+    id: "barchord",
+    name: "BARCHORD I",
+    eye: red,
+    vest: neutral[4],
+    trim: gold,
   },
+  // The workers wear the same burgundy armour with different eye colours.
   {
-    id: "nord",
-    name: "Nord",
-    default: {
-      ground: "#2e3440",
-      surface: "#3b4252",
-      raised: "#434c5e",
-      line: "#4c566a",
-      ink: "#eceff4",
-      muted: "#d8dee9",
-      accent: "#88c0d0",
-      focus: "#ebcb8b",
-    },
-    day: {
-      ground: "#d8dee9",
-      surface: "#e5e9f0",
-      raised: "#eceff4",
-      line: "#c2cad6",
-      ink: "#2e3440",
-      muted: "#4c566a",
-      accent: "#5e81ac",
-      focus: "#bf616a",
-    },
-    night: {
-      ground: "#1b1f27",
-      surface: "#21262f",
-      raised: "#2a303b",
-      line: "#3b4252",
-      ink: "#eceff4",
-      muted: "#c2cad6",
-      accent: "#88c0d0",
-      focus: "#ebcb8b",
-    },
+    id: "barchord-iv",
+    name: "BARCHORD IV",
+    eye: orange,
+    vest: red[0],
+    trim: red,
   },
+  { id: "barchord-v", name: "BARCHORD V", eye: gold, vest: red[0], trim: red },
+  // Burnt-orange armour and a gold lion.
   {
-    id: "everforest",
-    name: "Everforest",
-    default: {
-      ground: "#272e33",
-      surface: "#2d353b",
-      raised: "#343f44",
-      line: "#475258",
-      ink: "#d3c6aa",
-      muted: "#9da9a0",
-      accent: "#a7c080",
-      focus: "#e69875",
-    },
-    day: {
-      ground: "#efebd4",
-      surface: "#fdf6e3",
-      raised: "#fffbef",
-      line: "#e0dcc7",
-      ink: "#5c6a72",
-      muted: "#707f74",
-      accent: "#8da101",
-      focus: "#3a94c5",
-    },
-    night: {
-      ground: "#1a1f22",
-      surface: "#1e2326",
-      raised: "#272e33",
-      line: "#374145",
-      ink: "#d3c6aa",
-      muted: "#9da9a0",
-      accent: "#a7c080",
-      focus: "#e69875",
-    },
+    id: "bardon",
+    name: "BARDON",
+    eye: green,
+    vest: orange[2],
+    trim: orange,
+    hardware: gold,
   },
-  // Follows the operating system; its looks are built in systemLooks().
+  // Black armour, gold nameplate and orange lion.
+  {
+    id: "barney",
+    name: "BARNEY",
+    eye: blue,
+    vest: neutral[0],
+    trim: gold,
+    hardware: orange,
+  },
+  // Berry-magenta armour with charcoal hardware and violet eyes.
+  {
+    id: "barbie",
+    name: "BARBIE",
+    eye: violet,
+    vest: magenta[0],
+    trim: magenta,
+  },
+  { id: "default", name: "Neutral", eye: neutral },
   { id: "system", name: "System", system: true },
 ];
+
+const SURFACES = {
+  default: {
+    ground: neutral[0],
+    surface: "#202020",
+    raised: "#292929",
+    line: "#353535",
+    ink: neutral[4],
+    muted: neutral[3],
+    checker: ["#2a2a2a", "#212121"],
+  },
+  day: {
+    ground: neutral[4],
+    surface: "#f7f7f7",
+    raised: "#ffffff",
+    line: "#d7d7d7",
+    ink: neutral[0],
+    muted: neutral[1],
+    checker: ["#e6e6e6", "#f1f1f1"],
+  },
+  night: {
+    ground: "#101010",
+    surface: "#171717",
+    raised: "#212121",
+    line: "#2c2c2c",
+    ink: neutral[4],
+    muted: neutral[3],
+    checker: ["#202020", "#171717"],
+  },
+  contrast: {
+    ground: "#000000",
+    surface: "#000000",
+    raised: "#000000",
+    line: neutral[3],
+    ink: "#ffffff",
+    muted: neutral[4],
+    checker: [neutral[0], "#000000"],
+  },
+};
+
 export const MODIFIERS = [
   { id: "default", name: "Default" },
   { id: "day", name: "Day" },
   { id: "night", name: "Night" },
   { id: "contrast", name: "Contrast" },
 ];
-export const DEFAULT_THEME = "default";
-export const themeById = (id) =>
-  THEMES.find((t) => t.id === id) || THEMES.find((t) => t.id === DEFAULT_THEME);
+export const DEFAULT_THEME = "barchord";
 
-// System: the OS accent on neutral surfaces. Its Default look follows the
-// OS light/dark setting; without a known accent it looks like Default.
-function systemLooks({ accent, dark } = {}) {
-  const pick = (look) => (accent ? withAccent(look, accent, look.focus) : look);
-  return {
-    default: pick(dark === false ? DEFAULT_LOOKS.day : DEFAULT_LOOKS.default),
-    day: pick(DEFAULT_LOOKS.day),
-    night: pick(DEFAULT_LOOKS.night),
-  };
-}
-// Every theme boosts its main colour; for System that is the OS accent.
-const contrastLook = (main) => {
-  const accent = amplify(main);
-  return {
-    ground: "#000000",
-    surface: "#000000",
-    raised: "#000000",
-    line: "#9a9a9a",
-    ink: "#ffffff",
-    muted: "#e0e0e0",
-    accent,
-    focus: accent === "#ffffff" ? "#ffd400" : "#ffffff",
-    warn: "#ffb000",
-    contrast: true,
-  };
+const NEUTRAL_THEME = "default";
+const renamed = {
+  graphite: NEUTRAL_THEME,
+  lewd: "barchord-iv",
+  lude: "barchord-iv",
+  nord: "barney",
+  everforest: "bardon",
 };
+const themeId = (id) => (Object.hasOwn(renamed, id) ? renamed[id] : id);
+const themeById = (id) =>
+  THEMES.find((theme) => theme.id === themeId(id)) || THEMES[0];
 
-// The look for a theme and modifier: { dark, contrast, tokens }, where tokens
-// are every CSS custom property the stylesheet reads. `system` is the OS's
-// { accent, dark } for the System theme.
 export function resolveTheme(id, modifier, system) {
-  const theme = themeById(id),
-    looks = theme.system ? systemLooks(system) : theme,
-    p =
-      modifier === "contrast"
-        ? contrastLook(looks.default.accent)
-        : looks[
-            MODIFIERS.some((m) => m.id === modifier) ? modifier : "default"
-          ],
-    dark = luminance(p.ground) < 0.2,
-    { ground, surface, raised, line, ink } = p,
-    panels = [ground, surface, raised];
-  // Accent fills stand out from the panels (3:1, so a selected choice shows
-  // even with a dark OS accent on a dark theme). Text on them is whichever of
-  // near-black and white reads better; the fill shifts a little if neither
-  // reaches 4.5:1.
-  const fill = readable(p.accent, panels, 3),
-    darkInk = mix(dark ? ground : ink, "#000000", 0.5),
-    onAccent =
-      contrast(fill, darkInk) >= contrast(fill, "#ffffff")
-        ? darkInk
-        : "#ffffff",
-    accent = readable(fill, [onAccent], 4.5),
-    accentSoft = p.contrast
-      ? "#1a1a1a"
-      : mix(surface, accent, dark ? 0.18 : 0.14);
+  const theme = themeById(id);
+  const osAccent = theme.system ? system?.accent : null;
+  let look = Object.hasOwn(SURFACES, modifier) ? modifier : "default";
+  if (look === "default" && theme.system && system?.dark === false)
+    look = "day";
+  const highContrast = look === "contrast";
+  const dark = look !== "day";
+  const eye = theme.eye || neutral;
+  const shade = highContrast
+    ? 4
+    : look === "day"
+      ? 0
+      : look === "night"
+        ? 3
+        : 2;
+  const base = SURFACES[look];
+  const { ground, raised, line, ink, muted, checker } = base;
+  const vest = theme.vest || base.surface;
+  const surface = highContrast
+    ? base.surface
+    : mix(base.surface, vest, dark ? 0.07 : 0.04);
+  const chrome = highContrast
+    ? surface
+    : mix(base.surface, vest, dark ? 0.19 : 0.12);
+  const main =
+    osAccent && highContrast ? amplify(osAccent) : osAccent || eye[shade];
+  const hover = highContrast ? "#262626" : mix(raised, main, 0.08);
+  const panels = [ground, surface, raised, chrome, hover];
+  // Filled controls and focus outlines stand out even with a subdued OS accent.
+  const accent = readable(main, panels, 3);
+  const onAccent =
+    contrast(accent, "#000000") >= contrast(accent, "#ffffff")
+      ? "#000000"
+      : "#ffffff";
+  const accentHover = readable(mix(accent, ink, 0.12), [onAccent], 4.5);
+  const accentSoft = highContrast
+    ? neutral[0]
+    : mix(surface, accent, dark ? 0.18 : 0.11);
+  const textSurfaces = [...panels, accentSoft];
+  const trim = theme.trim?.[dark ? 3 : 0] || main;
+  const focus = (theme.hardware || eye)[dark ? 4 : 0];
   return {
     dark,
-    contrast: !!p.contrast,
+    contrast: highContrast,
     tokens: {
       "--ground": ground,
       "--surface": surface,
+      "--chrome": chrome,
       "--raised": raised,
-      "--hover": p.contrast ? "#262626" : mix(raised, ink, 0.07),
+      "--hover": hover,
       "--line": line,
-      "--line-strong": p.contrast ? ink : mix(line, ink, 0.14),
-      "--ink": readable(ink, [...panels, accentSoft], 7),
-      "--muted": readable(p.muted, panels, 4.5),
+      "--line-strong": highContrast ? ink : mix(line, ink, 0.16),
+      "--field-line": highContrast ? ink : readable(line, [raised, hover], 3),
+      "--ink": readable(ink, textSurfaces, 7),
+      "--muted": readable(muted, textSurfaces, 4.5),
       "--accent": accent,
+      "--accent-hover": accentHover,
       "--on-accent": onAccent,
-      "--accent-text": readable(p.accent, [...panels, accentSoft], 4.5),
+      "--accent-text": readable(main, textSurfaces, 4.5),
       "--accent-soft": accentSoft,
-      "--focus": readable(p.focus, panels, 3),
-      "--warn": readable(
-        p.warn || (dark ? "#f0b54a" : "#855000"),
-        [...panels, accentSoft],
-        4.5,
-      ),
-      "--checker1": p.contrast
-        ? "#1a1a1a"
-        : mix(ground, ink, dark ? 0.07 : 0.06),
-      "--checker2": p.contrast
-        ? "#000000"
-        : mix(ground, ink, dark ? 0.02 : 0.015),
+      "--trim": readable(trim, textSurfaces, 4.5),
+      "--focus": readable(focus, textSurfaces, 3),
+      "--warn": readable(gold[dark ? 4 : 0], textSurfaces, 4.5),
+      "--checker1": checker[0],
+      "--checker2": checker[1],
       "--shadow": dark ? "0 2px 12px #00000073" : "0 2px 10px #0000001f",
     },
   };
 }
-// The stored setting is "modifier:theme". Values from 3.0 ("dark:nord") and
-// earlier ("dark") are read as the nearest new look.
+
+// The stored setting is "modifier:theme". Keep the modifier when migrating
+// earlier theme names and keep the original neutral choice for bare modes.
 export function parseThemeSetting(value) {
-  const [first = "", second = ""] = String(value || "").split(":"),
-    renamed = { graphite: "default", lewd: "lude" },
-    oldMode = { dark: "default", light: "day" };
-  let modifier = MODIFIERS.some((m) => m.id === first)
-      ? first
-      : oldMode[first] || null,
-    theme = renamed[second] || second;
-  if (theme === "contrast") [theme, modifier] = ["default", "contrast"];
-  if (!THEMES.some((t) => t.id === theme)) theme = DEFAULT_THEME;
-  return { modifier, theme, saved: !!value };
+  const [first = "", second = ""] = String(value || "").split(":");
+  const oldMode =
+    first === "dark" ? "default" : first === "light" ? "day" : null;
+  const modifier = MODIFIERS.some((m) => m.id === first) ? first : oldMode;
+  if (second === "contrast")
+    return { modifier: "contrast", theme: NEUTRAL_THEME, saved: true };
+  const savedTheme = themeId(second);
+  return {
+    modifier,
+    theme: THEMES.some(({ id }) => id === savedTheme)
+      ? savedTheme
+      : value
+        ? NEUTRAL_THEME
+        : DEFAULT_THEME,
+    saved: !!value,
+  };
 }

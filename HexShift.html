@@ -6,40 +6,72 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-J4IVbXiWPRsffY6pVLVYsRSFIsI6wd22rKcKT0J4NCs='; style-src 'sha256-CrJVCbwZTUbK42tk145JYZkptYxbJWjQcrkDrrLD9vg='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-rQGrWiu5uKJMHeJRQTCE+NnLD/rNEl+VzNp/yHlIBYs='; style-src 'sha256-HW29IcMZYMxxG5Xv/OMAbIWspYH9A7yZWRKB8XJfArw='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta
       name="theme-color"
-      content="#f6f6f6"
+      content="#f5f5f5"
       media="(prefers-color-scheme: light)"
     />
     <meta
       name="theme-color"
-      content="#1c1c1c"
+      content="#464646"
       media="(prefers-color-scheme: dark)"
     />
     <title>Hex Shift — colour, with character</title>
     <link rel="manifest" href="manifest.webmanifest" />
-    <link rel="icon" href="data:image/png;base64,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" />
+    <link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAYAAABS3GwHAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAGS0lEQVR42u3dP2hdVRwH8Dtm7FiS/sfS2EFTEH1F0GgpFKkYi0gGh4wZFAqCFqT4EGkGh7qUoIMZg4sdM5U3lYJLcMrmc4tbcMoiPO+VO7QiaJNz3rvn/j4/+K7tbe7383LuuffdVpUxxhhjjDHGGGOMMcYYY8wMZn5+frHOjTrDOlt1Rk9lt85EOpG9f5ybh+05W6mzpMnPV/rmh7ZZZ1+xepODOtt1Vuuc0PJnC3+izlr7AzpUlhDZqbN+/szpk2GLf2ph4VxbeoWInVHdheUwxW/Ut0scJ1+eTnPdsNj3pc7QMkf+I5u9WxrV/6jbLmrlOXLYfljOlV78ufZXm5MqR8lusb8N2otce/Vy3DQrh0Fpn/yDdu/XCZRUS6LVUsq/5kJXMuV+18s/dJIk93ZpV8u/7uRIyN8EzZ08yx6Zcta6tNvjgldmcWE86MI+v61OmdkWafMBPEsARd7kmnxxL2v++Orz5Mf8691Psh/3e4OXS0TwZCZ3jNvHGyYAABDuorh9sG0fAAC6cj0w1aVQI67ktSMAvQMwvfsD7fP8hwAA0MEsTePTf6v03QMAegtgJ3f5l/qwfQZAbwE0WbHtCUBkALs51/4TAAAoIAMPuwEQGcAwB4AdAAAo5U11OZ75OQQAgFKS9MZY+0q7CQAAFJQ79v4BiAxglHL5cwAAAKUlyStV+nLzC4B4AJLcFOvb+h+AUADupACwAQAAhWbb4w8ARAawmwLACAAACs04BYA9AAAo9ZtiKQCMAQCg1KQAsA8AAJEBTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAigDw6ksXAEgJoPlEyX3SJE3+fPRRJ3Pr7csASMzyAyChyw+AhC4/ABK6/ABI6PIDIKHLD4CELj8AErr8AEjo8gMgocsPgIQuPwASuvwASOjyAyChyw+AhC4/ABK6/ABI6PIDIKHLD4CELj8AErr8AEjo8gMgocsPgIQuf/EArl25/PdLorqW7GX98uvkx/z7Tx9mL9vP3707efzgZqdy/eolb4bzZrj5yfbwWnYA3gwHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEA/Aa5cvTh5/uta55Abw248fTL75+PWk+eWHlewAvv/szeTHfdwcF6XXonh1ideiAKD8AACg/AAAoPwAAKD8AACg/AAAoPwAAKD8AACg/AAAoPwAAKD8AACg/AAAoPwARAaggACEBaB8AIQFoHgAhAWgdACEBaBwAIQFoGwAhAWgaACEBaBkAIQFoGAAhAWgXACEBaBYAEwFwOKFs5O777/VqTQ/0NwnrXmJVfP3pMyjb9/Jftzrt64kP+7j5sWLZ7waMXVyF+nxg5tejejViAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAxwAcAABAZABjAAAAAAAAggIYAQBAoRmnALADAACFZi8FgPsAAFBoHqYAsA4AAIVmIwWAAQAAFJrVFABO1DkEAIACs1ilmL7tBAEQAsC4SjV9uw4AIASAjWQATi0snAMAgJJSd3a5Sjn1H7oLAACF5KBKPfUfOgQAgEKylQPAEgAAFJKVKsf0ZRkEQK8B7NeZywVgBQAAOp7bVc7pw28BAHoLIN+n/1NbossAANDRrFXTmOYpOwAA6Fh2q2lN6TtCAPQSwEo1zan/wk0AAOhIdqppT/uU6BgAAGZ917d5VKeaxTSPm5b4qHTu/9jt+tVLyY/5jVdeyH7c58+eKhHAjWqW05d7A2LP/zgI7jgZMuVsV12a5oCcFJlSnmS/4XUEAHPtgTlBkvWbXufPnD5ZdXFaBA+dJMl1s6uz5e/rdwekO2v+zi17/sfu0IETJ73Z7TniIxNjJ1COepNr5vv8ie4Yuy6Q580o2Xt9OgJh0Mc3TUv6F9pO/cG2GVwb7DnR8i9fZlmvokzz5YX2H+3kW+cPi9rhyfAbYQuGUDlstzVXm2vEyjxznXDfEqm3S5zNXq/vMzxq3byTdKO9eLadWtayZtR+mN1utsM12hhjjDHGGGOMMcYYY4wx056/AKGsluFFFGLjAAAAAElFTkSuQmCC" />
     <style>:root {
   color-scheme: light;
-  --ground: #e9e9e9;
+  --ground: #e6e6e6;
   --surface: #f6f6f6;
+  --chrome: #f5f5f5;
   --raised: #ffffff;
-  --hover: #ebebeb;
-  --line: #d9d9d9;
-  --line-strong: #c4c4c4;
-  --ink: #171717;
-  --muted: #595959;
-  --accent: #1f1f1f;
+  --hover: #f7ecee;
+  --line: #d7d7d7;
+  --line-strong: #b9b9b9;
+  --field-line: #858585;
+  --ink: #1a1a1a;
+  --muted: #4d4d4d;
+  --accent: #990d2f;
+  --accent-hover: #8a0f2c;
   --on-accent: #ffffff;
-  --accent-text: #1f1f1f;
-  --accent-soft: #e0e0e0;
-  --focus: #000000;
-  --warn: #855000;
-  --checker1: #e0e0e0;
-  --checker2: #f2f2f2;
+  --accent-text: #990d2f;
+  --accent-soft: #ecdce0;
+  --trim: #6f4900;
+  --focus: #990d2f;
+  --warn: #6f4900;
+  --checker1: #e6e6e6;
+  --checker2: #f1f1f1;
   --shadow: 0 2px 10px #0000001f;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --ground: #1a1a1a;
+    --surface: #2e2e2e;
+    --chrome: #464646;
+    --raised: #292929;
+    --hover: #382d2e;
+    --line: #353535;
+    --line-strong: #515151;
+    --field-line: #7a7a7a;
+    --ink: #e6e6e6;
+    --muted: #b3b3b3;
+    --accent: #e36c78;
+    --accent-hover: #e37b85;
+    --on-accent: #000000;
+    --accent-text: #eda1a9;
+    --accent-soft: #4f393b;
+    --trim: #e0ab54;
+    --focus: #ffb3b5;
+    --warn: #fcbd5c;
+    --checker1: #2a2a2a;
+    --checker2: #212121;
+    --shadow: 0 2px 12px #00000073;
+  }
+}
+:root {
   /* Sizes. Every control height and gap comes from these, so the whole page
      tightens or loosens in one place: compact with a mouse, finger-sized on touch. */
   --ctl: 26px;
@@ -66,48 +98,6 @@
   /* Digits are all one width, so a number changing while you drag never
      changes the width of the line it sits in. */
   font-variant-numeric: tabular-nums;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --ground: #141414;
-    --surface: #1c1c1c;
-    --raised: #262626;
-    --hover: #2e2e2e;
-    --line: #303030;
-    --line-strong: #3d3d3d;
-    --ink: #ececec;
-    --muted: #a3a3a3;
-    --accent: #e6e6e6;
-    --on-accent: #0a0a0a;
-    --accent-text: #e6e6e6;
-    --accent-soft: #3a3a3a;
-    --focus: #ffffff;
-    --warn: #f0b54a;
-    --checker1: #1f1f1f;
-    --checker2: #262626;
-    --shadow: 0 2px 12px #00000073;
-  }
-}
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --ground: #141414;
-  --surface: #1c1c1c;
-  --raised: #262626;
-  --hover: #2e2e2e;
-  --line: #303030;
-  --line-strong: #3d3d3d;
-  --ink: #ececec;
-  --muted: #a3a3a3;
-  --accent: #e6e6e6;
-  --on-accent: #0a0a0a;
-  --accent-text: #e6e6e6;
-  --accent-soft: #3a3a3a;
-  --focus: #ffffff;
-  --warn: #f0b54a;
-  --checker1: #1f1f1f;
-  --checker2: #262626;
-  --shadow: 0 2px 12px #00000073;
 }
 * {
   box-sizing: border-box;
@@ -244,8 +234,8 @@ select:hover:not(:disabled) {
   color: var(--on-accent);
 }
 .button.primary:hover:not(:disabled) {
-  background: var(--accent);
-  filter: brightness(1.08);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 .button.full {
   width: 100%;
@@ -275,6 +265,11 @@ select:hover:not(:disabled) {
 select {
   max-width: 100%;
   padding: 0 6px;
+}
+select,
+.hex,
+#customSize {
+  border-color: var(--field-line);
 }
 select.compact {
   min-height: var(--ctl-sm);
@@ -507,6 +502,7 @@ summary::marker {
   color: var(--muted);
 }
 .topbar {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -514,8 +510,8 @@ summary::marker {
   min-height: var(--bar);
   padding: calc(4px + var(--safe-top)) calc(10px + var(--safe-right)) 4px
     calc(10px + var(--safe-left));
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
+  background: var(--chrome);
+  border-bottom: 1px solid var(--line-strong);
   z-index: 4;
 }
 .brand {
@@ -525,14 +521,14 @@ summary::marker {
   white-space: nowrap;
 }
 .mark {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   flex: none;
 }
 .brand h1 {
-  font-size: 14px;
-  font-weight: 650;
-  letter-spacing: -0.2px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.25px;
 }
 .version {
   font:
@@ -585,7 +581,12 @@ summary::marker {
 }
 .document-tab.active {
   border-color: var(--accent);
+  background: var(--accent-soft);
   box-shadow: inset 0 -2px var(--accent);
+}
+.document-tab.active .document-name {
+  color: var(--accent-text);
+  font-weight: 600;
 }
 .document-tab.tab-drop {
   outline: 2px solid var(--accent);
@@ -1005,8 +1006,9 @@ summary::marker {
   white-space: nowrap;
 }
 .panel-tab[aria-selected="true"] {
-  background: var(--hover);
-  color: var(--ink);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  box-shadow: inset 0 -2px var(--accent);
 }
 .tab-body {
   display: flex;
@@ -1048,6 +1050,8 @@ summary::marker {
   min-height: var(--head);
   padding: 0 4px 0 2px;
   overflow: hidden;
+  background: var(--chrome);
+  box-shadow: inset 2px 0 var(--trim);
 }
 .panel-head h2 {
   flex: 1;
@@ -1057,7 +1061,7 @@ summary::marker {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--trim);
 }
 .panel-grip {
   flex: none;
@@ -1149,7 +1153,7 @@ summary::marker {
   display: flex;
   flex-direction: column;
   gap: var(--gap);
-  padding: 0 var(--pad) 8px;
+  padding: 6px var(--pad) 8px;
   /* A wide dock does not stretch every control across the window. */
   max-width: 440px;
 }
@@ -1516,7 +1520,7 @@ summary::marker {
   padding: 3px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: var(--surface);
+  background: var(--chrome);
   box-shadow: var(--shadow);
   pointer-events: auto;
 }
@@ -1525,8 +1529,17 @@ summary::marker {
   border-color: transparent;
   background: transparent;
 }
-.canvas-toolbar .icon-button[aria-pressed="true"] {
+.canvas-toolbar .icon-button:hover:not(:disabled),
+.canvas-tools .icon-button:hover:not(:disabled) {
+  background: var(--hover);
+}
+.canvas-toolbar .icon-button[aria-pressed="true"],
+.canvas-tools .icon-button[aria-pressed="true"] {
   background: var(--accent);
+}
+.canvas-toolbar .icon-button[aria-pressed="true"]:hover:not(:disabled),
+.canvas-tools .icon-button[aria-pressed="true"]:hover:not(:disabled) {
+  background: var(--accent-hover);
 }
 .canvas-tools .text-button {
   color: var(--ink);
@@ -1785,7 +1798,14 @@ canvas.polygon-layer {
   background: #1c1c1c;
 }
 .custom-chip {
-  background: conic-gradient(#e8802e, #6ef0ff, #e8802e);
+  background: conic-gradient(
+    #ff7b86,
+    #fcbd5c,
+    #63c45e,
+    #5bb0ff,
+    #d286f2,
+    #ff7b86
+  );
 }
 .backgrounds .colour-trigger {
   width: var(--ctl-sm);
@@ -1836,7 +1856,7 @@ canvas.polygon-layer {
   min-width: 0;
   min-height: 40px;
   padding: 4px 10px;
-  background: var(--surface);
+  background: var(--chrome);
   border-top: 1px solid var(--line);
 }
 .mapbar-title {
@@ -1939,7 +1959,7 @@ canvas.polygon-layer {
   height: calc(var(--status) + var(--safe-bottom));
   padding: 0 calc(10px + var(--safe-right)) var(--safe-bottom)
     calc(10px + var(--safe-left));
-  background: var(--surface);
+  background: var(--chrome);
   border-top: 1px solid var(--line);
   font-size: 12px;
   color: var(--muted);
@@ -2439,7 +2459,7 @@ dialog details {
   display: flex;
   gap: 4px;
   padding: 6px 8px calc(6px + var(--safe-bottom));
-  background: var(--surface);
+  background: var(--chrome);
   border-top: 1px solid var(--line);
 }
 .main[data-preset="phone"] .dock-tabs button {
@@ -2547,8 +2567,11 @@ dialog details {
 
 /* Colour theme menu */
 .theme-menu {
-  position: relative;
   margin: 0;
+}
+.theme-menu[open] > summary {
+  background: var(--accent-soft);
+  border-color: var(--accent);
 }
 .theme-menu > summary {
   list-style: none;
@@ -2564,44 +2587,70 @@ dialog details {
   height: 16px;
   border-radius: 50%;
   border: 1px solid var(--line-strong);
-  background: conic-gradient(var(--accent) 0 50%, var(--surface) 0);
+  background: conic-gradient(
+    var(--accent) 0 50%,
+    var(--trim) 0 75%,
+    var(--chrome) 0
+  );
 }
 .theme-pop {
   position: absolute;
-  right: 0;
+  inset-inline-end: max(8px, var(--safe-right));
   top: calc(100% + 6px);
   z-index: 20;
-  width: 300px;
-  max-height: min(80vh, 560px);
+  width: min(328px, calc(100% - 16px - var(--safe-left) - var(--safe-right)));
+  max-height: min(
+    480px,
+    calc(100dvh - var(--topbar-height, var(--bar)) - 14px - var(--safe-bottom))
+  );
   overflow-y: auto;
-  padding: 6px;
-  border: 1px solid var(--line);
+  padding: 10px;
+  border: 1px solid var(--line-strong);
   border-radius: 10px;
   background: var(--surface);
   box-shadow: var(--shadow);
 }
+.theme-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
 .theme-list legend {
-  padding: 4px 8px 6px;
+  margin-bottom: 6px;
+  padding: 0;
   font-size: 12px;
   font-weight: 600;
   color: var(--muted);
 }
 .theme-list label {
   position: relative;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  min-height: 48px;
   padding: 6px 8px;
+  border: 1px solid var(--line-strong);
   border-radius: 6px;
-  font-weight: 400;
+  background: var(--raised);
+  font-weight: 600;
 }
 .theme-list label:hover {
   background: var(--hover);
 }
 .theme-list label:has(input:checked) {
+  border-color: var(--accent);
   background: var(--accent-soft);
-  font-weight: 600;
+}
+.theme-list label:has(input:checked)::after {
+  content: "";
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  width: 7px;
+  height: 4px;
+  border: solid var(--accent-text);
+  border-width: 0 0 2px 2px;
+  transform: rotate(-45deg);
 }
 .theme-list input {
   position: absolute;
@@ -2619,10 +2668,10 @@ dialog details {
 .theme-swatch {
   display: flex;
   flex: none;
-  width: 42px;
-  height: 20px;
+  width: 100%;
+  height: 13px;
   overflow: hidden;
-  border-radius: 5px;
+  border-radius: 3px;
   border: 1px solid var(--line-strong);
 }
 .theme-swatch span {
@@ -2651,10 +2700,10 @@ dialog details {
 }
 
 .theme-pop .modifier {
-  margin: 8px 4px 4px;
+  margin-bottom: 12px;
 }
-.theme-pop .modifier legend {
-  margin: 4px 4px 6px;
+.theme-pop .modifier label {
+  padding: 0 3px;
 }
 </style>
   </head>
@@ -2743,9 +2792,9 @@ dialog details {
                 <rect x="9" y="55.857" width="82" height="14.057" />
               </g>
             </defs>
-            <rect width="100" height="100" rx="22" fill="#262626" />
-            <use href="#markHash" fill="#6ef0ff" />
-            <use href="#markHash" fill="#e8802e" clip-path="url(#markSplit)" />
+            <rect width="100" height="100" rx="22" fill="#1a1a1a" />
+            <use href="#markHash" fill="#fcbd5c" />
+            <use href="#markHash" fill="#ff7b86" clip-path="url(#markSplit)" />
           </svg>
           <h1>Hex Shift<span class="version"> / 03</span></h1>
         </div>
@@ -2811,16 +2860,16 @@ dialog details {
             </button>
           </div>
           <details class="theme-menu" id="themeMenu">
-            <summary class="button" title="Theme">
+            <summary class="button" title="Theme" aria-label="Theme">
               <span class="theme-dot" aria-hidden="true"></span
               ><span class="label">Theme</span>
             </summary>
             <div class="theme-pop">
-              <fieldset id="uiTheme" class="theme-list">
-                <legend>Theme</legend>
-              </fieldset>
               <fieldset id="theme" class="segmented labelled modifier">
                 <legend>Modifier</legend>
+              </fieldset>
+              <fieldset id="uiTheme" class="theme-list">
+                <legend>Colour theme</legend>
               </fieldset>
             </div>
           </details>
@@ -4277,16 +4326,16 @@ dialog details {
     ly.push(...tl);
     if (xs.at(-1) < 1) lx.push(1), ly.push(1);
     const light = monotoneCubic(lx, ly);
-    const neutral = anchors.every((a) => a.neutral), offsets = [];
+    const neutral2 = anchors.every((a) => a.neutral), offsets = [];
     anchors.forEach((a, i) => {
-      let d = neutral ? targets[i][0] : hueDelta(targets[i][0], a.h);
+      let d = neutral2 ? targets[i][0] : hueDelta(targets[i][0], a.h);
       if (i) {
         while (d - offsets[i - 1] > 180) d -= 360;
         while (d - offsets[i - 1] < -180) d += 360;
       }
       offsets.push(d);
     });
-    const hue = linear(xs, offsets), chroma = neutral ? linear(
+    const hue = linear(xs, offsets), chroma = neutral2 ? linear(
       xs,
       targets.map((t) => t[1])
     ) : linear(
@@ -4298,8 +4347,8 @@ dialog details {
     return (rgb) => {
       const [h2, s, l] = toModel(rgb, p.model);
       return fromModel(
-        neutral ? hue(l) : h2 + hue(l),
-        neutral ? clamp(chroma(l), 0, 1) : clamp(s * Math.exp(chroma(l)), 0, 1),
+        neutral2 ? hue(l) : h2 + hue(l),
+        neutral2 ? clamp(chroma(l), 0, 1) : clamp(s * Math.exp(chroma(l)), 0, 1),
         clamp(light(l), 0, 1),
         p.model
       );
@@ -4665,12 +4714,12 @@ dialog details {
     return colour < 0 ? anchorColour(image, sel) : image.colours.subarray(colour * 3, colour * 3 + 3);
   }
   function shifter(p, anchorRgb) {
-    const [ah, as, al] = toModel(anchorRgb, p.model), neutral = rgbToHsl(...anchorRgb)[3] < NEUTRAL2, rawS = as + p.ds / 100, rawL = al + p.dl / 100, ts = clamp(rawS, 0, 1), tl = clamp(rawL, 0, 1), th = ah + p.dh;
+    const [ah, as, al] = toModel(anchorRgb, p.model), neutral2 = rgbToHsl(...anchorRgb)[3] < NEUTRAL2, rawS = as + p.ds / 100, rawL = al + p.dl / 100, ts = clamp(rawS, 0, 1), tl = clamp(rawL, 0, 1), th = ah + p.dh;
     const shift = (rgb) => {
       const [, s, l] = toModel(rgb, p.model);
       return fromModel(
         th,
-        neutral ? ts : p.protect ? saturationRemap(s, as, ts) : clamp(s + p.ds / 100, 0, 1),
+        neutral2 ? ts : p.protect ? saturationRemap(s, as, ts) : clamp(s + p.ds / 100, 0, 1),
         p.protect ? anchorRemap(l, al, tl) : clamp(l + p.dl / 100, 0, 1),
         p.model
       );
@@ -12617,193 +12666,187 @@ dialog details {
     }
     return fromHsl(h2, sat, 0.9);
   }
-  var DEFAULT_LOOKS = {
-    default: {
-      ground: "#141414",
-      surface: "#1c1c1c",
-      raised: "#262626",
-      line: "#303030",
-      ink: "#ececec",
-      muted: "#a3a3a3",
-      accent: "#e6e6e6",
-      focus: "#ffffff"
-    },
-    day: {
-      ground: "#e9e9e9",
-      surface: "#f6f6f6",
-      raised: "#ffffff",
-      line: "#d9d9d9",
-      ink: "#171717",
-      muted: "#595959",
-      accent: "#1f1f1f",
-      focus: "#000000"
-    },
-    night: {
-      ground: "#080808",
-      surface: "#0f0f0f",
-      raised: "#181818",
-      line: "#242424",
-      ink: "#e8e8e8",
-      muted: "#9c9c9c",
-      accent: "#e0e0e0",
-      focus: "#ffffff"
-    }
-  };
-  var withAccent = (look, accent, focus) => ({ ...look, accent, focus });
+  var neutral = ["#1a1a1a", "#4d4d4d", "#808080", "#b3b3b3", "#e6e6e6"];
+  var red = ["#990d2f", "#bc374a", "#df5866", "#ff7b86", "#ffb3b5"];
+  var orange = ["#843900", "#af4e00", "#da650c", "#fd853c", "#ffb892"];
+  var gold = ["#6f4900", "#946300", "#ba7e00", "#db9d38", "#fcbd5c"];
+  var green = ["#006502", "#1c851a", "#42a43e", "#63c45e", "#84e57d"];
+  var blue = ["#005591", "#0072bf", "#1590ec", "#5bb0ff", "#9fcfff"];
+  var violet = ["#74298f", "#9248af", "#b267d0", "#d286f2", "#e8b2ff"];
+  var magenta = ["#94104f", "#b6386b", "#d95888", "#fc78a6", "#ffb0c8"];
   var THEMES = [
-    { id: "default", name: "Default", ...DEFAULT_LOOKS },
+    // Pale ceramic armour, red note and iris, amber studio lights.
     {
-      id: "lude",
-      name: "Lude",
-      default: withAccent(DEFAULT_LOOKS.default, "#e8802e", "#6ef0ff"),
-      day: withAccent(DEFAULT_LOOKS.day, "#e8802e", "#007c99"),
-      night: withAccent(DEFAULT_LOOKS.night, "#e8802e", "#6ef0ff")
+      id: "barchord",
+      name: "BARCHORD I",
+      eye: red,
+      vest: neutral[4],
+      trim: gold
     },
+    // The workers wear the same burgundy armour with different eye colours.
     {
-      id: "nord",
-      name: "Nord",
-      default: {
-        ground: "#2e3440",
-        surface: "#3b4252",
-        raised: "#434c5e",
-        line: "#4c566a",
-        ink: "#eceff4",
-        muted: "#d8dee9",
-        accent: "#88c0d0",
-        focus: "#ebcb8b"
-      },
-      day: {
-        ground: "#d8dee9",
-        surface: "#e5e9f0",
-        raised: "#eceff4",
-        line: "#c2cad6",
-        ink: "#2e3440",
-        muted: "#4c566a",
-        accent: "#5e81ac",
-        focus: "#bf616a"
-      },
-      night: {
-        ground: "#1b1f27",
-        surface: "#21262f",
-        raised: "#2a303b",
-        line: "#3b4252",
-        ink: "#eceff4",
-        muted: "#c2cad6",
-        accent: "#88c0d0",
-        focus: "#ebcb8b"
-      }
+      id: "barchord-iv",
+      name: "BARCHORD IV",
+      eye: orange,
+      vest: red[0],
+      trim: red
     },
+    { id: "barchord-v", name: "BARCHORD V", eye: gold, vest: red[0], trim: red },
+    // Burnt-orange armour and a gold lion.
     {
-      id: "everforest",
-      name: "Everforest",
-      default: {
-        ground: "#272e33",
-        surface: "#2d353b",
-        raised: "#343f44",
-        line: "#475258",
-        ink: "#d3c6aa",
-        muted: "#9da9a0",
-        accent: "#a7c080",
-        focus: "#e69875"
-      },
-      day: {
-        ground: "#efebd4",
-        surface: "#fdf6e3",
-        raised: "#fffbef",
-        line: "#e0dcc7",
-        ink: "#5c6a72",
-        muted: "#707f74",
-        accent: "#8da101",
-        focus: "#3a94c5"
-      },
-      night: {
-        ground: "#1a1f22",
-        surface: "#1e2326",
-        raised: "#272e33",
-        line: "#374145",
-        ink: "#d3c6aa",
-        muted: "#9da9a0",
-        accent: "#a7c080",
-        focus: "#e69875"
-      }
+      id: "bardon",
+      name: "BARDON",
+      eye: green,
+      vest: orange[2],
+      trim: orange,
+      hardware: gold
     },
-    // Follows the operating system; its looks are built in systemLooks().
+    // Black armour, gold nameplate and orange lion.
+    {
+      id: "barney",
+      name: "BARNEY",
+      eye: blue,
+      vest: neutral[0],
+      trim: gold,
+      hardware: orange
+    },
+    // Berry-magenta armour with charcoal hardware and violet eyes.
+    {
+      id: "barbie",
+      name: "BARBIE",
+      eye: violet,
+      vest: magenta[0],
+      trim: magenta
+    },
+    { id: "default", name: "Neutral", eye: neutral },
     { id: "system", name: "System", system: true }
   ];
+  var SURFACES = {
+    default: {
+      ground: neutral[0],
+      surface: "#202020",
+      raised: "#292929",
+      line: "#353535",
+      ink: neutral[4],
+      muted: neutral[3],
+      checker: ["#2a2a2a", "#212121"]
+    },
+    day: {
+      ground: neutral[4],
+      surface: "#f7f7f7",
+      raised: "#ffffff",
+      line: "#d7d7d7",
+      ink: neutral[0],
+      muted: neutral[1],
+      checker: ["#e6e6e6", "#f1f1f1"]
+    },
+    night: {
+      ground: "#101010",
+      surface: "#171717",
+      raised: "#212121",
+      line: "#2c2c2c",
+      ink: neutral[4],
+      muted: neutral[3],
+      checker: ["#202020", "#171717"]
+    },
+    contrast: {
+      ground: "#000000",
+      surface: "#000000",
+      raised: "#000000",
+      line: neutral[3],
+      ink: "#ffffff",
+      muted: neutral[4],
+      checker: [neutral[0], "#000000"]
+    }
+  };
   var MODIFIERS = [
     { id: "default", name: "Default" },
     { id: "day", name: "Day" },
     { id: "night", name: "Night" },
     { id: "contrast", name: "Contrast" }
   ];
-  var DEFAULT_THEME = "default";
-  var themeById = (id) => THEMES.find((t) => t.id === id) || THEMES.find((t) => t.id === DEFAULT_THEME);
-  function systemLooks({ accent, dark } = {}) {
-    const pick2 = (look) => accent ? withAccent(look, accent, look.focus) : look;
-    return {
-      default: pick2(dark === false ? DEFAULT_LOOKS.day : DEFAULT_LOOKS.default),
-      day: pick2(DEFAULT_LOOKS.day),
-      night: pick2(DEFAULT_LOOKS.night)
-    };
-  }
-  var contrastLook = (main) => {
-    const accent = amplify(main);
-    return {
-      ground: "#000000",
-      surface: "#000000",
-      raised: "#000000",
-      line: "#9a9a9a",
-      ink: "#ffffff",
-      muted: "#e0e0e0",
-      accent,
-      focus: accent === "#ffffff" ? "#ffd400" : "#ffffff",
-      warn: "#ffb000",
-      contrast: true
-    };
+  var DEFAULT_THEME = "barchord";
+  var NEUTRAL_THEME = "default";
+  var renamed = {
+    graphite: NEUTRAL_THEME,
+    lewd: "barchord-iv",
+    lude: "barchord-iv",
+    nord: "barney",
+    everforest: "bardon"
   };
+  var themeId = (id) => Object.hasOwn(renamed, id) ? renamed[id] : id;
+  var themeById = (id) => THEMES.find((theme2) => theme2.id === themeId(id)) || THEMES[0];
   function resolveTheme(id, modifier2, system2) {
-    const theme2 = themeById(id), looks = theme2.system ? systemLooks(system2) : theme2, p = modifier2 === "contrast" ? contrastLook(looks.default.accent) : looks[MODIFIERS.some((m) => m.id === modifier2) ? modifier2 : "default"], dark = luminance(p.ground) < 0.2, { ground, surface, raised, line: line2, ink } = p, panels = [ground, surface, raised];
-    const fill = readable(p.accent, panels, 3), darkInk = mix(dark ? ground : ink, "#000000", 0.5), onAccent = contrast(fill, darkInk) >= contrast(fill, "#ffffff") ? darkInk : "#ffffff", accent = readable(fill, [onAccent], 4.5), accentSoft = p.contrast ? "#1a1a1a" : mix(surface, accent, dark ? 0.18 : 0.14);
+    const theme2 = themeById(id);
+    const osAccent = theme2.system ? system2?.accent : null;
+    let look = Object.hasOwn(SURFACES, modifier2) ? modifier2 : "default";
+    if (look === "default" && theme2.system && system2?.dark === false)
+      look = "day";
+    const highContrast = look === "contrast";
+    const dark = look !== "day";
+    const eye = theme2.eye || neutral;
+    const shade = highContrast ? 4 : look === "day" ? 0 : look === "night" ? 3 : 2;
+    const base = SURFACES[look];
+    const { ground, raised, line: line2, ink, muted, checker: checker2 } = base;
+    const vest = theme2.vest || base.surface;
+    const surface = highContrast ? base.surface : mix(base.surface, vest, dark ? 0.07 : 0.04);
+    const chrome = highContrast ? surface : mix(base.surface, vest, dark ? 0.19 : 0.12);
+    const main = osAccent && highContrast ? amplify(osAccent) : osAccent || eye[shade];
+    const hover = highContrast ? "#262626" : mix(raised, main, 0.08);
+    const panels = [ground, surface, raised, chrome, hover];
+    const accent = readable(main, panels, 3);
+    const onAccent = contrast(accent, "#000000") >= contrast(accent, "#ffffff") ? "#000000" : "#ffffff";
+    const accentHover = readable(mix(accent, ink, 0.12), [onAccent], 4.5);
+    const accentSoft = highContrast ? neutral[0] : mix(surface, accent, dark ? 0.18 : 0.11);
+    const textSurfaces = [...panels, accentSoft];
+    const trim = theme2.trim?.[dark ? 3 : 0] || main;
+    const focus = (theme2.hardware || eye)[dark ? 4 : 0];
     return {
       dark,
-      contrast: !!p.contrast,
+      contrast: highContrast,
       tokens: {
         "--ground": ground,
         "--surface": surface,
+        "--chrome": chrome,
         "--raised": raised,
-        "--hover": p.contrast ? "#262626" : mix(raised, ink, 0.07),
+        "--hover": hover,
         "--line": line2,
-        "--line-strong": p.contrast ? ink : mix(line2, ink, 0.14),
-        "--ink": readable(ink, [...panels, accentSoft], 7),
-        "--muted": readable(p.muted, panels, 4.5),
+        "--line-strong": highContrast ? ink : mix(line2, ink, 0.16),
+        "--field-line": highContrast ? ink : readable(line2, [raised, hover], 3),
+        "--ink": readable(ink, textSurfaces, 7),
+        "--muted": readable(muted, textSurfaces, 4.5),
         "--accent": accent,
+        "--accent-hover": accentHover,
         "--on-accent": onAccent,
-        "--accent-text": readable(p.accent, [...panels, accentSoft], 4.5),
+        "--accent-text": readable(main, textSurfaces, 4.5),
         "--accent-soft": accentSoft,
-        "--focus": readable(p.focus, panels, 3),
-        "--warn": readable(
-          p.warn || (dark ? "#f0b54a" : "#855000"),
-          [...panels, accentSoft],
-          4.5
-        ),
-        "--checker1": p.contrast ? "#1a1a1a" : mix(ground, ink, dark ? 0.07 : 0.06),
-        "--checker2": p.contrast ? "#000000" : mix(ground, ink, dark ? 0.02 : 0.015),
+        "--trim": readable(trim, textSurfaces, 4.5),
+        "--focus": readable(focus, textSurfaces, 3),
+        "--warn": readable(gold[dark ? 4 : 0], textSurfaces, 4.5),
+        "--checker1": checker2[0],
+        "--checker2": checker2[1],
         "--shadow": dark ? "0 2px 12px #00000073" : "0 2px 10px #0000001f"
       }
     };
   }
   function parseThemeSetting(value) {
-    const [first = "", second = ""] = String(value || "").split(":"), renamed = { graphite: "default", lewd: "lude" }, oldMode = { dark: "default", light: "day" };
-    let modifier2 = MODIFIERS.some((m) => m.id === first) ? first : oldMode[first] || null, theme2 = renamed[second] || second;
-    if (theme2 === "contrast") [theme2, modifier2] = ["default", "contrast"];
-    if (!THEMES.some((t) => t.id === theme2)) theme2 = DEFAULT_THEME;
-    return { modifier: modifier2, theme: theme2, saved: !!value };
+    const [first = "", second = ""] = String(value || "").split(":");
+    const oldMode = first === "dark" ? "default" : first === "light" ? "day" : null;
+    const modifier2 = MODIFIERS.some((m) => m.id === first) ? first : oldMode;
+    if (second === "contrast")
+      return { modifier: "contrast", theme: NEUTRAL_THEME, saved: true };
+    const savedTheme = themeId(second);
+    return {
+      modifier: modifier2,
+      theme: THEMES.some(({ id }) => id === savedTheme) ? savedTheme : value ? NEUTRAL_THEME : DEFAULT_THEME,
+      saved: !!value
+    };
   }
 
   // src/app.js
   var $ = (id) => document.getElementById(id);
   var pause = makePause();
-  var VERSION = "3.14.4";
+  var VERSION = "3.15.0";
   var w = 0;
   var h = 0;
   var name = "";
@@ -14317,13 +14360,13 @@ dialog details {
     return out;
   }
   function overlayTint() {
-    const cyan = [110, 240, 255], orange = [232, 128, 46], row = edit?.rows?.[edit.active], from = row ? rowText(row).from : null, rgb = from?.startsWith("#") ? parseHex(from) : null;
+    const cyan = [110, 240, 255], orange2 = [232, 128, 46], row = edit?.rows?.[edit.active], from = row ? rowText(row).from : null, rgb = from?.startsWith("#") ? parseHex(from) : null;
     if (!rgb) return cyan;
     const [r, g, b] = rgb.map((v) => v / 255), max = Math.max(r, g, b), d = max - Math.min(r, g, b);
     if (d < 0.08) return cyan;
     const hue = (max === r ? ((g - b) / d + 6) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4) * 60;
     const gap = (a) => Math.min(Math.abs(hue - a), 360 - Math.abs(hue - a));
-    return gap(187) >= gap(26) ? cyan : orange;
+    return gap(187) >= gap(26) ? cyan : orange2;
   }
   function draw() {
     if (!pixels) return;
@@ -16467,6 +16510,8 @@ dialog details {
     label2.append(input, m.name);
     $("theme").append(label2);
   }
+  var themeSwatches = /* @__PURE__ */ new Map();
+  var previewTokens = ["--ground", "--chrome", "--trim", "--accent", "--focus"];
   for (const t of THEMES) {
     const label2 = document.createElement("label"), input = document.createElement("input"), swatch2 = document.createElement("span");
     input.type = "radio";
@@ -16474,8 +16519,10 @@ dialog details {
     input.value = t.id;
     swatch2.className = "theme-swatch";
     swatch2.setAttribute("aria-hidden", "true");
-    swatch2.dataset.theme = t.id;
-    label2.append(input, swatch2, t.name);
+    const parts = previewTokens.map(() => document.createElement("span"));
+    swatch2.append(...parts);
+    themeSwatches.set(t.id, parts);
+    label2.append(input, t.name, swatch2);
     $("uiTheme").append(label2);
   }
   function theme() {
@@ -16492,16 +16539,12 @@ dialog details {
       root.style.setProperty(name2, value);
     root.style.colorScheme = dark ? "dark" : "light";
     for (const meta2 of document.querySelectorAll('meta[name="theme-color"]'))
-      meta2.content = tokens["--surface"];
-    for (const swatch2 of document.querySelectorAll(".theme-swatch")) {
-      const t = resolveTheme(swatch2.dataset.theme, modifier, system).tokens;
-      swatch2.replaceChildren(
-        ...["--surface", "--raised", "--accent"].map((name2) => {
-          const part = document.createElement("span");
-          part.style.background = t[name2];
-          return part;
-        })
-      );
+      meta2.content = tokens["--chrome"];
+    for (const [id, parts] of themeSwatches) {
+      const preview = id === uiTheme ? tokens : resolveTheme(id, modifier, system).tokens;
+      parts.forEach((part, i) => {
+        part.style.backgroundColor = preview[previewTokens[i]];
+      });
     }
     setChoice("uiTheme", uiTheme);
     setChoice("theme", modifier);
@@ -16518,13 +16561,18 @@ dialog details {
     uiTheme = choice("uiTheme");
     theme();
   };
+  var themeMenu = $("themeMenu");
+  var topbar = themeMenu.closest(".topbar");
+  new ResizeObserver(() => {
+    themeMenu.style.setProperty("--topbar-height", topbar.offsetHeight + "px");
+  }).observe(topbar);
   document.addEventListener("click", (e) => {
-    if (!$("themeMenu").contains(e.target)) $("themeMenu").open = false;
+    if (!themeMenu.contains(e.target)) themeMenu.open = false;
   });
-  $("themeMenu").addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && $("themeMenu").open) {
-      $("themeMenu").open = false;
-      $("themeMenu").querySelector("summary").focus();
+  themeMenu.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && themeMenu.open) {
+      themeMenu.open = false;
+      themeMenu.querySelector("summary").focus();
       e.stopPropagation();
     }
   });
@@ -17741,6 +17789,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 Original C# port and code by Christian Winnerlein (CodesInChaos), public domain, https://github.com/CodesInChaos/Chaos.NaCl . Poly1305 by Andrew M. (floodyberry), MIT or public domain. Curve25519, Ed25519, Salsa20 and HSalsa20 from SUPERCOP ref10 by Dan Bernstein, public domain (http://bench.cr.yp.to/supercop.html). SHA512 by Christian Winnerlein, public domain.</pre></template>
     <template id="release-notes"><pre># Hex Shift 3
+
+**New in 3.15.0:** The editor and theme picker use the updated cr0wbots palette and character artwork. BARCHORD I, IV and V take their names from the I–IV–V chord progression. They join BARDON, BARNEY and BARBIE alongside Neutral and System. Every theme has Default, Day, Night and Contrast versions. The picker previews each theme in the selected modifier, and the canvas stays neutral for colour work. Saved Lude, Nord and Everforest choices move to BARCHORD IV, BARNEY and BARDON with their modifiers intact.
 
 **Fixed in 3.14.4:** Windows reports when a save succeeds, is cancelled, or fails. Repeated exports can open Save As, and the web app tells you to check your browser downloads. Applying a colour target across tabs accounts for each tab's starting shade. Repeating a batch skips recipe steps already applied.
 

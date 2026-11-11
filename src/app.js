@@ -4448,6 +4448,8 @@ for (const m of MODIFIERS) {
   label.append(input, m.name);
   $("theme").append(label);
 }
+const themeSwatches = new Map();
+const previewTokens = ["--ground", "--chrome", "--trim", "--accent", "--focus"];
 for (const t of THEMES) {
   const label = document.createElement("label"),
     input = document.createElement("input"),
@@ -4457,8 +4459,10 @@ for (const t of THEMES) {
   input.value = t.id;
   swatch.className = "theme-swatch";
   swatch.setAttribute("aria-hidden", "true");
-  swatch.dataset.theme = t.id;
-  label.append(input, swatch, t.name);
+  const parts = previewTokens.map(() => document.createElement("span"));
+  swatch.append(...parts);
+  themeSwatches.set(t.id, parts);
+  label.append(input, t.name, swatch);
   $("uiTheme").append(label);
 }
 function theme() {
@@ -4478,17 +4482,14 @@ function theme() {
     root.style.setProperty(name, value);
   root.style.colorScheme = dark ? "dark" : "light";
   for (const meta of document.querySelectorAll('meta[name="theme-color"]'))
-    meta.content = tokens["--surface"];
+    meta.content = tokens["--chrome"];
   // Each theme's swatch previews it with the current modifier.
-  for (const swatch of document.querySelectorAll(".theme-swatch")) {
-    const t = resolveTheme(swatch.dataset.theme, modifier, system).tokens;
-    swatch.replaceChildren(
-      ...["--surface", "--raised", "--accent"].map((name) => {
-        const part = document.createElement("span");
-        part.style.background = t[name];
-        return part;
-      }),
-    );
+  for (const [id, parts] of themeSwatches) {
+    const preview =
+      id === uiTheme ? tokens : resolveTheme(id, modifier, system).tokens;
+    parts.forEach((part, i) => {
+      part.style.backgroundColor = preview[previewTokens[i]];
+    });
   }
   setChoice("uiTheme", uiTheme);
   setChoice("theme", modifier);
@@ -4504,14 +4505,19 @@ $("uiTheme").onchange = () => {
   uiTheme = choice("uiTheme");
   theme();
 };
+const themeMenu = $("themeMenu"),
+  topbar = themeMenu.closest(".topbar");
+new ResizeObserver(() => {
+  themeMenu.style.setProperty("--topbar-height", topbar.offsetHeight + "px");
+}).observe(topbar);
 // The menu closes on Escape or a click elsewhere, like other menus.
 document.addEventListener("click", (e) => {
-  if (!$("themeMenu").contains(e.target)) $("themeMenu").open = false;
+  if (!themeMenu.contains(e.target)) themeMenu.open = false;
 });
-$("themeMenu").addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && $("themeMenu").open) {
-    $("themeMenu").open = false;
-    $("themeMenu").querySelector("summary").focus();
+themeMenu.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && themeMenu.open) {
+    themeMenu.open = false;
+    themeMenu.querySelector("summary").focus();
     e.stopPropagation();
   }
 });

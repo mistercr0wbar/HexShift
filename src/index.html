@@ -10,12 +10,12 @@
     <meta name="referrer" content="no-referrer" />
     <meta
       name="theme-color"
-      content="#f6f6f6"
+      content="__DAY_CHROME__"
       media="(prefers-color-scheme: light)"
     />
     <meta
       name="theme-color"
-      content="#1c1c1c"
+      content="__DEFAULT_CHROME__"
       media="(prefers-color-scheme: dark)"
     />
     <title>Hex Shift — colour, with character</title>
@@ -110,9 +110,9 @@
                 <rect x="9" y="55.857" width="82" height="14.057" />
               </g>
             </defs>
-            <rect width="100" height="100" rx="22" fill="#262626" />
-            <use href="#markHash" fill="#6ef0ff" />
-            <use href="#markHash" fill="#e8802e" clip-path="url(#markSplit)" />
+            <rect width="100" height="100" rx="22" fill="#1a1a1a" />
+            <use href="#markHash" fill="#fcbd5c" />
+            <use href="#markHash" fill="#ff7b86" clip-path="url(#markSplit)" />
           </svg>
           <h1>Hex Shift<span class="version"> / 03</span></h1>
         </div>
@@ -178,16 +178,16 @@
             </button>
           </div>
           <details class="theme-menu" id="themeMenu">
-            <summary class="button" title="Theme">
+            <summary class="button" title="Theme" aria-label="Theme">
               <span class="theme-dot" aria-hidden="true"></span
               ><span class="label">Theme</span>
             </summary>
             <div class="theme-pop">
-              <fieldset id="uiTheme" class="theme-list">
-                <legend>Theme</legend>
-              </fieldset>
               <fieldset id="theme" class="segmented labelled modifier">
                 <legend>Modifier</legend>
+              </fieldset>
+              <fieldset id="uiTheme" class="theme-list">
+                <legend>Colour theme</legend>
               </fieldset>
             </div>
           </details>

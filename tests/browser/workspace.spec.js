@@ -697,8 +697,8 @@ test("menu items run the same actions as the controls", async ({ page }) => {
   await expect(page.locator('#background input[value="white"]')).toBeChecked();
   await top(page, "View").click();
   await item(page, "Theme").hover();
-  await page.getByRole("menuitemradio", { name: "Nord" }).click();
-  await expect(page.locator('#uiTheme input[value="nord"]')).toBeChecked();
+  await page.getByRole("menuitemradio", { name: "BARNEY" }).click();
+  await expect(page.locator('#uiTheme input[value="barney"]')).toBeChecked();
   await expect(page.locator("html")).toHaveAttribute(
     "data-theme",
     /dark|light/,

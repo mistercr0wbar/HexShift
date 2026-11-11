@@ -1,5 +1,7 @@
 # Hex Shift 3
 
+**New in 3.15.0:** The editor and theme picker use the updated cr0wbots palette and character artwork. BARCHORD I, IV and V take their names from the I–IV–V chord progression. They join BARDON, BARNEY and BARBIE alongside Neutral and System. Every theme has Default, Day, Night and Contrast versions. The picker previews each theme in the selected modifier, and the canvas stays neutral for colour work. Saved Lude, Nord and Everforest choices move to BARCHORD IV, BARNEY and BARDON with their modifiers intact.
+
 **Fixed in 3.14.4:** Windows reports when a save succeeds, is cancelled, or fails. Repeated exports can open Save As, and the web app tells you to check your browser downloads. Applying a colour target across tabs accounts for each tab's starting shade. Repeating a batch skips recipe steps already applied.
 
 **Fixed in 3.14.2:** Static SVGs whose IDs match browser property names, such as `scroll`, now open. Internal IDs are renamed together with their references so gradients, filters, masks, clipping and linked artwork keep drawing correctly. SVG security checks remain in place.

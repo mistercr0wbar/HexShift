@@ -830,6 +830,14 @@ test("responsive workspace, keyboard palette and theme persist without image sto
     "hexshift-mode",
     "hexshift-theme",
   ]);
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.locator("#themeMenu summary").click();
+  await expect(page.locator(".theme-pop")).toBeInViewport({ ratio: 1 });
+  await page.setViewportSize({ width: 360, height: 280 });
+  await expect(page.locator(".theme-pop")).toBeInViewport({ ratio: 1 });
+  await page.locator('#uiTheme input[value="barbie"]').check();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".theme-pop")).toBeHidden();
 });
 test("network and content security policy block external resources and script injection", async ({
   page,
@@ -1295,7 +1303,7 @@ test("themes and modifiers apply, persist in the one theme setting and pass acce
   test.setTimeout(150000);
   await pick(page);
   await page.locator("#themeMenu summary").click();
-  await expect(page.locator("#uiTheme label")).toHaveCount(5);
+  await expect(page.locator("#uiTheme label")).toHaveCount(THEMES.length);
   await expect(page.locator("#theme label")).toHaveText([
     "Default",
     "Day",
@@ -1304,8 +1312,10 @@ test("themes and modifiers apply, persist in the one theme setting and pass acce
   ]);
   await page.keyboard.press("Escape");
   await expect(page.locator(".theme-pop")).toBeHidden();
-  await look(page, "nord", "night");
-  expect(await token(page, "--surface")).toBe("#21262f");
+  await look(page, "barney", "night");
+  const barney = resolveTheme("barney", "night").tokens;
+  expect(await token(page, "--chrome")).toBe(barney["--chrome"]);
+  expect(await token(page, "--trim")).toBe(barney["--trim"]);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   expect(
     await page.evaluate(() => [
@@ -1314,18 +1324,18 @@ test("themes and modifiers apply, persist in the one theme setting and pass acce
     ]),
   ).toEqual([
     ["hexshift-introduced", "hexshift-mode", "hexshift-theme"],
-    "night:nord",
+    "night:barney",
   ]);
   await page.reload();
   await ready(page);
-  expect(await token(page, "--surface")).toBe("#21262f");
-  await expect(page.locator('#uiTheme input[value="nord"]')).toBeChecked();
+  expect(await token(page, "--chrome")).toBe(barney["--chrome"]);
+  await expect(page.locator('#uiTheme input[value="barney"]')).toBeChecked();
   await expect(page.locator('#theme input[value="night"]')).toBeChecked();
   // Contrast: pitch black with the theme's main colour boosted.
-  await look(page, "lude", "contrast");
+  await look(page, "barbie", "contrast");
   expect(await token(page, "--ground")).toBe("#000000");
   expect(await token(page, "--accent")).toBe(
-    resolveTheme("lude", "contrast").tokens["--accent"],
+    resolveTheme("barbie", "contrast").tokens["--accent"],
   );
   await expect(page.locator("html")).toHaveAttribute("data-contrast", "high");
   // Every theme with every modifier, in one engine (the default look is
@@ -1381,7 +1391,7 @@ test("the System theme follows the colours the Windows app sends", async ({
     dark: true,
   }).tokens;
   expect(await token(page, "--accent")).toBe(dark["--accent"]);
-  expect(await token(page, "--ground")).toBe("#141414");
+  expect(await token(page, "--ground")).toBe(dark["--ground"]);
   // Contrast keeps the Windows accent over pitch black.
   await look(page, "system", "contrast");
   expect(await token(page, "--ground")).toBe("#000000");

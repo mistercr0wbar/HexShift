@@ -1,6 +1,7 @@
 import { build } from "esbuild";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
+import { DEFAULT_THEME, resolveTheme } from "../src/themes.js";
 const hash = (s) => createHash("sha256").update(s).digest("base64");
 const readText = async (path) =>
   (await readFile(path, "utf8")).replace(/\r\n?/g, "\n");
@@ -31,7 +32,20 @@ const js = (
     legalComments: "none",
   })
 ).outputFiles[0].text;
-const css = await readText("src/style.css"),
+const day = resolveTheme(DEFAULT_THEME, "day"),
+  dark = resolveTheme(DEFAULT_THEME, "default");
+const themeCss = ({ dark, tokens }, indent = "") =>
+  [
+    `${indent}:root {`,
+    `${indent}  color-scheme: ${dark ? "dark" : "light"};`,
+    ...Object.entries(tokens).map(
+      ([name, value]) => `${indent}  ${name}: ${value};`,
+    ),
+    `${indent}}`,
+  ].join("\n");
+const css =
+    `${themeCss(day)}\n@media (prefers-color-scheme: dark) {\n${themeCss(dark, "  ")}\n}\n` +
+    (await readText("src/style.css")),
   icon =
     "data:image/png;base64," +
     (await readFile("icons/icon-192.png")).toString("base64");
@@ -52,6 +66,8 @@ const notices = embed(await readText("THIRD_PARTY_NOTICES.md")),
 const html = (await readText("src/index.html"))
   .replace("__CSP__", policy)
   .replace("__ICON__", icon)
+  .replace("__DAY_CHROME__", day.tokens["--chrome"])
+  .replace("__DEFAULT_CHROME__", dark.tokens["--chrome"])
   .replace(/<style>\s*__CSS__\s*<\/style>/, () => "<style>" + css + "</style>")
   .replace(
     /<script>\s*__SCRIPT__;?\s*<\/script>/,

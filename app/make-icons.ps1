@@ -1,6 +1,6 @@
 # Draws the Hex Shift icon: an upright # on a graphite tile, split corner to corner
-# at 45 degrees, orange above the split and cyan below. The # is symmetrical about
-# its centre, so the split gives both colours exactly the same area.
+# at 45 degrees, BARCHORD Light above and BARCHORD V Lighter below.
+# The # is symmetrical, so the split gives both colours exactly the same area.
 # Writes app\icon.ico, the PWA icons and the Android adaptive-icon layers.
 # Run from anywhere:  powershell -ExecutionPolicy Bypass -File app\make-icons.ps1
 
@@ -11,9 +11,9 @@ $icons = Join-Path $root 'icons'
 $android = Join-Path $icons 'android'
 New-Item -ItemType Directory -Force $icons, $android | Out-Null
 
-$graphite = [System.Drawing.Color]::FromArgb(255, 0x26, 0x26, 0x26)
-$orange = [System.Drawing.Color]::FromArgb(255, 0xE8, 0x80, 0x2E)
-$cyan = [System.Drawing.Color]::FromArgb(255, 0x6E, 0xF0, 0xFF)
+$graphite = [System.Drawing.Color]::FromArgb(255, 0x1A, 0x1A, 0x1A)
+$red = [System.Drawing.Color]::FromArgb(255, 0xFF, 0x7B, 0x86)
+$gold = [System.Drawing.Color]::FromArgb(255, 0xFC, 0xBD, 0x5C)
 
 # The # in a 70-unit design (15..85 on a 100-unit grid): strokes at 33..45 and
 # 55..67, bars at the same places across, all 70 long. $span is the share of the
@@ -39,7 +39,7 @@ function Hash-Path([float]$x0, [float]$y0, [float]$box, [float]$span, [bool]$sna
     return $p
 }
 
-# Fills the # cyan, then lays the orange half over it, clipped to the triangle above
+# Fills the # gold, then lays the red half over it, clipped to the triangle above
 # the box's top-right to bottom-left diagonal: one clean edge, no seam.
 function Fill-Hash($g, [float]$x0, [float]$y0, [float]$box, [float]$span, $top, $bottom, [bool]$snap = $false) {
     $hash = Hash-Path $x0 $y0 $box $span $snap
@@ -83,14 +83,14 @@ function Draw-Icon([int]$size, [string]$kind) {
             $tile.CloseFigure()
             $fill = New-Object System.Drawing.SolidBrush $graphite
             $g.FillPath($fill, $tile); $fill.Dispose(); $tile.Dispose()
-            Fill-Hash $g $pad $pad $box 0.82 $orange $cyan ($size -le 64)
+            Fill-Hash $g $pad $pad $box 0.82 $red $gold ($size -le 64)
         }
         'maskable' {
             $g.Clear($graphite)
             # Keeps every corner of the # inside the 80% safe circle.
-            Fill-Hash $g 0 0 $size 0.70 $orange $cyan
+            Fill-Hash $g 0 0 $size 0.70 $red $gold
         }
-        'foreground' { Fill-Hash $g 0 0 $size 0.54 $orange $cyan }
+        'foreground' { Fill-Hash $g 0 0 $size 0.54 $red $gold }
         'monochrome' { Fill-Hash $g 0 0 $size 0.54 ([System.Drawing.Color]::White) ([System.Drawing.Color]::White) }
         'background' { $g.Clear($graphite) }
     }
