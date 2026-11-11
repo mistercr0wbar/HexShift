@@ -1,4 +1,4 @@
-// Hex Shift - update downloads.
+// Barhex - update downloads.
 //
 // Every update request goes through here. The first address must pass the rule the
 // caller gives, each redirect is checked against that request's redirect rule and budget
@@ -60,7 +60,7 @@ namespace HexShift
         // Follows only allowed redirects. The caller disposes what comes back.
         Fetch Open(string url, UpdateRoute route, CancellationToken token)
         {
-            if (url == null || !route.First(url)) throw new UpdateException("HexShift will not contact that address.");
+            if (url == null || !route.First(url)) throw new UpdateException("Barhex will not contact that address.");
             string current = url;
             for (int hop = 0; ; hop++)
             {
@@ -100,7 +100,7 @@ namespace HexShift
                 if (string.IsNullOrEmpty(location) || !Uri.TryCreate(new Uri(current), location, out next))
                     throw new UpdateException("The update server sent an unusable redirect.");
                 if (!route.Redirect(next.AbsoluteUri))
-                    throw new UpdateException("The update server redirected to an address HexShift does not accept.");
+                    throw new UpdateException("The update server redirected to an address Barhex does not accept.");
                 current = next.AbsoluteUri;
             }
         }
@@ -128,7 +128,7 @@ namespace HexShift
             {
                 using (Fetch fetch = Open(url, route, limited))
                 {
-                    if (fetch.Response.ContentLength > maxBytes) throw new UpdateException("The response is larger than HexShift allows.");
+                    if (fetch.Response.ContentLength > maxBytes) throw new UpdateException("The response is larger than Barhex allows.");
                     using (Stream body = fetch.Response.GetResponseStream())
                     using (MemoryStream buffer = new MemoryStream())
                     {
@@ -136,7 +136,7 @@ namespace HexShift
                         int read;
                         while ((read = Read(body, chunk, limited)) > 0)
                         {
-                            if (buffer.Length + read > maxBytes) throw new UpdateException("The response is larger than HexShift allows.");
+                            if (buffer.Length + read > maxBytes) throw new UpdateException("The response is larger than Barhex allows.");
                             buffer.Write(chunk, 0, read);
                         }
                         return buffer.ToArray();

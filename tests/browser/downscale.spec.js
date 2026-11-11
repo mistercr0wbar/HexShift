@@ -493,7 +493,7 @@ test("Files to ZIP reports each oversized file and does not ask", async ({
     file("huge.png", pngHeader(5000, 4000)),
   ]);
   const download = await downloading;
-  expect(download.suggestedFilename()).toBe("hexshift-batch.zip");
+  expect(download.suggestedFilename()).toBe("barhex-batch.zip");
   await expect(page.locator("#downscaleDialog")).toBeHidden();
   const files = unzip(await readFile(await download.path()));
   const errors = files["errors.txt"].toString();

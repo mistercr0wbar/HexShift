@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    The Windows app: a WinForms window hosting WebView2, with HexShift.html and the
+    The Windows app: a WinForms window hosting WebView2, with Barhex.html and the
     WebView2 SDK assemblies embedded so the build output is a single HexShift.exe.
     Targets .NET Framework 4.8, which every Windows 10 and 11 install already has.
   -->
@@ -15,14 +15,16 @@
     <RootNamespace>HexShift</RootNamespace>
     <ApplicationIcon>icon.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>3.15.0</Version>
+    <Version>3.16.0</Version>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <NuGetAudit>true</NuGetAudit>
     <NuGetAuditMode>all</NuGetAuditMode>
-    <Product>Hex Shift</Product>
+    <Product>Barhex</Product>
+    <AssemblyTitle>Barhex</AssemblyTitle>
+    <Company>Bardev</Company>
     <Authors>mistercr0wbar</Authors>
     <Copyright>MIT License</Copyright>
-    <Description>Recolour one part of an emoji and keep its shading.</Description>
+    <Description>Recolour emoji, icons and stickers on your device.</Description>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <Prefer32Bit>false</Prefer32Bit>
     <DebugType>none</DebugType>
@@ -44,7 +46,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="..\HexShift.html" LogicalName="HexShift.html" />
+    <EmbeddedResource Include="..\Barhex.html" LogicalName="Barhex.html" />
     <EmbeddedResource Include="$(PkgNetSparkleUpdater_Chaos_NaCl)\lib\net462\Chaos.NaCl.dll" LogicalName="Chaos.NaCl.dll" />
     <EmbeddedResource Include="update-public-key.txt" LogicalName="UpdatePublicKey.txt" />
     <EmbeddedResource Include="$(PkgMicrosoft_Web_WebView2)\lib\net462\Microsoft.Web.WebView2.Core.dll" LogicalName="Microsoft.Web.WebView2.Core.dll" />

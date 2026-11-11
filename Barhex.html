@@ -6,26 +6,35 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-rQGrWiu5uKJMHeJRQTCE+NnLD/rNEl+VzNp/yHlIBYs='; style-src 'sha256-HW29IcMZYMxxG5Xv/OMAbIWspYH9A7yZWRKB8XJfArw='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-TxJetr71HcmSYtLz1Sc4j7dRHEM2NJRfs10yTdlkkTY='; style-src 'sha256-u/yd7kQ/DL6Jgb0vgmmDcvr9Msiw2CPyBgV2Hk/uJ2Q='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta
       name="theme-color"
-      content="#f5f5f5"
+      content="#f6f6f6"
       media="(prefers-color-scheme: light)"
     />
     <meta
       name="theme-color"
-      content="#464646"
+      content="#232529"
       media="(prefers-color-scheme: dark)"
     />
-    <title>Hex Shift — colour, with character</title>
+    <meta
+      name="description"
+      content="Recolour emoji, icons and stickers on your device."
+    />
+    <title>Barhex</title>
     <link rel="manifest" href="manifest.webmanifest" />
-    <link rel="icon" href="data:image/png;base64,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" />
+    <link rel="icon" href="data:image/png;base64,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" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
     <style>:root {
   color-scheme: light;
   --ground: #e6e6e6;
   --surface: #f6f6f6;
   --chrome: #f5f5f5;
+  --masthead: #f6f6f6;
+  --wordmark: #1a1a1a;
+  --maker-credit: #4d4d4d;
+  --maker-wordmark: #966538;
   --raised: #ffffff;
   --hover: #f7ecee;
   --line: #d7d7d7;
@@ -51,6 +60,10 @@
     --ground: #1a1a1a;
     --surface: #2e2e2e;
     --chrome: #464646;
+    --masthead: #232529;
+    --wordmark: #f5f1ea;
+    --maker-credit: #adaeb2;
+    --maker-wordmark: #f2a35a;
     --raised: #292929;
     --hover: #382d2e;
     --line: #353535;
@@ -79,7 +92,7 @@
   --gap: 6px;
   --pad: 10px;
   --head: 28px;
-  --bar: 40px;
+  --bar: 54px;
   --status: 28px;
   --dock-h: clamp(210px, 32vh, 300px);
   --col-left: clamp(220px, 20vw, 280px);
@@ -506,36 +519,52 @@ summary::marker {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 12px;
+  gap: 6px 14px;
   min-height: var(--bar);
   padding: calc(4px + var(--safe-top)) calc(10px + var(--safe-right)) 4px
     calc(10px + var(--safe-left));
-  background: var(--chrome);
-  border-bottom: 1px solid var(--line-strong);
+  background: var(--masthead);
+  border-bottom: 2px solid var(--accent);
   z-index: 4;
 }
 .brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  flex: none;
   white-space: nowrap;
 }
-.mark {
-  width: 26px;
-  height: 26px;
-  flex: none;
+.brand .wordmark {
+  color: var(--wordmark);
+  font-size: 24px;
+  font-weight: 750;
+  letter-spacing: -0.04em;
+  line-height: 1;
 }
-.brand h1 {
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.25px;
+.small-caps {
+  font-variant-caps: all-small-caps;
 }
-.version {
-  font:
-    12px "Cascadia Mono",
-    Consolas,
-    monospace;
-  color: var(--muted);
+.maker-credit {
+  color: var(--maker-credit);
+  font-size: 10px;
+  line-height: 1.35;
+}
+.maker-credit strong {
+  color: var(--maker-wordmark);
+  font-weight: 750;
+}
+.about-brand {
+  padding: 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--masthead);
+}
+.about-brand .wordmark {
+  margin-bottom: 0;
+  font-size: 32px;
+}
+.about-brand .maker-credit {
+  font-size: 12px;
 }
 .file-info {
   display: flex;
@@ -1616,6 +1645,21 @@ summary::marker {
 .empty-editor.quiet {
   visibility: hidden;
 }
+.empty-copy {
+  display: grid;
+  gap: 5px;
+  max-width: 100%;
+  padding: 16px 22px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.empty-title {
+  color: var(--ink);
+  font-size: clamp(16px, 2.2cqw, 24px);
+  font-weight: 700;
+  line-height: 1.2;
+}
 /* Import failures wrap here. The status bar stays one fixed line. */
 .import-notice {
   position: absolute;
@@ -2340,17 +2384,14 @@ dialog details {
   #pixelReadout {
     display: none;
   }
-  .version {
-    display: none;
-  }
 }
 
 /* Phone layout (also the Android port): the page scrolls; the canvas, the colour
    map and one group of panels at a time, chosen from a tab bar at the bottom. */
 @container app (max-width: 759px) {
   .document-tabs {
-    flex: 1 0 100%;
-    order: 3;
+    grid-column: 1 / -1;
+    min-width: 0;
   }
   .tab-list {
     display: none;
@@ -2371,13 +2412,22 @@ dialog details {
   .topbar {
     position: sticky;
     top: 0;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 6px 8px;
+    padding-top: calc(6px + var(--safe-top));
+    padding-bottom: 6px;
     padding-left: calc(10px + var(--safe-left));
     padding-right: calc(10px + var(--safe-right));
   }
-  .version {
-    display: none;
+  .topbar .brand {
+    justify-self: start;
+  }
+  .brand .wordmark {
+    font-size: 20px;
+  }
+  .about-brand .wordmark {
+    font-size: 28px;
   }
   .menu-top {
     display: none;
@@ -2387,8 +2437,13 @@ dialog details {
     align-items: center;
   }
   .top-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    margin-left: 0;
     gap: 4px;
-    flex-wrap: wrap;
+  }
+  .top-actions #export {
+    margin-left: auto;
   }
   #open .label {
     display: none;
@@ -2782,21 +2837,10 @@ dialog details {
       <div id="dropIndicator" hidden aria-hidden="true"></div>
       <header class="topbar">
         <div class="brand">
-          <svg class="mark" viewBox="0 0 100 100" aria-hidden="true">
-            <defs>
-              <clipPath id="markSplit"><path d="M0 0H100L0 100Z" /></clipPath>
-              <g id="markHash">
-                <rect x="30.086" y="9" width="14.057" height="82" />
-                <rect x="55.857" y="9" width="14.057" height="82" />
-                <rect x="9" y="30.086" width="82" height="14.057" />
-                <rect x="9" y="55.857" width="82" height="14.057" />
-              </g>
-            </defs>
-            <rect width="100" height="100" rx="22" fill="#1a1a1a" />
-            <use href="#markHash" fill="#fcbd5c" />
-            <use href="#markHash" fill="#ff7b86" clip-path="url(#markSplit)" />
-          </svg>
-          <h1>Hex Shift<span class="version"> / 03</span></h1>
+          <h1 class="wordmark"><span class="small-caps">Bar</span>hex</h1>
+          <p class="maker-credit">
+            Made by <strong><span class="small-caps">Bar</span>dev</strong>
+          </p>
         </div>
         <div id="menubar" class="menubar"></div>
         <div id="documentTabs" class="document-tabs">
@@ -3236,7 +3280,14 @@ dialog details {
                   Dismiss
                 </button>
               </div>
-              <p id="emptyEditor" class="empty-editor">Open an image to begin.</p>
+              <div id="emptyEditor" class="empty-editor">
+                <div class="empty-copy">
+                  <p class="empty-title">
+                    Change the colour. Keep the shading.
+                  </p>
+                  <p>Open, drop or paste an image.</p>
+                </div>
+              </div>
               <div class="pane before">
                 <div class="canvas-space">
                   <canvas
@@ -3761,7 +3812,7 @@ dialog details {
                     <summary>Repeat edits</summary>
                     <p class="help">
                       A recipe repeats sampled colours. Brush strokes, connected
-                      regions and polygons are left out, and Hex Shift asks
+                      regions and polygons are left out, and Barhex asks
                       before repeating a step that had one. An outline on its
                       own can be repeated.
                     </p>
@@ -3855,8 +3906,8 @@ dialog details {
           >Hover to inspect · scroll to zoom</span
         >
         <p id="update" class="notice" hidden>
-          A new version is ready. Export your work, then close and reopen Hex
-          Shift to update.
+          A new version is ready. Export your work, then close and reopen
+          Barhex to update.
         </p>
         <span class="privacy"
           ><svg class="icon" aria-hidden="true"><use href="#i-shield" /></svg>
@@ -4056,12 +4107,23 @@ dialog details {
     </dialog>
     <dialog id="aboutDialog" aria-labelledby="aboutTitle">
       <form method="dialog">
-        <h2 id="aboutTitle">Hex Shift</h2>
+        <div class="about-brand brand">
+          <h2 id="aboutTitle" class="wordmark">
+            <span class="small-caps">Bar</span>hex
+          </h2>
+          <p class="maker-credit">
+            Made by <strong><span class="small-caps">Bar</span>dev</strong>
+          </p>
+        </div>
         <p id="aboutVersion"></p>
         <p>
-          Recolour one part of an emoji, icon or sticker and keep its shading.
-          Images stay on your device. Hex Shift is free software under the MIT
-          licence.
+          Recolour emoji, icons and stickers on your device. Barhex is free
+          software under the MIT licence.
+        </p>
+        <p>
+          The Bar name comes from Crowbar, the handle behind The Crow Bar and
+          its cast of crows. The original name, Hex Shift, was a nod to
+          <cite>Half-Life: Blue Shift</cite>.
         </p>
         <details>
           <summary>Licence notices</summary>
@@ -7379,7 +7441,7 @@ dialog details {
   var SOURCE_BYTES = 16 * 1024 * 1024;
   var WORKING_LIMIT = "Image too large. Use at most 4,194,304 pixels and 8,192 pixels on either side.";
   var SOURCE_LIMIT = "Image too large to downscale. Use at most 16,777,216 pixels, 16,384 pixels on either side, and 16 MiB.";
-  var RESIZE_UNAVAILABLE = "This browser cannot downscale an image while decoding it. Hex Shift did not open it at full size. Use at most 4,194,304 pixels and 8,192 pixels on either side.";
+  var RESIZE_UNAVAILABLE = "This browser cannot downscale an image while decoding it. Barhex did not open it at full size. Use at most 4,194,304 pixels and 8,192 pixels on either side.";
   var ANIMATED_LIMIT = "Animated images are not downscaled. Use at most 4,194,304 pixels and 8,192 pixels on either side.";
   function dimensions(w2, h2) {
     if (!Number.isInteger(w2) || !Number.isInteger(h2) || w2 < 1 || h2 < 1 || w2 > WORKING_SIDE || h2 > WORKING_SIDE || w2 * h2 > MAX_PIXELS)
@@ -8303,7 +8365,7 @@ dialog details {
     out.set(bytes.subarray(0, length), 25);
     return new Blob([out], { type: "image/webp" });
   }
-  var WEBP_UNAVAILABLE = "Small WebP files can't be made in this browser. Use Chrome, Edge or Firefox, or the Hex Shift Windows app.";
+  var WEBP_UNAVAILABLE = "Small WebP files can't be made in this browser. Use Chrome, Edge or Firefox, or the Barhex Windows app.";
   var webpSupport;
   function canEncodeWebP() {
     if (webpSupport === void 0) {
@@ -9001,7 +9063,7 @@ dialog details {
   }
   function writeGpl(name2, entries2) {
     const clean = (s) => String(s).replace(/[\x00-\x1f\x7f]/g, " ").trim();
-    return "GIMP Palette\nName: " + (clean(name2) || "Hex Shift") + "\nColumns: 0\n#\n" + entries2.map(({ hex: hex3, label: label2 }) => {
+    return "GIMP Palette\nName: " + (clean(name2) || "Barhex") + "\nColumns: 0\n#\n" + entries2.map(({ hex: hex3, label: label2 }) => {
       const [r, g, b] = [1, 3, 5].map(
         (i) => parseInt(hex3.slice(i, i + 2), 16)
       );
@@ -9174,12 +9236,12 @@ dialog details {
     try {
       data = JSON.parse(text2.replace(/^﻿/, ""));
     } catch {
-      throw Error("This is not a Hex Shift recipe (it is not valid JSON).");
+      throw Error("This is not a Barhex recipe (it is not valid JSON).");
     }
     if (data?.format !== "hexshift-recipe")
-      throw Error("This is not a Hex Shift recipe.");
+      throw Error("This is not a Barhex recipe.");
     if (data.version !== 1 && data.version !== 2 && data.version !== 3)
-      throw Error("This recipe needs a newer version of Hex Shift.");
+      throw Error("This recipe needs a newer version of Barhex.");
     const outline2 = data.version === 1 ? null : cleanOutline(data.outline);
     if (data.version === 3 && !outline2)
       throw Error("An outline-only recipe needs an outline.");
@@ -9537,16 +9599,16 @@ dialog details {
     try {
       data = JSON.parse(text2.replace(/^\uFEFF/, ""));
     } catch {
-      throw Error("This file is not a Hex Shift session.");
+      throw Error("This file is not a Barhex session.");
     }
     if (!data || typeof data !== "object" || Array.isArray(data))
-      throw Error("This file is not a Hex Shift session.");
+      throw Error("This file is not a Barhex session.");
     if (data.format === "hexshift-recipe")
       throw Error("This is a recipe, not a session.");
     if (data.format !== "hexshift-session")
-      throw Error("This file is not a Hex Shift session.");
+      throw Error("This file is not a Barhex session.");
     if (data.version !== 1)
-      throw Error("This session needs a newer version of Hex Shift.");
+      throw Error("This session needs a newer version of Barhex.");
     if (!Array.isArray(data.documents) || data.documents.length < 1)
       throw Error("A session needs an image.");
     if (data.documents.length > MAX_DOCUMENTS)
@@ -12791,9 +12853,10 @@ dialog details {
     const vest = theme2.vest || base.surface;
     const surface = highContrast ? base.surface : mix(base.surface, vest, dark ? 0.07 : 0.04);
     const chrome = highContrast ? surface : mix(base.surface, vest, dark ? 0.19 : 0.12);
+    const masthead = look === "default" ? "#232529" : surface;
     const main = osAccent && highContrast ? amplify(osAccent) : osAccent || eye[shade];
     const hover = highContrast ? "#262626" : mix(raised, main, 0.08);
-    const panels = [ground, surface, raised, chrome, hover];
+    const panels = [ground, surface, raised, chrome, masthead, hover];
     const accent = readable(main, panels, 3);
     const onAccent = contrast(accent, "#000000") >= contrast(accent, "#ffffff") ? "#000000" : "#ffffff";
     const accentHover = readable(mix(accent, ink, 0.12), [onAccent], 4.5);
@@ -12808,6 +12871,10 @@ dialog details {
         "--ground": ground,
         "--surface": surface,
         "--chrome": chrome,
+        "--masthead": masthead,
+        "--wordmark": dark ? "#f5f1ea" : ink,
+        "--maker-credit": readable(dark ? "#adaeb2" : muted, [masthead], 4.5),
+        "--maker-wordmark": readable("#f2a35a", [masthead], 4.5),
         "--raised": raised,
         "--hover": hover,
         "--line": line2,
@@ -12846,7 +12913,7 @@ dialog details {
   // src/app.js
   var $ = (id) => document.getElementById(id);
   var pause = makePause();
-  var VERSION = "3.15.0";
+  var VERSION = "3.16.0";
   var w = 0;
   var h = 0;
   var name = "";
@@ -13989,7 +14056,7 @@ dialog details {
       "Redraw"
     ],
     quit: [
-      "Quit Hex Shift?",
+      "Quit Barhex?",
       "Your open tabs have edits. Export them first if you want to keep them.",
       "Quit"
     ],
@@ -14035,7 +14102,7 @@ dialog details {
   }
   function askDownscale(info, signal) {
     const dialog = $("downscaleDialog"), quality = $("downscaleQuality");
-    $("downscaleText").textContent = info.orientedWidth + " \xD7 " + info.orientedHeight + " is larger than Hex Shift can edit. It can open at " + info.proposal.width + " \xD7 " + info.proposal.height + ". Smooth keeps gradients. Nearest keeps hard pixel edges. Export scaling is unchanged.";
+    $("downscaleText").textContent = info.orientedWidth + " \xD7 " + info.orientedHeight + " is larger than Barhex can edit. It can open at " + info.proposal.width + " \xD7 " + info.proposal.height + ". Smooth keeps gradients. Nearest keeps hard pixel edges. Export scaling is unchanged.";
     quality.value = "smooth";
     return new Promise((resolve) => {
       let settled = false;
@@ -15398,10 +15465,10 @@ dialog details {
       }
       const blob = await zip(files);
       if (cancelled()) return;
-      $("batchNote").textContent = "Prepared hexshift-tabs.zip (" + files.length + " files).";
+      $("batchNote").textContent = "Prepared barhex-tabs.zip (" + files.length + " files).";
       download(
         blob,
-        "hexshift-tabs.zip",
+        "barhex-tabs.zip",
         files.length + " files, " + formatBytes(blob.size)
       );
     } catch (e) {
@@ -15487,7 +15554,7 @@ dialog details {
           name: "errors.txt",
           blob: new Blob([errors.join("\r\n") + "\r\n"], { type: "text/plain" })
         });
-      const blob = await zip(files), filename = "hexshift-batch.zip", done = list.length - errors.length;
+      const blob = await zip(files), filename = "barhex-batch.zip", done = list.length - errors.length;
       if (cancelled()) return;
       $("batchNote").textContent = (summary.text ? summary.text + " " : "") + "Done: " + done + " of " + list.length + (list.length === 1 ? " image" : " images") + (errors.length ? ". errors.txt in the ZIP lists the others." : ".");
       download(blob, filename, formatBytes(blob.size));
@@ -16161,7 +16228,7 @@ dialog details {
     if (!documents.length || batchAbort) return;
     commit("Adjust colour");
     stash();
-    const active = documents.indexOf(activeDocument), filename = safeStem(documents.length === 1 ? name : "hexshift") + ".hexshift";
+    const active = documents.indexOf(activeDocument), filename = safeStem(documents.length === 1 ? name : "barhex") + ".hexshift";
     try {
       const records = await Promise.all(
         documents.map(async (doc) => {
@@ -16539,7 +16606,7 @@ dialog details {
       root.style.setProperty(name2, value);
     root.style.colorScheme = dark ? "dark" : "light";
     for (const meta2 of document.querySelectorAll('meta[name="theme-color"]'))
-      meta2.content = tokens["--chrome"];
+      meta2.content = tokens["--masthead"];
     for (const [id, parts] of themeSwatches) {
       const preview = id === uiTheme ? tokens : resolveTheme(id, modifier, system).tokens;
       parts.forEach((part, i) => {
@@ -17054,7 +17121,7 @@ dialog details {
   var updateState = { phase: "idle", auto: true, enabled: true };
   var updates = updateChannel((state) => {
     updateState = state;
-    const named = "Hex Shift" + (state.version ? " " + state.version : "");
+    const named = "Barhex" + (state.version ? " " + state.version : "");
     if (state.phase === "checking") status("Checking for updates\u2026");
     else if (state.phase === "current")
       status(named + " is up to date", { fade: 6e3 });
@@ -17494,7 +17561,7 @@ dialog details {
           },
           { type: "separator" },
           { type: "item", label: "Release notes", run: showNotes },
-          { type: "item", label: "About Hex Shift", run: showAbout }
+          { type: "item", label: "About Barhex", run: showAbout }
         ]
       }
     ]
@@ -17788,7 +17855,13 @@ Copyright (c) 2000-2024 The Legion of the Bouncy Castle Inc. (https://www.bouncy
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 Original C# port and code by Christian Winnerlein (CodesInChaos), public domain, https://github.com/CodesInChaos/Chaos.NaCl . Poly1305 by Andrew M. (floodyberry), MIT or public domain. Curve25519, Ed25519, Salsa20 and HSalsa20 from SUPERCOP ref10 by Dan Bernstein, public domain (http://bench.cr.yp.to/supercop.html). SHA512 by Christian Winnerlein, public domain.</pre></template>
-    <template id="release-notes"><pre># Hex Shift 3
+    <template id="release-notes"><pre># Barhex 3.16.0
+
+**Formerly Hex Shift**
+
+**Change the colour. Keep the shading.** Recolour emoji, icons and stickers on your device. Made by Bardev.
+
+**New in 3.16.0:** Barhex has a new masthead, maker credit and app icon. The web and Windows apps use the same Bardev design as Bardrop. Barhex opens existing Hex Shift sessions and recipes. Hosted and installed copies keep their preferences, and Windows Setup upgrades installed copies in place.
 
 **New in 3.15.0:** The editor and theme picker use the updated cr0wbots palette and character artwork. BARCHORD I, IV and V take their names from the I–IV–V chord progression. They join BARDON, BARNEY and BARBIE alongside Neutral and System. Every theme has Default, Day, Night and Contrast versions. The picker previews each theme in the selected modifier, and the canvas stays neutral for colour work. Saved Lude, Nord and Everforest choices move to BARCHORD IV, BARNEY and BARDON with their modifiers intact.
 

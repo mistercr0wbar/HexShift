@@ -1,4 +1,4 @@
-// Hex Shift - the update service.
+// Barhex - the update service.
 //
 // Check, download, install: the whole flow with no window in it, so it can be driven
 // from a test as easily as from the notice bar. The addresses it may use come in as
@@ -145,7 +145,7 @@ namespace HexShift
         // Failed with a sentence for the user; only cancellation is thrown.
         internal CheckOutcome Check(CancellationToken token)
         {
-            if (!Enabled) return CheckOutcome.Of(CheckKind.Disabled, "This build of HexShift has no update key, so it cannot check for updates.");
+            if (!Enabled) return CheckOutcome.Of(CheckKind.Disabled, "This build of Barhex has no update key, so it cannot check for updates.");
             try
             {
                 UpdateRoute route = endpoints.ForFeed();
@@ -156,8 +156,8 @@ namespace HexShift
 
                 settings.LastCheckUtc = DateTime.UtcNow;
                 settings.Save(dataDir);
-                if (result.Status == FeedStatus.UpToDate) return CheckOutcome.Of(CheckKind.UpToDate, "HexShift " + currentVersion + " is up to date.");
-                CheckOutcome outcome = CheckOutcome.Of(CheckKind.Available, "HexShift " + result.Offer.Version + " is available.");
+                if (result.Status == FeedStatus.UpToDate) return CheckOutcome.Of(CheckKind.UpToDate, "Barhex " + currentVersion + " is up to date.");
+                CheckOutcome outcome = CheckOutcome.Of(CheckKind.Available, "Barhex " + result.Offer.Version + " is available.");
                 outcome.Offer = result.Offer;
                 return outcome;
             }
@@ -167,7 +167,7 @@ namespace HexShift
         // Blocks. Returns the path of the verified installer, or throws UpdateException.
         internal string Download(UpdateOffer offer, Action<long, long> progress, CancellationToken token)
         {
-            if (!Enabled) throw new UpdateException("This build of HexShift has no update key.");
+            if (!Enabled) throw new UpdateException("This build of Barhex has no update key.");
             return UpdateInstaller.Stage(transport, endpoints, offer, dataDir, publicKey, progress, token);
         }
 
@@ -175,7 +175,7 @@ namespace HexShift
         // expected to close itself right afterwards; a portable copy just opens the normal wizard.
         internal void Install(UpdateOffer offer, string stagedPath, bool installedCopy)
         {
-            if (!Enabled) throw new UpdateException("This build of HexShift has no update key.");
+            if (!Enabled) throw new UpdateException("This build of Barhex has no update key.");
             UpdateInstaller.Launch(stagedPath, offer, dataDir, publicKey, installedCopy ? UpdatePolicy.InstallerArguments : "");
         }
     }

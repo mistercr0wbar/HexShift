@@ -7,8 +7,9 @@ dotnet build app/HexShift.csproj -c Release --no-restore
 ```
 
 The existing `./scripts/package.ps1` command still packages the portable files.
-Add `-BuildInstaller` to also produce `dist/HexShift-{version}-Setup.exe` and
-append its hash to the root `SHA256SUMS.txt`. Alternatively, run
+Add `-BuildInstaller` to also produce `dist/Barhex-{version}-Setup.exe` and a
+byte-identical `dist/HexShift-{version}-Setup.exe` for the signed update feed.
+The script appends both hashes to the root `SHA256SUMS.txt`. Alternatively, run
 `./scripts/installer.ps1` after packaging. Both scripts accept `-AppVersion`;
 it must match the built EXE's product and file versions. Omit it to read the
 product version from the EXE. Use stable three-part versions; the installer
@@ -16,8 +17,8 @@ uses a zero fourth component for its Windows version resource.
 
 The recipe can also be compiled with `ISCC.exe /DAppVersion=2.1.0
 installer/HexShift.iss`. It retains the original per-user AppId, installation
-directory, shortcuts and uninstall behavior. It does not remove the profile
-under `%LOCALAPPDATA%\HexShift`.
+directory and profile under `%LOCALAPPDATA%\HexShift`. The Start menu and
+desktop shortcuts and the Windows uninstall entry use the Barhex name.
 
 For an updater, after the user agrees and exports their image, use:
 
@@ -26,14 +27,14 @@ For an updater, after the user agrees and exports their image, use:
 ```
 
 These switches match `UpdatePolicy.InstallerArguments`. `/SILENT` keeps the
-installation progress window visible after HexShift closes; `/VERYSILENT`
+installation progress window visible after Barhex closes. `/VERYSILENT`
 would hide it. Message boxes remain enabled so Setup can ask
-"HexShift was updated. Open it now?" after a successful silent installation.
-Yes starts HexShift as the original user without waiting; No leaves it closed.
-Normal interactive installations use the Finish page's "Launch HexShift"
+"Barhex was updated. Open it now?" after a successful silent installation.
+Yes starts Barhex as the original user without waiting. No leaves it closed.
+Normal interactive installations use the Finish page's "Launch Barhex"
 checkbox instead and never show this extra prompt.
 
-`CloseApplications=yes` uses Windows Restart Manager to close HexShift if it
+`CloseApplications=yes` uses Windows Restart Manager to close Barhex if it
 still holds the installed EXE. The updater starts Setup after the user agrees
 and exports their image, then closes itself. Do not force-close an editor with
 unsaved work. `RestartApplications=no` prevents automatic Restart Manager

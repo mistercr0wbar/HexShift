@@ -66,8 +66,8 @@ const notices = embed(await readText("THIRD_PARTY_NOTICES.md")),
 const html = (await readText("src/index.html"))
   .replace("__CSP__", policy)
   .replace("__ICON__", icon)
-  .replace("__DAY_CHROME__", day.tokens["--chrome"])
-  .replace("__DEFAULT_CHROME__", dark.tokens["--chrome"])
+  .replace("__DAY_CHROME__", day.tokens["--masthead"])
+  .replace("__DEFAULT_CHROME__", dark.tokens["--masthead"])
   .replace(/<style>\s*__CSS__\s*<\/style>/, () => "<style>" + css + "</style>")
   .replace(
     /<script>\s*__SCRIPT__;?\s*<\/script>/,
@@ -75,7 +75,7 @@ const html = (await readText("src/index.html"))
   )
   .replace("__NOTICES__", () => notices)
   .replace("__NOTES__", () => notes);
-await writeFile("HexShift.html", html);
+await writeFile("Barhex.html", html);
 const versionHash = createHash("sha256")
   .update(html)
   .update(await readText("manifest.webmanifest"))

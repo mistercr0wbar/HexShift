@@ -360,16 +360,16 @@ export function parseSession(text) {
   try {
     data = JSON.parse(text.replace(/^\uFEFF/, ""));
   } catch {
-    throw Error("This file is not a Hex Shift session.");
+    throw Error("This file is not a Barhex session.");
   }
   if (!data || typeof data !== "object" || Array.isArray(data))
-    throw Error("This file is not a Hex Shift session.");
+    throw Error("This file is not a Barhex session.");
   if (data.format === "hexshift-recipe")
     throw Error("This is a recipe, not a session.");
   if (data.format !== "hexshift-session")
-    throw Error("This file is not a Hex Shift session.");
+    throw Error("This file is not a Barhex session.");
   if (data.version !== 1)
-    throw Error("This session needs a newer version of Hex Shift.");
+    throw Error("This session needs a newer version of Barhex.");
   if (!Array.isArray(data.documents) || data.documents.length < 1)
     throw Error("A session needs an image.");
   if (data.documents.length > MAX_DOCUMENTS)

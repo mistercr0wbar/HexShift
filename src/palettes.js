@@ -151,7 +151,7 @@ export function writeGpl(name, entries) {
       .trim();
   return (
     "GIMP Palette\nName: " +
-    (clean(name) || "Hex Shift") +
+    (clean(name) || "Barhex") +
     "\nColumns: 0\n#\n" +
     entries
       .map(({ hex, label }) => {

@@ -18,9 +18,14 @@
       content="__DEFAULT_CHROME__"
       media="(prefers-color-scheme: dark)"
     />
-    <title>Hex Shift — colour, with character</title>
+    <meta
+      name="description"
+      content="Recolour emoji, icons and stickers on your device."
+    />
+    <title>Barhex</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="__ICON__" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
     <style>
       __CSS__
     </style>
@@ -100,21 +105,10 @@
       <div id="dropIndicator" hidden aria-hidden="true"></div>
       <header class="topbar">
         <div class="brand">
-          <svg class="mark" viewBox="0 0 100 100" aria-hidden="true">
-            <defs>
-              <clipPath id="markSplit"><path d="M0 0H100L0 100Z" /></clipPath>
-              <g id="markHash">
-                <rect x="30.086" y="9" width="14.057" height="82" />
-                <rect x="55.857" y="9" width="14.057" height="82" />
-                <rect x="9" y="30.086" width="82" height="14.057" />
-                <rect x="9" y="55.857" width="82" height="14.057" />
-              </g>
-            </defs>
-            <rect width="100" height="100" rx="22" fill="#1a1a1a" />
-            <use href="#markHash" fill="#fcbd5c" />
-            <use href="#markHash" fill="#ff7b86" clip-path="url(#markSplit)" />
-          </svg>
-          <h1>Hex Shift<span class="version"> / 03</span></h1>
+          <h1 class="wordmark"><span class="small-caps">Bar</span>hex</h1>
+          <p class="maker-credit">
+            Made by <strong><span class="small-caps">Bar</span>dev</strong>
+          </p>
         </div>
         <div id="menubar" class="menubar"></div>
         <div id="documentTabs" class="document-tabs">
@@ -554,7 +548,14 @@
                   Dismiss
                 </button>
               </div>
-              <p id="emptyEditor" class="empty-editor">Open an image to begin.</p>
+              <div id="emptyEditor" class="empty-editor">
+                <div class="empty-copy">
+                  <p class="empty-title">
+                    Change the colour. Keep the shading.
+                  </p>
+                  <p>Open, drop or paste an image.</p>
+                </div>
+              </div>
               <div class="pane before">
                 <div class="canvas-space">
                   <canvas
@@ -1079,7 +1080,7 @@
                     <summary>Repeat edits</summary>
                     <p class="help">
                       A recipe repeats sampled colours. Brush strokes, connected
-                      regions and polygons are left out, and Hex Shift asks
+                      regions and polygons are left out, and Barhex asks
                       before repeating a step that had one. An outline on its
                       own can be repeated.
                     </p>
@@ -1173,8 +1174,8 @@
           >Hover to inspect · scroll to zoom</span
         >
         <p id="update" class="notice" hidden>
-          A new version is ready. Export your work, then close and reopen Hex
-          Shift to update.
+          A new version is ready. Export your work, then close and reopen
+          Barhex to update.
         </p>
         <span class="privacy"
           ><svg class="icon" aria-hidden="true"><use href="#i-shield" /></svg>
@@ -1374,12 +1375,23 @@
     </dialog>
     <dialog id="aboutDialog" aria-labelledby="aboutTitle">
       <form method="dialog">
-        <h2 id="aboutTitle">Hex Shift</h2>
+        <div class="about-brand brand">
+          <h2 id="aboutTitle" class="wordmark">
+            <span class="small-caps">Bar</span>hex
+          </h2>
+          <p class="maker-credit">
+            Made by <strong><span class="small-caps">Bar</span>dev</strong>
+          </p>
+        </div>
         <p id="aboutVersion"></p>
         <p>
-          Recolour one part of an emoji, icon or sticker and keep its shading.
-          Images stay on your device. Hex Shift is free software under the MIT
-          licence.
+          Recolour emoji, icons and stickers on your device. Barhex is free
+          software under the MIT licence.
+        </p>
+        <p>
+          The Bar name comes from Crowbar, the handle behind The Crow Bar and
+          its cast of crows. The original name, Hex Shift, was a nod to
+          <cite>Half-Life: Blue Shift</cite>.
         </p>
         <details>
           <summary>Licence notices</summary>

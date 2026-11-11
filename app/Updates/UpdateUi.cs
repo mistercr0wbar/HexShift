@@ -1,4 +1,4 @@
-// Hex Shift - the update notice.
+// Barhex - the update notice.
 //
 // A slim bar across the top of the window, plain WinForms, never a modal window: it says
 // an update exists, shows progress, and asks before anything is installed. Everything that
@@ -264,7 +264,7 @@ namespace HexShift
         {
             if (!service.Enabled)
             {
-                SetPhase(UpdateState.Failed, null, "Updates are not available in this build of Hex Shift.", true);
+                SetPhase(UpdateState.Failed, null, "Updates are not available in this build of Barhex.", true);
                 return;
             }
             if (busy)
@@ -334,7 +334,7 @@ namespace HexShift
 
         void ShowAvailable()
         {
-            bar.Display("HexShift " + offer.Version + " is available.", -1,
+            bar.Display("Barhex " + offer.Version + " is available.", -1,
                 new BarButton("Release notes", ShowNotes),
                 new BarButton("Later", bar.Dismiss),
                 new BarButton("Download update", BeginDownload));
@@ -343,11 +343,11 @@ namespace HexShift
         void ShowReady()
         {
             if (installedCopy)
-                bar.Display("HexShift " + offer.Version + " is ready to install. Export your image first: unfinished work is not saved.", -1,
+                bar.Display("Barhex " + offer.Version + " is ready to install. Export your image first: unfinished work is not saved.", -1,
                     new BarButton("Later", bar.Dismiss),
                     new BarButton("Restart and install", ConfirmInstall));
             else
-                bar.Display("HexShift " + offer.Version + " is downloaded. This copy is portable, so it cannot update itself.", -1,
+                bar.Display("Barhex " + offer.Version + " is downloaded. This copy is portable, so it cannot update itself.", -1,
                     new BarButton("Later", bar.Dismiss),
                     new BarButton("Open installer", ConfirmInstall));
         }
@@ -358,7 +358,7 @@ namespace HexShift
             busy = true;
             downloading = true;
             UpdateOffer target = offer;
-            string label = "Downloading HexShift " + target.Version + "...";
+            string label = "Downloading Barhex " + target.Version + "...";
             SetPhase(UpdateState.Downloading, target.Version, null, false);
             bar.Display(label, 0, new BarButton("Cancel", delegate { if (cancel != null) cancel.Cancel(); }));
             cancel = new CancellationTokenSource();
@@ -383,7 +383,7 @@ namespace HexShift
                 catch (OperationCanceledException) { }
                 catch (UpdateException ex) { failure = ex.Message; }
                 catch (IOException ex) { failure = "The update could not be saved (" + ex.Message + ")."; }
-                catch (UnauthorizedAccessException) { failure = "HexShift is not allowed to save the update."; }
+                catch (UnauthorizedAccessException) { failure = "Barhex is not allowed to save the update."; }
                 catch (Exception ex) { failure = "Something unexpected went wrong (" + ex.GetType().Name + ")."; }
                 Post(delegate { Downloaded(path, failure); });
             });
@@ -419,7 +419,7 @@ namespace HexShift
         {
             using (Form dialog = new Form())
             {
-                dialog.Text = "What is new in HexShift " + offer.Version;
+                dialog.Text = "What is new in Barhex " + offer.Version;
                 dialog.StartPosition = FormStartPosition.CenterParent;
                 dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
                 dialog.MinimizeBox = false;
@@ -472,17 +472,17 @@ namespace HexShift
             if (installedCopy)
             {
                 DialogResult answer = MessageBox.Show(owner,
-                    "Restart HexShift to install version " + offer.Version + "?\n\n"
-                    + "HexShift will close, install the update, and offer to open again. Anything you have not exported, including your current image and edits, will be lost.\n\n"
+                    "Restart Barhex to install version " + offer.Version + "?\n\n"
+                    + "Barhex will close, install the update, and offer to open again. Anything you have not exported, including your current image and edits, will be lost.\n\n"
                     + "Have you exported your image?",
-                    "Hex Shift - install update", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+                    "Barhex - install update", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
                 if (answer != DialogResult.Yes) return;
             }
             else
             {
                 DialogResult answer = MessageBox.Show(owner,
-                    "The installer for version " + offer.Version + " will open in its own window and install HexShift for your Windows account.\n\nThis portable copy stays as it is and keeps running.",
-                    "Hex Shift - install update", MessageBoxButtons.OKCancel, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1);
+                    "The installer for version " + offer.Version + " will open in its own window and install Barhex for your Windows account.\n\nThis portable copy stays as it is and keeps running.",
+                    "Barhex - install update", MessageBoxButtons.OKCancel, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1);
                 if (answer != DialogResult.OK) return;
             }
 
@@ -501,7 +501,7 @@ namespace HexShift
 
         void Info(string text)
         {
-            MessageBox.Show(owner, text, "Hex Shift", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(owner, text, "Barhex", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         // Back onto the window's own thread. Quietly nothing if the window is already gone.

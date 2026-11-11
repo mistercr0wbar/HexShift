@@ -659,7 +659,7 @@ test("the menu bar works from the keyboard: Alt, F10, letters, arrows and Enter"
   await expect(menu(page, "Help")).toBeVisible();
   // Up from the first item wraps to the last.
   await page.keyboard.press("ArrowUp");
-  await expect(item(page, "About Hex Shift")).toBeFocused();
+  await expect(item(page, "About Barhex")).toBeFocused();
   // A letter jumps to the item that starts with it.
   await page.keyboard.press("r");
   await expect(item(page, "Release notes")).toBeFocused();
@@ -754,9 +754,11 @@ test("menu items run the same actions as the controls", async ({ page }) => {
 test("Help shows the version, the licence notices and the release notes", async ({
   page,
 }) => {
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Barhex");
+  await expect(page.locator(".topbar .maker-credit")).toHaveText("Made by Bardev");
   await top(page, "Help").click();
-  await item(page, "About Hex Shift").click();
-  await expect(page.locator("#aboutDialog")).toBeVisible();
+  await item(page, "About Barhex").click();
+  await expect(page.getByRole("dialog", { name: "Barhex" })).toBeVisible();
   await expect(page.locator("#aboutVersion")).toHaveText(
     /^Version \d+\.\d+\.\d+$/,
   );
@@ -1226,7 +1228,7 @@ test("the update check shows in the status bar and the Help menu", async ({
   await expect(page.locator("#status")).toHaveText("Checking for updates…");
   await reply(state({ phase: "current", version: "3.2.0" }));
   await expect(page.locator("#status")).toHaveText(
-    "Hex Shift 3.2.0 is up to date",
+    "Barhex 3.2.0 is up to date",
   );
   // It fades away on its own.
   await expect(page.locator("#status")).toHaveText("", { timeout: 9000 });
@@ -1242,7 +1244,7 @@ test("the update check shows in the status bar and the Help menu", async ({
   );
   await reply(state({ phase: "available", version: "3.2.1" }));
   await expect(page.locator("#status")).toContainText(
-    "Hex Shift 3.2.1 is available",
+    "Barhex 3.2.1 is available",
   );
   // A failed download is the app's own bar's business; the page says nothing.
   await page.evaluate(
@@ -1257,7 +1259,7 @@ test("the update check shows in the status bar and the Help menu", async ({
   await reply("update-state");
   await reply(null);
   await reply(state({ phase: "current", version: "<img src=x onerror=1>" }));
-  await expect(page.locator("#status")).toHaveText("Hex Shift is up to date");
+  await expect(page.locator("#status")).toHaveText("Barhex is up to date");
   expect(await page.locator("#status img").count()).toBe(0);
 
   // Help: check now, and the automatic checks' switch.
@@ -1295,7 +1297,7 @@ test("in the Windows app File > Exit asks before leaving unsaved work", async ({
   await top(page, "File").click();
   await item(page, "Exit").click();
   await expect(page.locator("#replaceDialog")).toBeVisible();
-  await expect(page.locator("#replaceTitle")).toHaveText("Quit Hex Shift?");
+  await expect(page.locator("#replaceTitle")).toHaveText("Quit Barhex?");
   await page.getByRole("button", { name: "Keep editing", exact: true }).click();
   expect(await closed()).toBe(false);
   await top(page, "File").click();

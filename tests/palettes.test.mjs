@@ -91,7 +91,7 @@ test("palette files: GIMP, JASC, Paint.NET, Lospec and pasted lists", () => {
   assert.ok(isPaletteFile({ name: "x", type: "text/plain" }));
   assert.ok(!isPaletteFile({ name: "heart.svg", type: "image/svg+xml" }));
 });
-test("GIMP palettes written by Hex Shift read back the same", () => {
+test("GIMP palettes written by Barhex read back the same", () => {
   for (const set of SETS) {
     const entries = set.entries.map(({ hex, label }) => ({ hex, label }));
     assert.deepEqual(parsePalette(writeGpl(set.label, entries)), entries);

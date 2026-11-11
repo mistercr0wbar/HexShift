@@ -13,6 +13,7 @@ const port = Number(process.env.HEXSHIFT_PORT) || 4173,
 const allowed = new Set([
   "/",
   "/index.html",
+  "/Barhex.html",
   "/HexShift.html",
   "/sw.js",
   "/manifest.webmanifest",
@@ -32,7 +33,7 @@ http
     try {
       const file = resolve(
         root,
-        path === "/" || path === "/index.html" ? "HexShift.html" : "." + path,
+        path === "/" || path.endsWith(".html") ? "Barhex.html" : "." + path,
       );
       const data = await readFile(file);
       res.writeHead(200, {
@@ -47,5 +48,5 @@ http
     }
   })
   .listen(port, "127.0.0.1", () =>
-    console.log("HexShift: http://127.0.0.1:" + port),
+    console.log("Barhex: http://127.0.0.1:" + port),
   );

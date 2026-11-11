@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 test("portable CSP hashes exactly match browser-parsed inline content", async () => {
-  const html = await readFile("HexShift.html", "utf8"),
+  const html = await readFile("Barhex.html", "utf8"),
     policy = html.match(/content="(default-src [^"]+)"/)[1];
   assert.ok(!html.includes("\r"));
   for (const tag of ["script", "style"]) {

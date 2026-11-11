@@ -1,4 +1,10 @@
-# Hex Shift 3
+# Barhex 3.16.0
+
+**Formerly Hex Shift**
+
+**Change the colour. Keep the shading.** Recolour emoji, icons and stickers on your device. Made by Bardev.
+
+**New in 3.16.0:** Barhex has a new masthead, maker credit and app icon. The web and Windows apps use the same Bardev design as Bardrop. Barhex opens existing Hex Shift sessions and recipes. Hosted and installed copies keep their preferences, and Windows Setup upgrades installed copies in place.
 
 **New in 3.15.0:** The editor and theme picker use the updated cr0wbots palette and character artwork. BARCHORD I, IV and V take their names from the I–IV–V chord progression. They join BARDON, BARNEY and BARBIE alongside Neutral and System. Every theme has Default, Day, Night and Contrast versions. The picker previews each theme in the selected modifier, and the canvas stays neutral for colour work. Saved Lude, Nord and Everforest choices move to BARCHORD IV, BARNEY and BARDON with their modifiers intact.
 
