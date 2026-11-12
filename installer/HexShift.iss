@@ -14,7 +14,7 @@
 AppId={{44A94DA7-51B1-4BE0-BB05-9E1486733DEA}
 AppName=Barhex
 AppVersion={#AppVersion}
-AppPublisher=Bardev
+AppPublisher=Bardevco
 AppPublisherURL=https://github.com/mistercr0wbar/HexShift
 AppSupportURL=https://github.com/mistercr0wbar/HexShift/issues
 DefaultDirName={localappdata}\Programs\HexShift
@@ -33,7 +33,7 @@ OutputBaseFilename=Barhex-{#AppVersion}-Setup
 SetupIconFile=app\icon.ico
 VersionInfoVersion={#AppVersionInfo}
 VersionInfoProductName=Barhex
-VersionInfoCompany=Bardev
+VersionInfoCompany=Bardevco
 VersionInfoDescription=Barhex per-user installer
 Compression=lzma2
 SolidCompression=yes

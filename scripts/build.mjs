@@ -43,9 +43,12 @@ const themeCss = ({ dark, tokens }, indent = "") =>
     ),
     `${indent}}`,
   ].join("\n");
+const makerMark =
+  "data:image/svg+xml;base64," +
+  (await readFile("src/bardevco-monogram.svg")).toString("base64");
 const css =
     `${themeCss(day)}\n@media (prefers-color-scheme: dark) {\n${themeCss(dark, "  ")}\n}\n` +
-    (await readText("src/style.css")),
+    (await readText("src/style.css")).replace("__MAKER_MARK__", makerMark),
   icon =
     "data:image/png;base64," +
     (await readFile("icons/icon-192.png")).toString("base64");

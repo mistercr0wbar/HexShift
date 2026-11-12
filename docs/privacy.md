@@ -1,6 +1,6 @@
 # Barhex privacy
 
-Applies to Barhex 3.16.0 (browser and Windows).
+Applies to Barhex 3.16.1 (browser and Windows).
 
 Images are processed on your device. Images, selections, edits and undo history
 stay in memory and are lost when the page closes or reloads, unless you save a

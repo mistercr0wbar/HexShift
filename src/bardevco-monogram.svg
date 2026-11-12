@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+  <title id="title">Bardevco crow monogram</title>
+  <defs>
+    <g id="shared-crow">
+      <path d="M6 62V25Q6 21 11 17L4 18L15 9H10Q29 0 50 4Q60 6 70 15Q88 18 100 32H74L65 36L71 39Q55 42 41 48Q22 55 6 62Z" fill="#000"/>
+      <path d="M39 13Q48 12 58 17Q55 22 50 22Q42 22 39 13Z" fill="#fff"/>
+    </g>
+    <mask id="monogram-knockout" maskUnits="userSpaceOnUse" x="0" y="0" width="128" height="128">
+      <path d="M0 0H128V128H0Z" fill="#fff"/>
+      <use href="#shared-crow" transform="translate(32 27) scale(.635)"/>
+      <path d="M43 80H71C80 80 86 84 86 91C86 98 80 102 71 102H43Z" fill="#000"/>
+    </mask>
+    <symbol id="crow-monogram" viewBox="0 0 128 128">
+      <path d="M19 13H66C89 13 105 23 105 39C105 51 98 60 89 64C104 69 112 78 112 92C112 108 99 118 76 118H19Z" fill="currentColor" mask="url(#monogram-knockout)"/>
+    </symbol>
+  </defs>
+  <use href="#crow-monogram" width="128" height="128" color="#E6E6E6"/>
+</svg>

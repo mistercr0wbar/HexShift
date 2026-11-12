@@ -755,10 +755,15 @@ test("Help shows the version, the licence notices and the release notes", async 
   page,
 }) => {
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Barhex");
-  await expect(page.locator(".topbar .maker-credit")).toHaveText("Made by Bardev");
+  await expect(page.locator(".topbar .maker-credit")).toHaveText(
+    "Made by Bardevco",
+  );
   await top(page, "Help").click();
   await item(page, "About Barhex").click();
   await expect(page.getByRole("dialog", { name: "Barhex" })).toBeVisible();
+  await expect(page.locator("#aboutDialog .maker-credit")).toHaveText(
+    "Made by Bardevco",
+  );
   await expect(page.locator("#aboutVersion")).toHaveText(
     /^Version \d+\.\d+\.\d+$/,
   );

@@ -15,13 +15,13 @@
     <RootNamespace>HexShift</RootNamespace>
     <ApplicationIcon>icon.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>3.16.0</Version>
+    <Version>3.16.1</Version>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <NuGetAudit>true</NuGetAudit>
     <NuGetAuditMode>all</NuGetAuditMode>
     <Product>Barhex</Product>
     <AssemblyTitle>Barhex</AssemblyTitle>
-    <Company>Bardev</Company>
+    <Company>Bardevco</Company>
     <Authors>mistercr0wbar</Authors>
     <Copyright>MIT License</Copyright>
     <Description>Recolour emoji, icons and stickers on your device.</Description>

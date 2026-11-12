@@ -4,7 +4,7 @@
 
 **Change the colour. Keep the shading.**
 
-Recolour emoji, icons and stickers on your device. Made by Bardev.
+Recolour emoji, icons and stickers on your device. Made by Bardevco.
 
 Open [the web app](https://mistercr0wbar.github.io/HexShift/), use the portable `Barhex.html`, or run `Barhex.exe` from a release. The web app can be installed as a PWA and works offline after its shell has loaded.
 

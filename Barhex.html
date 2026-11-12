@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-TxJetr71HcmSYtLz1Sc4j7dRHEM2NJRfs10yTdlkkTY='; style-src 'sha256-u/yd7kQ/DL6Jgb0vgmmDcvr9Msiw2CPyBgV2Hk/uJ2Q='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-SmwZpfcb7ukmDvG/u7XOs9vU3svQ6PUNuDm5YNAmfcE='; style-src 'sha256-XEPc9civY1FvmjYuuIKav3Puzf3xzrNOKCBwUD8Mz7Y='; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'" />
     <meta name="referrer" content="no-referrer" />
     <meta
       name="theme-color"
@@ -34,7 +34,7 @@
   --masthead: #f6f6f6;
   --wordmark: #1a1a1a;
   --maker-credit: #4d4d4d;
-  --maker-wordmark: #966538;
+  --maker-wordmark: #1a1a1a;
   --raised: #ffffff;
   --hover: #f7ecee;
   --line: #d7d7d7;
@@ -61,9 +61,9 @@
     --surface: #2e2e2e;
     --chrome: #464646;
     --masthead: #232529;
-    --wordmark: #f5f1ea;
-    --maker-credit: #adaeb2;
-    --maker-wordmark: #f2a35a;
+    --wordmark: #e6e6e6;
+    --maker-credit: #b3b3b3;
+    --maker-wordmark: #e6e6e6;
     --raised: #292929;
     --hover: #382d2e;
     --line: #353535;
@@ -529,7 +529,7 @@ summary::marker {
 }
 .brand {
   display: grid;
-  justify-items: center;
+  justify-items: start;
   align-content: center;
   flex: none;
   white-space: nowrap;
@@ -543,17 +543,32 @@ summary::marker {
 }
 .small-caps {
   font-variant-caps: all-small-caps;
+  font-weight: 800;
 }
 .maker-credit {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   color: var(--maker-credit);
   font-size: 10px;
   line-height: 1.35;
 }
 .maker-credit strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   color: var(--maker-wordmark);
   font-weight: 750;
 }
+.maker-mark {
+  width: 12px;
+  height: 12px;
+  background: currentColor;
+  mask: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjggMTI4IiByb2xlPSJpbWciIGFyaWEtbGFiZWxsZWRieT0idGl0bGUiPgogIDx0aXRsZSBpZD0idGl0bGUiPkJhcmRldmNvIGNyb3cgbW9ub2dyYW08L3RpdGxlPgogIDxkZWZzPgogICAgPGcgaWQ9InNoYXJlZC1jcm93Ij4KICAgICAgPHBhdGggZD0iTTYgNjJWMjVRNiAyMSAxMSAxN0w0IDE4TDE1IDlIMTBRMjkgMCA1MCA0UTYwIDYgNzAgMTVRODggMTggMTAwIDMySDc0TDY1IDM2TDcxIDM5UTU1IDQyIDQxIDQ4UTIyIDU1IDYgNjJaIiBmaWxsPSIjMDAwIi8+CiAgICAgIDxwYXRoIGQ9Ik0zOSAxM1E0OCAxMiA1OCAxN1E1NSAyMiA1MCAyMlE0MiAyMiAzOSAxM1oiIGZpbGw9IiNmZmYiLz4KICAgIDwvZz4KICAgIDxtYXNrIGlkPSJtb25vZ3JhbS1rbm9ja291dCIgbWFza1VuaXRzPSJ1c2VyU3BhY2VPblVzZSIgeD0iMCIgeT0iMCIgd2lkdGg9IjEyOCIgaGVpZ2h0PSIxMjgiPgogICAgICA8cGF0aCBkPSJNMCAwSDEyOFYxMjhIMFoiIGZpbGw9IiNmZmYiLz4KICAgICAgPHVzZSBocmVmPSIjc2hhcmVkLWNyb3ciIHRyYW5zZm9ybT0idHJhbnNsYXRlKDMyIDI3KSBzY2FsZSguNjM1KSIvPgogICAgICA8cGF0aCBkPSJNNDMgODBINzFDODAgODAgODYgODQgODYgOTFDODYgOTggODAgMTAyIDcxIDEwMkg0M1oiIGZpbGw9IiMwMDAiLz4KICAgIDwvbWFzaz4KICAgIDxzeW1ib2wgaWQ9ImNyb3ctbW9ub2dyYW0iIHZpZXdCb3g9IjAgMCAxMjggMTI4Ij4KICAgICAgPHBhdGggZD0iTTE5IDEzSDY2Qzg5IDEzIDEwNSAyMyAxMDUgMzlDMTA1IDUxIDk4IDYwIDg5IDY0QzEwNCA2OSAxMTIgNzggMTEyIDkyQzExMiAxMDggOTkgMTE4IDc2IDExOEgxOVoiIGZpbGw9ImN1cnJlbnRDb2xvciIgbWFzaz0idXJsKCNtb25vZ3JhbS1rbm9ja291dCkiLz4KICAgIDwvc3ltYm9sPgogIDwvZGVmcz4KICA8dXNlIGhyZWY9IiNjcm93LW1vbm9ncmFtIiB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgY29sb3I9IiNFNkU2RTYiLz4KPC9zdmc+Cg==") center / contain no-repeat;
+  forced-color-adjust: none;
+}
 .about-brand {
+  justify-items: center;
   padding: 16px;
   border: 1px solid var(--line-strong);
   border-radius: 8px;
@@ -565,6 +580,10 @@ summary::marker {
 }
 .about-brand .maker-credit {
   font-size: 12px;
+}
+.about-brand .maker-mark {
+  width: 15px;
+  height: 15px;
 }
 .file-info {
   display: flex;
@@ -2839,7 +2858,11 @@ dialog details {
         <div class="brand">
           <h1 class="wordmark"><span class="small-caps">Bar</span>hex</h1>
           <p class="maker-credit">
-            Made by <strong><span class="small-caps">Bar</span>dev</strong>
+            Made by
+            <strong>
+              <span class="maker-mark" aria-hidden="true"></span>
+              <span><span class="small-caps">Bar</span>devco</span>
+            </strong>
           </p>
         </div>
         <div id="menubar" class="menubar"></div>
@@ -2910,7 +2933,7 @@ dialog details {
             </summary>
             <div class="theme-pop">
               <fieldset id="theme" class="segmented labelled modifier">
-                <legend>Modifier</legend>
+                <legend>Look</legend>
               </fieldset>
               <fieldset id="uiTheme" class="theme-list">
                 <legend>Colour theme</legend>
@@ -4112,7 +4135,11 @@ dialog details {
             <span class="small-caps">Bar</span>hex
           </h2>
           <p class="maker-credit">
-            Made by <strong><span class="small-caps">Bar</span>dev</strong>
+            Made by
+            <strong>
+              <span class="maker-mark" aria-hidden="true"></span>
+              <span><span class="small-caps">Bar</span>devco</span>
+            </strong>
           </p>
         </div>
         <p id="aboutVersion"></p>
@@ -12864,6 +12891,7 @@ dialog details {
     const textSurfaces = [...panels, accentSoft];
     const trim = theme2.trim?.[dark ? 3 : 0] || main;
     const focus = (theme2.hardware || eye)[dark ? 4 : 0];
+    const wordmark = dark ? neutral[4] : neutral[0];
     return {
       dark,
       contrast: highContrast,
@@ -12872,9 +12900,9 @@ dialog details {
         "--surface": surface,
         "--chrome": chrome,
         "--masthead": masthead,
-        "--wordmark": dark ? "#f5f1ea" : ink,
-        "--maker-credit": readable(dark ? "#adaeb2" : muted, [masthead], 4.5),
-        "--maker-wordmark": readable("#f2a35a", [masthead], 4.5),
+        "--wordmark": wordmark,
+        "--maker-credit": readable(dark ? neutral[3] : neutral[1], [masthead], 4.5),
+        "--maker-wordmark": wordmark,
         "--raised": raised,
         "--hover": hover,
         "--line": line2,
@@ -12913,7 +12941,7 @@ dialog details {
   // src/app.js
   var $ = (id) => document.getElementById(id);
   var pause = makePause();
-  var VERSION = "3.16.0";
+  var VERSION = "3.16.1";
   var w = 0;
   var h = 0;
   var name = "";
@@ -17855,13 +17883,15 @@ Copyright (c) 2000-2024 The Legion of the Bouncy Castle Inc. (https://www.bouncy
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 Original C# port and code by Christian Winnerlein (CodesInChaos), public domain, https://github.com/CodesInChaos/Chaos.NaCl . Poly1305 by Andrew M. (floodyberry), MIT or public domain. Curve25519, Ed25519, Salsa20 and HSalsa20 from SUPERCOP ref10 by Dan Bernstein, public domain (http://bench.cr.yp.to/supercop.html). SHA512 by Christian Winnerlein, public domain.</pre></template>
-    <template id="release-notes"><pre># Barhex 3.16.0
+    <template id="release-notes"><pre># Barhex 3.16.1
 
 **Formerly Hex Shift**
 
-**Change the colour. Keep the shading.** Recolour emoji, icons and stickers on your device. Made by Bardev.
+**Change the colour. Keep the shading.** Recolour emoji, icons and stickers on your device. Made by Bardevco.
 
-**New in 3.16.0:** Barhex has a new masthead, maker credit and app icon. The web and Windows apps use the same Bardev design as Bardrop. Barhex opens existing Hex Shift sessions and recipes. Hosted and installed copies keep their preferences, and Windows Setup upgrades installed copies in place.
+**New in 3.16.1:** The compact toolbar and About panel use the Bardevco crow monogram and wordmark. Look and Colour theme sit together under Theme, as in Bardrop.
+
+**New in 3.16.0:** Barhex has a new masthead, maker credit and app icon. Barhex opens existing Hex Shift sessions and recipes. Hosted and installed copies keep their preferences, and Windows Setup upgrades installed copies in place.
 
 **New in 3.15.0:** The editor and theme picker use the updated cr0wbots palette and character artwork. BARCHORD I, IV and V take their names from the I–IV–V chord progression. They join BARDON, BARNEY and BARBIE alongside Neutral and System. Every theme has Default, Day, Night and Contrast versions. The picker previews each theme in the selected modifier, and the canvas stays neutral for colour work. Saved Lude, Nord and Everforest choices move to BARCHORD IV, BARNEY and BARDON with their modifiers intact.
 

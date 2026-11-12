@@ -241,6 +241,7 @@ export function resolveTheme(id, modifier, system) {
   const textSurfaces = [...panels, accentSoft];
   const trim = theme.trim?.[dark ? 3 : 0] || main;
   const focus = (theme.hardware || eye)[dark ? 4 : 0];
+  const wordmark = dark ? neutral[4] : neutral[0];
   return {
     dark,
     contrast: highContrast,
@@ -249,9 +250,9 @@ export function resolveTheme(id, modifier, system) {
       "--surface": surface,
       "--chrome": chrome,
       "--masthead": masthead,
-      "--wordmark": dark ? "#f5f1ea" : ink,
-      "--maker-credit": readable(dark ? "#adaeb2" : muted, [masthead], 4.5),
-      "--maker-wordmark": readable("#f2a35a", [masthead], 4.5),
+      "--wordmark": wordmark,
+      "--maker-credit": readable(dark ? neutral[3] : neutral[1], [masthead], 4.5),
+      "--maker-wordmark": wordmark,
       "--raised": raised,
       "--hover": hover,
       "--line": line,

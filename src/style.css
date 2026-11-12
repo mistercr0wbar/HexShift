@@ -443,7 +443,7 @@ summary::marker {
 }
 .brand {
   display: grid;
-  justify-items: center;
+  justify-items: start;
   align-content: center;
   flex: none;
   white-space: nowrap;
@@ -457,17 +457,32 @@ summary::marker {
 }
 .small-caps {
   font-variant-caps: all-small-caps;
+  font-weight: 800;
 }
 .maker-credit {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   color: var(--maker-credit);
   font-size: 10px;
   line-height: 1.35;
 }
 .maker-credit strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   color: var(--maker-wordmark);
   font-weight: 750;
 }
+.maker-mark {
+  width: 12px;
+  height: 12px;
+  background: currentColor;
+  mask: url("__MAKER_MARK__") center / contain no-repeat;
+  forced-color-adjust: none;
+}
 .about-brand {
+  justify-items: center;
   padding: 16px;
   border: 1px solid var(--line-strong);
   border-radius: 8px;
@@ -479,6 +494,10 @@ summary::marker {
 }
 .about-brand .maker-credit {
   font-size: 12px;
+}
+.about-brand .maker-mark {
+  width: 15px;
+  height: 15px;
 }
 .file-info {
   display: flex;

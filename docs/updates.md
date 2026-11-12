@@ -2,7 +2,7 @@
 
 How Barhex updates itself, what the app trusts, and what a
 release needs. For people who publish releases; users only need the short
-version in the website's Hex Shift page.
+version on the website's Barhex page.
 
 ## What the app does
 
@@ -13,7 +13,7 @@ version in the website's Hex Shift page.
   scheduled check never starts while another check or a download is running, or once an
   update has been found. Picking **Help > Check for updates...** checks at any time.
 - How a check went is shown in the page's status bar: "Checking for updates...", then
-  "Barhex 3.16.0 is up to date" (it fades after six seconds), or a quiet "Couldn't check
+  "Barhex 3.16.1 is up to date" (it fades after six seconds), or a quiet "Couldn't check
   for updates" when it failed (a check you asked for also says why). None of these opens a
   window.
 - If a newer version exists it shows a notice bar with **Release notes**,
