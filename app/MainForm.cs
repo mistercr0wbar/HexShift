@@ -38,7 +38,7 @@ namespace HexShift
         {
             this.dataDir = dataDir;
             dark = SystemColours.AppsUseDarkMode();
-            Text = "Barhex";
+            Text = "Hex Shift";
             StartPosition = FormStartPosition.CenterScreen;
             ClientSize = new Size(1280, 840);
             MinimumSize = new Size(720, 540);
@@ -88,10 +88,10 @@ namespace HexShift
             }
             catch (Exception ex)
             {
-                string msg = "Barhex draws its window with the Microsoft Edge WebView2 runtime, which this PC does not seem to have.\n\n"
+                string msg = "Hex Shift draws its window with the Microsoft Edge WebView2 runtime, which this PC does not seem to have.\n\n"
                     + "It is a free, small download from Microsoft and comes with Windows 11 and most Windows 10 machines.\n\n"
                     + "Open the download page now?\n\n(" + ex.Message + ")";
-                DialogResult r = MessageBox.Show(this, msg, "Barhex", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+                DialogResult r = MessageBox.Show(this, msg, "Hex Shift", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
                 if (r == DialogResult.Yes) OpenExternal(RuntimeDownload);
                 Close();
                 return;
@@ -184,8 +184,8 @@ namespace HexShift
             { "image/webp", new[] { ".webp", "WebP image (*.webp)|*.webp", "Save the shifted image" } },
             { "application/zip", new[] { ".zip", "ZIP archive (*.zip)|*.zip", "Save the emoji pack" } },
             { "application/x-gimp-palette", new[] { ".gpl", "GIMP palette (*.gpl)|*.gpl", "Save the palette" } },
-            { "application/json", new[] { ".json", "Barhex recipe (*.json)|*.json", "Save the recipe" } },
-            { "application/vnd.hexshift.session+json", new[] { ".hexshift", "Barhex session (*.hexshift)|*.hexshift", "Save the session" } },
+            { "application/json", new[] { ".json", "Hex Shift recipe (*.json)|*.json", "Save the recipe" } },
+            { "application/vnd.hexshift.session+json", new[] { ".hexshift", "Hex Shift session (*.hexshift)|*.hexshift", "Save the session" } },
         };
 
         internal static bool IsExportDownload(string document, string url, string mime)
@@ -222,7 +222,7 @@ namespace HexShift
             CoreWebView2Environment env = web.CoreWebView2.Environment;
             if (e.Request.Method == "GET" && IsAppDocument(e.Request.Uri))
             {
-                Stream s = typeof(MainForm).Assembly.GetManifestResourceStream("Barhex.html");
+                Stream s = typeof(MainForm).Assembly.GetManifestResourceStream("HexShift.html");
                 e.Response = env.CreateWebResourceResponse(s, 200, "OK", "Content-Type: text/html; charset=utf-8\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: frame-ancestors 'none'\r\nReferrer-Policy: no-referrer\r\nCache-Control: no-store");
             }
             else
@@ -286,7 +286,7 @@ namespace HexShift
                         if (!HasExportExtension(dlg.FileName, extension))
                         {
                             args.Cancel = true;
-                            MessageBox.Show(this, "Choose a filename ending in " + extension + ".", "Barhex", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            MessageBox.Show(this, "Choose a filename ending in " + extension + ".", "Hex Shift", MessageBoxButtons.OK, MessageBoxIcon.Information);
                         }
                     };
                     ReportSave(url, "choosing");
@@ -345,7 +345,7 @@ namespace HexShift
             if (kind == PageMessage.None) return;
             if (kind != PageMessage.PickColour) { updates.HandlePageMessage(kind); return; }
             if (picker.Busy) return;
-            // Only while someone is using Barhex: the page cannot cover the screen behind their back.
+            // Only while someone is using Hex Shift: the page cannot cover the screen behind their back.
             if (GetForegroundWindow() != Handle) { SendPick(null); return; }
             picker.Start(delegate(string hex)
             {

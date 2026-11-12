@@ -50,7 +50,6 @@ test("every theme and modifier reads at WCAG AA", () => {
             k["--ground"],
             k["--surface"],
             k["--chrome"],
-            k["--masthead"],
             k["--raised"],
             k["--hover"],
           ],
@@ -64,8 +63,6 @@ test("every theme and modifier reads at WCAG AA", () => {
           };
         atLeast(k["--ink"], textSurfaces, 7, "text");
         atLeast(k["--muted"], textSurfaces, 4.5, "muted text");
-        for (const token of ["--wordmark", "--maker-credit", "--maker-wordmark"])
-          atLeast(k[token], [k["--masthead"]], 4.5, token);
         atLeast(k["--accent-text"], textSurfaces, 4.5, "accent text");
         atLeast(
           k["--on-accent"],

@@ -582,7 +582,7 @@ test("tab and file repeats ask only when another image would be replayed", async
   const batching = page.waitForEvent("download");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   const batch = await batching;
-  expect(batch.suggestedFilename()).toBe("barhex-batch.zip");
+  expect(batch.suggestedFilename()).toBe("hexshift-batch.zip");
   await expect(page.locator("#batchNote")).toContainText(
     "Connected regions are left out.",
   );
@@ -590,7 +590,7 @@ test("tab and file repeats ask only when another image would be replayed", async
 
   const exporting = page.waitForEvent("download");
   await menu(page, "Export all tabs…");
-  expect((await exporting).suggestedFilename()).toBe("barhex-tabs.zip");
+  expect((await exporting).suggestedFilename()).toBe("hexshift-tabs.zip");
   await expect(page.locator("#recipeDialog")).toBeHidden();
 
   await openPanel(page, "outline");

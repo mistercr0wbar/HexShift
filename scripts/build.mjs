@@ -43,12 +43,9 @@ const themeCss = ({ dark, tokens }, indent = "") =>
     ),
     `${indent}}`,
   ].join("\n");
-const makerMark =
-  "data:image/svg+xml;base64," +
-  (await readFile("src/bardevco-monogram.svg")).toString("base64");
 const css =
     `${themeCss(day)}\n@media (prefers-color-scheme: dark) {\n${themeCss(dark, "  ")}\n}\n` +
-    (await readText("src/style.css")).replace("__MAKER_MARK__", makerMark),
+    (await readText("src/style.css")),
   icon =
     "data:image/png;base64," +
     (await readFile("icons/icon-192.png")).toString("base64");
@@ -69,8 +66,8 @@ const notices = embed(await readText("THIRD_PARTY_NOTICES.md")),
 const html = (await readText("src/index.html"))
   .replace("__CSP__", policy)
   .replace("__ICON__", icon)
-  .replace("__DAY_CHROME__", day.tokens["--masthead"])
-  .replace("__DEFAULT_CHROME__", dark.tokens["--masthead"])
+  .replace("__DAY_CHROME__", day.tokens["--chrome"])
+  .replace("__DEFAULT_CHROME__", dark.tokens["--chrome"])
   .replace(/<style>\s*__CSS__\s*<\/style>/, () => "<style>" + css + "</style>")
   .replace(
     /<script>\s*__SCRIPT__;?\s*<\/script>/,
@@ -78,7 +75,7 @@ const html = (await readText("src/index.html"))
   )
   .replace("__NOTICES__", () => notices)
   .replace("__NOTES__", () => notes);
-await writeFile("Barhex.html", html);
+await writeFile("HexShift.html", html);
 const versionHash = createHash("sha256")
   .update(html)
   .update(await readText("manifest.webmanifest"))

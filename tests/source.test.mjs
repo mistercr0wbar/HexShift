@@ -55,7 +55,7 @@ test("source files have no byte-order mark and no text decoded with the wrong en
 });
 
 test("the characters the interface draws are intact in the built page", async () => {
-  const page = await readFile("Barhex.html", "utf8");
+  const page = await readFile("HexShift.html", "utf8");
   // From the menus, the panels and the status line.
   const lower = page.toLowerCase();
   for (const mark of ["▸", "✓", "●", "‹", "→", "·", "…", "⚠"])

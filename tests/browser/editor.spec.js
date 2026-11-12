@@ -761,7 +761,7 @@ test("map all colours, then save a recipe, apply it and batch it into a ZIP", as
     { name: "broken.png", mimeType: "image/png", buffer: Buffer.from("nope") },
   ]);
   const batch = await batching;
-  expect(batch.suggestedFilename()).toBe("barhex-batch.zip");
+  expect(batch.suggestedFilename()).toBe("hexshift-batch.zip");
   const files = unzip(await readFile(await batch.path()));
   expect(Object.keys(files).sort()).toEqual([
     "errors.txt",
@@ -882,7 +882,7 @@ test("portable HTML opens without a server", async ({ browser }) => {
   const context = await browser.newContext();
   await rememberAdvanced(context);
   const page = await context.newPage();
-  await page.goto("file:///" + resolve("Barhex.html").replaceAll("\\", "/"));
+  await page.goto("file:///" + resolve("HexShift.html").replaceAll("\\", "/"));
   await ready(page);
   await pick(page);
   await expect(page.locator("#editState")).toHaveText("Pending edit");
@@ -1290,17 +1290,10 @@ test("offline shell, cache isolation and PWA manifest", async ({
     await page.request.get("/manifest.webmanifest")
   ).json();
   expect(manifest.display).toBe("standalone");
-  expect(manifest.name).toBe("Barhex");
-  expect(manifest.short_name).toBe("Barhex");
   await page.context().setOffline(true);
   await page.reload();
   await ready(page);
-  await expect(page).toHaveTitle("Barhex");
   await pick(page);
-  for (const path of ["/Barhex.html", "/HexShift.html"]) {
-    await page.goto(path);
-    await expect(page).toHaveTitle("Barhex");
-  }
   await page.context().setOffline(false);
 });
 test("themes and modifiers apply, persist in the one theme setting and pass accessibility checks", async ({

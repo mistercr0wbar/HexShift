@@ -1,4 +1,4 @@
-; Keep the AppId, default directory and installed filename for in-place upgrades.
+; Keep this AppId for future HexShift installers.
 #ifndef AppVersion
   #error Pass /DAppVersion=major.minor.patch (or use scripts/installer.ps1).
 #endif
@@ -12,29 +12,28 @@
 
 [Setup]
 AppId={{44A94DA7-51B1-4BE0-BB05-9E1486733DEA}
-AppName=Barhex
+AppName=HexShift
 AppVersion={#AppVersion}
-AppPublisher=Bardevco
+AppPublisher=mistercr0wbar
 AppPublisherURL=https://github.com/mistercr0wbar/HexShift
 AppSupportURL=https://github.com/mistercr0wbar/HexShift/issues
 DefaultDirName={localappdata}\Programs\HexShift
-DefaultGroupName=Barhex
+DefaultGroupName=HexShift
 PrivilegesRequired=lowest
 MinVersion=10.0.17763
 DisableProgramGroupPage=yes
 DisableWelcomePage=no
 UsePreviousAppDir=yes
 UsePreviousTasks=yes
-UninstallDisplayName=Barhex
+UninstallDisplayName=HexShift
 UninstallDisplayIcon={app}\HexShift.exe
 SourceDir=..
 OutputDir=dist
-OutputBaseFilename=Barhex-{#AppVersion}-Setup
+OutputBaseFilename=HexShift-{#AppVersion}-Setup
 SetupIconFile=app\icon.ico
 VersionInfoVersion={#AppVersionInfo}
-VersionInfoProductName=Barhex
-VersionInfoCompany=Bardevco
-VersionInfoDescription=Barhex per-user installer
+VersionInfoProductName=HexShift
+VersionInfoDescription=HexShift per-user installer
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -53,26 +52,13 @@ Source: "THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "installer\INSTALLATION.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{userprograms}\Barhex"; Filename: "{app}\HexShift.exe"; WorkingDir: "{app}"
-Name: "{userdesktop}\Barhex"; Filename: "{app}\HexShift.exe"; WorkingDir: "{app}"; Tasks: desktopicon
-
-[InstallDelete]
-Type: files; Name: "{userprograms}\HexShift.lnk"; Check: UpgradingHexShift
-Type: files; Name: "{userdesktop}\HexShift.lnk"; Check: UpgradingHexShift
+Name: "{userprograms}\HexShift"; Filename: "{app}\HexShift.exe"; WorkingDir: "{app}"
+Name: "{userdesktop}\HexShift"; Filename: "{app}\HexShift.exe"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\HexShift.exe"; Description: "Launch Barhex"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\HexShift.exe"; Description: "Launch HexShift"; Flags: nowait postinstall skipifsilent
 
 [Code]
-function UpgradingHexShift: Boolean;
-var
-  DisplayName: String;
-begin
-  Result := RegQueryStringValue(HKCU,
-    'Software\Microsoft\Windows\CurrentVersion\Uninstall\{44A94DA7-51B1-4BE0-BB05-9E1486733DEA}_is1',
-    'DisplayName', DisplayName) and (DisplayName = 'HexShift');
-end;
-
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   ResultCode: Integer;
@@ -80,12 +66,12 @@ begin
   { ssDone is reached only when installation has completed successfully. }
   if (CurStep = ssDone) and WizardSilent then
   begin
-    if MsgBox('Barhex was updated. Open it now?', mbConfirmation,
+    if MsgBox('HexShift was updated. Open it now?', mbConfirmation,
       MB_YESNO or MB_DEFBUTTON2) = IDYES then
     begin
       if not ExecAsOriginalUser(ExpandConstant('{app}\HexShift.exe'), '',
         ExpandConstant('{app}'), SW_SHOWNORMAL, ewNoWait, ResultCode) then
-        MsgBox('Barhex could not be opened. Please use its Start menu shortcut.',
+        MsgBox('HexShift could not be opened. Please use its Start menu shortcut.',
           mbError, MB_OK);
     end;
   end;

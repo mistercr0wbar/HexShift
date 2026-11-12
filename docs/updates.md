@@ -1,8 +1,8 @@
 # Updates
 
-How Barhex updates itself, what the app trusts, and what a
+How Hex Shift updates itself from version 2.1.0, what the app trusts, and what a
 release needs. For people who publish releases; users only need the short
-version on the website's Barhex page.
+version in the website's Hex Shift page.
 
 ## What the app does
 
@@ -13,7 +13,7 @@ version on the website's Barhex page.
   scheduled check never starts while another check or a download is running, or once an
   update has been found. Picking **Help > Check for updates...** checks at any time.
 - How a check went is shown in the page's status bar: "Checking for updates...", then
-  "Barhex 3.16.1 is up to date" (it fades after six seconds), or a quiet "Couldn't check
+  "Hex Shift 3.2.0 is up to date" (it fades after six seconds), or a quiet "Couldn't check
   for updates" when it failed (a check you asked for also says why). None of these opens a
   window.
 - If a newer version exists it shows a notice bar with **Release notes**,
@@ -131,9 +131,9 @@ dotnet tool install NetSparkleUpdater.Tools.AppCastGenerator --version 2.9.0 --t
 
 ## Every release
 
-1. Set the version in `package.json`, `package-lock.json`, `app/Program.cs`
-   (`Version`) and `app/HexShift.csproj` (`<Version>`). `tests/native` checks the
-   Windows version and `scripts/installer.ps1` checks it against the built EXE.
+1. Bump the version in **both** `app/Program.cs` (`Version`) and `app/HexShift.csproj`
+   (`<Version>`). `tests/native` fails if they differ, and `scripts/installer.ps1`
+   refuses to build an installer whose version differs from the EXE's.
 2. Build, test and package (`dotnet restore ... --locked-mode`, `dotnet build -c Release`,
    `HostTests.exe`, `./scripts/package.ps1 -BuildInstaller`).
 3. The installer's embedded **ProductVersion** must equal the tag version. The feed
@@ -141,9 +141,7 @@ dotnet tool install NetSparkleUpdater.Tools.AppCastGenerator --version 2.9.0 --t
    `--file-version` option is only a fallback when the file has none), then builds the
    download address from `--base-url` and the file name. A mismatch produces a feed the
    app refuses, so the release job must fail instead of publishing it.
-4. Generate the feed from a folder containing **only** the compatibility asset
-   `HexShift-<version>-Setup.exe`. Installed clients require that basename. The
-   public `Barhex-<version>-Setup.exe` has identical bytes. Run with
+4. Generate the feed from a folder containing **only** that one installer, with
    `SPARKLE_PRIVATE_KEY` and `SPARKLE_PUBLIC_KEY` set in the environment (the tool needs
    both; this avoids key files and command-line secrets):
 
@@ -151,7 +149,7 @@ dotnet tool install NetSparkleUpdater.Tools.AppCastGenerator --version 2.9.0 --t
    netsparkle-generate-appcast --binaries <folder with only the installer> --ext exe `
      --output-type json --appcast-output-directory <out> `
      --base-url https://github.com/mistercr0wbar/HexShift/releases/download/v<version> `
-     --product-name 'Barhex' --os windows
+     --product-name HexShift --os windows
    ```
 
    It writes `appcast.json` (UTF-8, no byte-order mark) and `appcast.json.signature`.
@@ -164,7 +162,7 @@ dotnet tool install NetSparkleUpdater.Tools.AppCastGenerator --version 2.9.0 --t
    ```powershell
    tests\native\bin\Release\net48\HostTests.exe verify-release `
      --feed <out>\appcast.json --signature <out>\appcast.json.signature `
-     --key app\update-public-key.txt --exe dist\Barhex.exe `
+     --key app\update-public-key.txt --exe dist\HexShift.exe `
      --installer dist\HexShift-<version>-Setup.exe --tag v<version>
    ```
 
@@ -174,7 +172,7 @@ dotnet tool install NetSparkleUpdater.Tools.AppCastGenerator --version 2.9.0 --t
    EXE's version equals the tag; that the feed and installer signatures verify against that
    key; and that an older copy would be offered exactly this release from exactly this
    address at exactly this size.
-6. Publish as a **draft**, upload both installer names, `appcast.json`,
+6. Publish as a **draft**, upload `HexShift-<version>-Setup.exe`, `appcast.json`,
    `appcast.json.signature`, the portable files and `SHA256SUMS.txt`, check them, then
    publish. `https://thecr0wbar.xyz/updates/hexshift/appcast.json` and `.signature` are
    plain redirects to `releases/latest/download/...`, resolved separately for each

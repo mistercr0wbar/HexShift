@@ -1,4 +1,4 @@
-// Barhex - reading the update feed.
+// Hex Shift - reading the update feed.
 //
 // The feed is NetSparkle 3.1.0's JSON appcast. Nothing in it is believed until its
 // Ed25519 signature checks out against the public key built into the app, and even
@@ -96,7 +96,7 @@ namespace HexShift
             if (!Verifies(signature, feed, publicKey))
                 return Reject("The update information's signature did not check out.");
             if (!UpdatePolicy.IsVersion(currentVersion))
-                return Reject("This copy of Barhex has no valid version number.");
+                return Reject("This copy of HexShift has no valid version number.");
 
             IList items = null;
             try
@@ -147,7 +147,7 @@ namespace HexShift
         static string ProblemWith(Dictionary<string, object> item, string version, Func<string, string, bool> isInstaller)
         {
             if (!isInstaller(Text(item, "url"), version))
-                return "The newest version points at a download address Barhex does not accept.";
+                return "The newest version points at a download address HexShift does not accept.";
             if (DecodeSignature(Text(item, "signature")) == null)
                 return "The newest version has no usable installer signature.";
             long size = Number(item, "size");

@@ -259,7 +259,7 @@ test("a recipe is not a session, and a session is not a recipe", () => {
 });
 
 test("a bad session is refused", () => {
-  assert.throws(() => parseSession("{"), /not a Barhex session/);
+  assert.throws(() => parseSession("{"), /not a Hex Shift session/);
   const text = writeSession({
     active: 0,
     documents: [doc("one.png", [1, 2, 3, 255])],

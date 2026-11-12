@@ -415,7 +415,7 @@ test("recipes are parsed safely: format, version, size, counts and ranges", () =
   };
   assert.throws(() => parseRecipe("{"), /not valid JSON/);
   assert.throws(() => parseRecipe(" ".repeat(70000) + text(good)), /64 KB/);
-  bad((o) => (o.format = "something-else"), /not a Barhex recipe/);
+  bad((o) => (o.format = "something-else"), /not a Hex Shift recipe/);
   bad((o) => (o.version = 4), /newer version/);
   bad((o) => (o.version = 3), /outline/);
   bad((o) => (o.steps = []), /1 to 32 steps/);

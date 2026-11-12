@@ -12,7 +12,7 @@ export const WORKING_LIMIT =
 export const SOURCE_LIMIT =
   "Image too large to downscale. Use at most 16,777,216 pixels, 16,384 pixels on either side, and 16 MiB.";
 export const RESIZE_UNAVAILABLE =
-  "This browser cannot downscale an image while decoding it. Barhex did not open it at full size. Use at most 4,194,304 pixels and 8,192 pixels on either side.";
+  "This browser cannot downscale an image while decoding it. Hex Shift did not open it at full size. Use at most 4,194,304 pixels and 8,192 pixels on either side.";
 const ANIMATED_LIMIT =
   "Animated images are not downscaled. Use at most 4,194,304 pixels and 8,192 pixels on either side.";
 export function dimensions(w, h) {

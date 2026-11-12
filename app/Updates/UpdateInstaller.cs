@@ -1,4 +1,4 @@
-// Barhex - keeping and running a downloaded installer.
+// Hex Shift - keeping and running a downloaded installer.
 //
 // The installer is downloaded into one folder of ours, checked against the signature
 // in the signed feed, and checked again, while held open and locked against changes,
@@ -30,7 +30,7 @@ namespace HexShift
 
             string final = Path.Combine(folder, "HexShift-" + offer.Version + "-Setup.exe");
             if (!UpdatePolicy.IsStagedInstaller(folder, final, offer.Version))
-                throw new UpdateException("Barhex could not choose a safe place for the update.");
+                throw new UpdateException("HexShift could not choose a safe place for the update.");
             string part = final + ".part";
             string version = offer.Version;
 
@@ -120,12 +120,12 @@ namespace HexShift
         {
             string folder = UpdatePolicy.StagingFolder(dataDir);
             if (!UpdatePolicy.IsStagedInstaller(folder, path, offer.Version))
-                throw new UpdateException("That file is not a staged Barhex installer.");
+                throw new UpdateException("That file is not a staged HexShift installer.");
             Program.RejectRedirects(path);
 
             using (FileStream held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
-                if (!IsAt(held, path)) throw new UpdateException("The downloaded installer is not where Barhex put it, so it was not run.");
+                if (!IsAt(held, path)) throw new UpdateException("The downloaded installer is not where HexShift put it, so it was not run.");
                 if (held.Length != offer.Size) throw new UpdateException("The downloaded installer is not the size the update information promised.");
                 byte[] bytes = new byte[held.Length];
                 int total = 0;

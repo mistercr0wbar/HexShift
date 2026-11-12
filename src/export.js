@@ -98,7 +98,7 @@ export async function losslessWebP(width, height, pixels) {
   return new Blob([out], { type: "image/webp" });
 }
 export const WEBP_UNAVAILABLE =
-  "Small WebP files can't be made in this browser. Use Chrome, Edge or Firefox, or the Barhex Windows app.";
+  "Small WebP files can't be made in this browser. Use Chrome, Edge or Firefox, or the Hex Shift Windows app.";
 let webpSupport;
 export function canEncodeWebP() {
   if (webpSupport === undefined) {

@@ -1,4 +1,4 @@
-// Screenshots of the built Barhex.html for review and for the website.
+// Screenshots of the built HexShift.html for review and for the website.
 //   npm run screenshots             sizes from a phone to 2560 × 1440, Day and Default
 //   npm run screenshots -- themes   every theme with every modifier at 1280 × 840
 //   npm run screenshots -- website  the website's 1280 × 720 pair
@@ -41,7 +41,7 @@ for (const [label, width, height] of sizes)
         (value) => localStorage.setItem("hexshift-theme", value),
         mode + ":" + theme,
       );
-      await page.goto(pathToFileURL(resolve("Barhex.html")).href);
+      await page.goto(pathToFileURL(resolve("HexShift.html")).href);
       // The app opens blank. Screenshots open a file so the editor is shown at work.
       await page.locator("#fileInput").setInputFiles({
         name: "red_heart.png",
@@ -64,7 +64,7 @@ for (const [label, width, height] of sizes)
       await page.waitForTimeout(400);
       const name =
         kind === "website"
-          ? `barhex-editor-${mode === "day" ? "light" : "dark"}.png`
+          ? `hexshift-editor-${mode === "day" ? "light" : "dark"}.png`
           : kind === "themes"
             ? `theme-${theme}-${mode}.png`
             : `${label}-${width}x${height}-${mode}.png`;

@@ -6,7 +6,7 @@
   --gap: 6px;
   --pad: 10px;
   --head: 28px;
-  --bar: 54px;
+  --bar: 40px;
   --status: 28px;
   --dock-h: clamp(210px, 32vh, 300px);
   --col-left: clamp(220px, 20vw, 280px);
@@ -433,71 +433,36 @@ summary::marker {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 14px;
+  gap: 4px 12px;
   min-height: var(--bar);
   padding: calc(4px + var(--safe-top)) calc(10px + var(--safe-right)) 4px
     calc(10px + var(--safe-left));
-  background: var(--masthead);
-  border-bottom: 2px solid var(--accent);
+  background: var(--chrome);
+  border-bottom: 1px solid var(--line-strong);
   z-index: 4;
 }
 .brand {
-  display: grid;
-  justify-items: start;
-  align-content: center;
-  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   white-space: nowrap;
 }
-.brand .wordmark {
-  color: var(--wordmark);
-  font-size: 24px;
-  font-weight: 750;
-  letter-spacing: -0.04em;
-  line-height: 1;
+.mark {
+  width: 26px;
+  height: 26px;
+  flex: none;
 }
-.small-caps {
-  font-variant-caps: all-small-caps;
-  font-weight: 800;
+.brand h1 {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.25px;
 }
-.maker-credit {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  color: var(--maker-credit);
-  font-size: 10px;
-  line-height: 1.35;
-}
-.maker-credit strong {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  color: var(--maker-wordmark);
-  font-weight: 750;
-}
-.maker-mark {
-  width: 12px;
-  height: 12px;
-  background: currentColor;
-  mask: url("__MAKER_MARK__") center / contain no-repeat;
-  forced-color-adjust: none;
-}
-.about-brand {
-  justify-items: center;
-  padding: 16px;
-  border: 1px solid var(--line-strong);
-  border-radius: 8px;
-  background: var(--masthead);
-}
-.about-brand .wordmark {
-  margin-bottom: 0;
-  font-size: 32px;
-}
-.about-brand .maker-credit {
-  font-size: 12px;
-}
-.about-brand .maker-mark {
-  width: 15px;
-  height: 15px;
+.version {
+  font:
+    12px "Cascadia Mono",
+    Consolas,
+    monospace;
+  color: var(--muted);
 }
 .file-info {
   display: flex;
@@ -1578,21 +1543,6 @@ summary::marker {
 .empty-editor.quiet {
   visibility: hidden;
 }
-.empty-copy {
-  display: grid;
-  gap: 5px;
-  max-width: 100%;
-  padding: 16px 22px;
-  border: 1px solid var(--line-strong);
-  border-radius: 10px;
-  background: var(--surface);
-}
-.empty-title {
-  color: var(--ink);
-  font-size: clamp(16px, 2.2cqw, 24px);
-  font-weight: 700;
-  line-height: 1.2;
-}
 /* Import failures wrap here. The status bar stays one fixed line. */
 .import-notice {
   position: absolute;
@@ -2317,14 +2267,17 @@ dialog details {
   #pixelReadout {
     display: none;
   }
+  .version {
+    display: none;
+  }
 }
 
 /* Phone layout (also the Android port): the page scrolls; the canvas, the colour
    map and one group of panels at a time, chosen from a tab bar at the bottom. */
 @container app (max-width: 759px) {
   .document-tabs {
-    grid-column: 1 / -1;
-    min-width: 0;
+    flex: 1 0 100%;
+    order: 3;
   }
   .tab-list {
     display: none;
@@ -2345,22 +2298,13 @@ dialog details {
   .topbar {
     position: sticky;
     top: 0;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    flex-wrap: wrap;
     gap: 6px 8px;
-    padding-top: calc(6px + var(--safe-top));
-    padding-bottom: 6px;
     padding-left: calc(10px + var(--safe-left));
     padding-right: calc(10px + var(--safe-right));
   }
-  .topbar .brand {
-    justify-self: start;
-  }
-  .brand .wordmark {
-    font-size: 20px;
-  }
-  .about-brand .wordmark {
-    font-size: 28px;
+  .version {
+    display: none;
   }
   .menu-top {
     display: none;
@@ -2370,13 +2314,8 @@ dialog details {
     align-items: center;
   }
   .top-actions {
-    grid-column: 1 / -1;
-    justify-content: flex-start;
-    margin-left: 0;
     gap: 4px;
-  }
-  .top-actions #export {
-    margin-left: auto;
+    flex-wrap: wrap;
   }
   #open .label {
     display: none;

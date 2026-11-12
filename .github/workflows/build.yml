@@ -25,7 +25,7 @@ jobs:
       - run: npm audit --audit-level=low
       - run: npm run build
       - name: Verify generated files are current
-        run: git diff --exit-code -- Barhex.html sw.js
+        run: git diff --exit-code -- HexShift.html sw.js
       - run: npm test
       - run: npx playwright install --with-deps chromium firefox webkit
       - run: npm run test:browser
@@ -59,9 +59,9 @@ jobs:
       - name: Prepare web app
         run: |
           mkdir -p dist/web
-          cp Barhex.html dist/web/index.html
-          cp Barhex.html dist/web/HexShift.html
-          cp Barhex.html sw.js manifest.webmanifest dist/web/
+          cp HexShift.html dist/web/index.html
+          cp HexShift.html dist/web/Barhex.html
+          cp HexShift.html sw.js manifest.webmanifest dist/web/
           cp -R icons dist/web/icons
       - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
         with:
@@ -85,10 +85,10 @@ jobs:
       - run: ./scripts/package.ps1
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: Barhex
+          name: HexShift
           path: |
             dist/
-            Barhex.zip
+            HexShift.zip
             SHA256SUMS.txt
   release:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -150,19 +150,16 @@ jobs:
           & "$env:RUNNER_TEMP\tools\netsparkle-generate-appcast.exe" --binaries $binaries --ext exe `
             --output-type json --appcast-output-directory $env:GITHUB_WORKSPACE `
             --base-url "https://github.com/mistercr0wbar/HexShift/releases/download/v$version" `
-            --product-name 'Barhex' --os windows
+            --product-name HexShift --os windows
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify exact release files before creating a draft
         run: |
           $version = $env:RELEASE_TAG.Substring(1)
           ./tests/native/bin/Release/net48/HostTests.exe verify-release `
             --feed appcast.json --signature appcast.json.signature `
-            --key app/update-public-key.txt --exe dist/Barhex.exe `
+            --key app/update-public-key.txt --exe dist/HexShift.exe `
             --installer "dist/HexShift-$version-Setup.exe" --tag $env:RELEASE_TAG
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $publicInstaller = (Get-FileHash -LiteralPath "dist/Barhex-$version-Setup.exe").Hash
-          $updateInstaller = (Get-FileHash -LiteralPath "dist/HexShift-$version-Setup.exe").Hash
-          if ($publicInstaller -cne $updateInstaller) { throw 'The public and updater installers must be identical.' }
       - name: Append feed checksums
         run: |
           $ErrorActionPreference = 'Stop'
@@ -173,20 +170,19 @@ jobs:
       - uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
         with:
           subject-path: |
-            dist/Barhex.exe
-            dist/Barhex-${{ steps.version.outputs.value }}-Setup.exe
+            dist/HexShift.exe
             dist/HexShift-${{ steps.version.outputs.value }}-Setup.exe
-            Barhex.zip
+            HexShift.zip
             appcast.json
-      - name: Create draft with the verified assets
+      - name: Create draft with all seven assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = 'Stop'
           $version = $env:RELEASE_TAG.Substring(1)
-          $assets = @("dist/Barhex-$version-Setup.exe", "dist/HexShift-$version-Setup.exe", 'appcast.json', 'appcast.json.signature',
-            'SHA256SUMS.txt', 'dist/Barhex.exe', 'dist/Barhex.html', 'Barhex.zip')
-          gh release create $env:RELEASE_TAG @assets --draft --verify-tag --title "Barhex $env:RELEASE_TAG" --notes-file docs/release-notes.md
+          $assets = @("dist/HexShift-$version-Setup.exe", 'appcast.json', 'appcast.json.signature',
+            'SHA256SUMS.txt', 'dist/HexShift.exe', 'dist/HexShift.html', 'HexShift.zip')
+          gh release create $env:RELEASE_TAG @assets --draft --verify-tag --title "Hex Shift $env:RELEASE_TAG" --notes-file docs/release-notes.md
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Check draft assets
         env:
@@ -196,20 +192,19 @@ jobs:
           $version = $env:RELEASE_TAG.Substring(1)
           # release asset name -> the local file it was uploaded from
           $local = [ordered]@{
-            "Barhex-$version-Setup.exe" = "dist/Barhex-$version-Setup.exe"
             "HexShift-$version-Setup.exe" = "dist/HexShift-$version-Setup.exe"
             'appcast.json' = 'appcast.json'
             'appcast.json.signature' = 'appcast.json.signature'
             'SHA256SUMS.txt' = 'SHA256SUMS.txt'
-            'Barhex.exe' = 'dist/Barhex.exe'
-            'Barhex.html' = 'dist/Barhex.html'
-            'Barhex.zip' = 'Barhex.zip'
+            'HexShift.exe' = 'dist/HexShift.exe'
+            'HexShift.html' = 'dist/HexShift.html'
+            'HexShift.zip' = 'HexShift.zip'
           }
           $json = gh release view $env:RELEASE_TAG --json assets,isDraft
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $release = ($json -join "`n") | ConvertFrom-Json
           if (-not $release.isDraft) { throw 'Expected a draft release.' }
-          if (@($release.assets).Count -ne $local.Count) { throw "Expected $($local.Count) assets in the draft." }
+          if (@($release.assets).Count -ne $local.Count) { throw 'The draft must contain exactly seven assets.' }
           foreach ($name in $local.Keys) {
             $asset = @($release.assets | Where-Object { $_.name -ceq $name })
             if ($asset.Count -ne 1) { throw "Missing or duplicate draft asset: $name" }

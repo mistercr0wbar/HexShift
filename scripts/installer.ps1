@@ -44,21 +44,15 @@ $distPath = Join-Path $repoRoot 'dist'
 New-Item -ItemType Directory -Force -Path $distPath | Out-Null
 & $IsccPath "/DAppVersion=$AppVersion" "/O$distPath" (Join-Path $repoRoot 'installer/HexShift.iss')
 if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE." }
-$installerName = "Barhex-$AppVersion-Setup.exe"
+$installerName = "HexShift-$AppVersion-Setup.exe"
 $installerPath = Join-Path $distPath $installerName
 if (-not (Test-Path -LiteralPath $installerPath -PathType Leaf)) { throw "ISCC did not produce $installerPath." }
-# Installed Hex Shift versions only accept the old basename in the signed feed.
-$updateName = "HexShift-$AppVersion-Setup.exe"
-Copy-Item -LiteralPath $installerPath -Destination (Join-Path $distPath $updateName) -Force
 $checksumPath = Join-Path $repoRoot 'SHA256SUMS.txt'
 $checksums = @()
 if (Test-Path -LiteralPath $checksumPath) {
-    $checksums = @(Get-Content -LiteralPath $checksumPath | Where-Object {
-        -not ($_.EndsWith("  $installerName") -or $_.EndsWith("  $updateName"))
-    })
+    $checksums = @(Get-Content -LiteralPath $checksumPath | Where-Object { $_ -notmatch ('  ' + [regex]::Escape($installerName) + '$') })
 }
 $hash = Get-FileHash -LiteralPath $installerPath -Algorithm SHA256
 $checksums += $hash.Hash.ToLowerInvariant() + '  ' + $installerName
-$checksums += $hash.Hash.ToLowerInvariant() + '  ' + $updateName
 $checksums | Set-Content -LiteralPath $checksumPath -Encoding utf8
 Write-Output "Prepared $installerPath and appended its SHA256SUMS.txt entry."

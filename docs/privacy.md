@@ -1,11 +1,11 @@
-# Barhex privacy
+# Hex Shift privacy
 
-Applies to Barhex 3.16.1 (browser and Windows).
+Updated 29 October 2026 for version 3.14.0 (browser and Windows).
 
 Images are processed on your device. Images, selections, edits and undo history
 stay in memory and are lost when the page closes or reloads, unless you save a
-session. They are never stored in localStorage or sent to the developer. Bar
-Hacks has no accounts, advertising, analytics, tracking or cloud image
+session. They are never stored in localStorage or sent to the developer. Hex
+Shift has no accounts, advertising, analytics, tracking or cloud image
 processing.
 
 Up to 20 image tabs can be open in one session, with separate edits and views.

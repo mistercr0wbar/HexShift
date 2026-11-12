@@ -1397,7 +1397,7 @@ const dialogText = {
     "Redraw",
   ],
   quit: [
-    "Quit Barhex?",
+    "Quit Hex Shift?",
     "Your open tabs have edits. Export them first if you want to keep them.",
     "Quit",
   ],
@@ -1450,7 +1450,7 @@ function askDownscale(info, signal) {
     info.orientedWidth +
     " × " +
     info.orientedHeight +
-    " is larger than Barhex can edit. It can open at " +
+    " is larger than Hex Shift can edit. It can open at " +
     info.proposal.width +
     " × " +
     info.proposal.height +
@@ -3126,10 +3126,10 @@ async function exportDocuments() {
     const blob = await zip(files);
     if (cancelled()) return;
     $("batchNote").textContent =
-      "Prepared barhex-tabs.zip (" + files.length + " files).";
+      "Prepared hexshift-tabs.zip (" + files.length + " files).";
     download(
       blob,
-      "barhex-tabs.zip",
+      "hexshift-tabs.zip",
       files.length + " files, " + formatBytes(blob.size),
     );
   } catch (e) {
@@ -3221,7 +3221,7 @@ async function runBatch(list) {
         blob: new Blob([errors.join("\r\n") + "\r\n"], { type: "text/plain" }),
       });
     const blob = await zip(files),
-      filename = "barhex-batch.zip",
+      filename = "hexshift-batch.zip",
       done = list.length - errors.length;
     if (cancelled()) return;
     $("batchNote").textContent =
@@ -4041,7 +4041,7 @@ async function saveSession() {
   stash();
   const active = documents.indexOf(activeDocument),
     filename =
-      safeStem(documents.length === 1 ? name : "barhex") + ".hexshift";
+      safeStem(documents.length === 1 ? name : "hexshift") + ".hexshift";
   try {
     // Capture every tab before reading any SVG asynchronously.
     const records = await Promise.all(
@@ -4482,7 +4482,7 @@ function theme() {
     root.style.setProperty(name, value);
   root.style.colorScheme = dark ? "dark" : "light";
   for (const meta of document.querySelectorAll('meta[name="theme-color"]'))
-    meta.content = tokens["--masthead"];
+    meta.content = tokens["--chrome"];
   // Each theme's swatch previews it with the current modifier.
   for (const [id, parts] of themeSwatches) {
     const preview =
@@ -5095,7 +5095,7 @@ const inApp = !!window.chrome?.webview;
 let updateState = { phase: "idle", auto: true, enabled: true };
 const updates = updateChannel((state) => {
   updateState = state;
-  const named = "Barhex" + (state.version ? " " + state.version : "");
+  const named = "Hex Shift" + (state.version ? " " + state.version : "");
   if (state.phase === "checking") status("Checking for updates…");
   else if (state.phase === "current")
     status(named + " is up to date", { fade: 6000 });
@@ -5542,7 +5542,7 @@ createMenubar({
         },
         { type: "separator" },
         { type: "item", label: "Release notes", run: showNotes },
-        { type: "item", label: "About Barhex", run: showAbout },
+        { type: "item", label: "About Hex Shift", run: showAbout },
       ],
     },
   ],

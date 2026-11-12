@@ -213,7 +213,7 @@ test("apply to all tabs is one undo per tab, and export ZIP deduplicates names",
   await menu(page, "Export all tabs…");
   const download = await next,
     files = unzip(await readFile(await download.path()));
-  expect(download.suggestedFilename()).toBe("barhex-tabs.zip");
+  expect(download.suggestedFilename()).toBe("hexshift-tabs.zip");
   expect(Object.keys(files)).toEqual([
     "red-shifted.png",
     "red-shifted (2).png",
@@ -516,7 +516,7 @@ test("quitting checks edits in background tabs through both native-close and Fil
   await page.evaluate(() => {
     window.hexShiftRequestClose();
   });
-  await expect(page.locator("#replaceTitle")).toHaveText("Quit Barhex?");
+  await expect(page.locator("#replaceTitle")).toHaveText("Quit Hex Shift?");
   await page.getByRole("button", { name: "Keep editing", exact: true }).click();
   expect(await page.evaluate(() => !!window.__closed)).toBe(false);
   await menu(page, "Exit");
@@ -541,7 +541,7 @@ test("a session file restores both tabs and a recipe does not replace them", asy
     .click();
   await page.getByRole("menuitem", { name: /^Save session/ }).click();
   const saved = await download;
-  expect(saved.suggestedFilename()).toBe("barhex.hexshift");
+  expect(saved.suggestedFilename()).toBe("hexshift.hexshift");
   await expect(page.locator("#status")).toContainText(
     "Check your browser’s downloads.",
   );

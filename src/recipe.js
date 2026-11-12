@@ -223,12 +223,12 @@ export function parseRecipeFile(text) {
   try {
     data = JSON.parse(text.replace(/^﻿/, ""));
   } catch {
-    throw Error("This is not a Barhex recipe (it is not valid JSON).");
+    throw Error("This is not a Hex Shift recipe (it is not valid JSON).");
   }
   if (data?.format !== "hexshift-recipe")
-    throw Error("This is not a Barhex recipe.");
+    throw Error("This is not a Hex Shift recipe.");
   if (data.version !== 1 && data.version !== 2 && data.version !== 3)
-    throw Error("This recipe needs a newer version of Barhex.");
+    throw Error("This recipe needs a newer version of Hex Shift.");
   const outline = data.version === 1 ? null : cleanOutline(data.outline);
   if (data.version === 3 && !outline)
     throw Error("An outline-only recipe needs an outline.");

@@ -223,11 +223,10 @@ export function resolveTheme(id, modifier, system) {
   const chrome = highContrast
     ? surface
     : mix(base.surface, vest, dark ? 0.19 : 0.12);
-  const masthead = look === "default" ? "#232529" : surface;
   const main =
     osAccent && highContrast ? amplify(osAccent) : osAccent || eye[shade];
   const hover = highContrast ? "#262626" : mix(raised, main, 0.08);
-  const panels = [ground, surface, raised, chrome, masthead, hover];
+  const panels = [ground, surface, raised, chrome, hover];
   // Filled controls and focus outlines stand out even with a subdued OS accent.
   const accent = readable(main, panels, 3);
   const onAccent =
@@ -241,7 +240,6 @@ export function resolveTheme(id, modifier, system) {
   const textSurfaces = [...panels, accentSoft];
   const trim = theme.trim?.[dark ? 3 : 0] || main;
   const focus = (theme.hardware || eye)[dark ? 4 : 0];
-  const wordmark = dark ? neutral[4] : neutral[0];
   return {
     dark,
     contrast: highContrast,
@@ -249,10 +247,6 @@ export function resolveTheme(id, modifier, system) {
       "--ground": ground,
       "--surface": surface,
       "--chrome": chrome,
-      "--masthead": masthead,
-      "--wordmark": wordmark,
-      "--maker-credit": readable(dark ? neutral[3] : neutral[1], [masthead], 4.5),
-      "--maker-wordmark": wordmark,
       "--raised": raised,
       "--hover": hover,
       "--line": line,

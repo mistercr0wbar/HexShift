@@ -1,6 +1,6 @@
-// Barhex - Windows host.
+// Hex Shift - Windows host.
 //
-// One EXE, nothing to install. The page (Barhex.html) and the WebView2 SDK
+// One EXE, nothing to install. The page (HexShift.html) and the WebView2 SDK
 // assemblies are embedded as resources; the managed ones are loaded from
 // memory and the native loader is written under %LOCALAPPDATA%\HexShift once.
 //
@@ -18,7 +18,7 @@ namespace HexShift
 {
     static class Program
     {
-        public const string Version = "3.16.1";
+        public const string Version = "3.15.0";
 
         [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Unicode)]
         static extern IntPtr LoadLibraryExW(string path, IntPtr reserved, uint flags);
@@ -30,7 +30,7 @@ namespace HexShift
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             try { RejectSideBySideAssemblies(typeof(Program).Assembly.Location); Run(); }
-            catch (Exception ex) { MessageBox.Show("Barhex could not start safely.\n\n" + ex.Message, "Barhex", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+            catch (Exception ex) { MessageBox.Show("Hex Shift could not start safely.\n\n" + ex.Message, "Hex Shift", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         }
 
         // The three managed assemblies HexShift carries inside itself. Windows looks for a file of
@@ -43,14 +43,13 @@ namespace HexShift
         internal static void RejectSideBySideAssemblies(string exePath)
         {
             string folder = Path.GetDirectoryName(Path.GetFullPath(exePath));
-            string executableName = Path.GetFileName(exePath);
             if (File.Exists(exePath + ".config"))
-                throw new IOException("A file named " + executableName + ".config sits next to " + executableName + " and could redirect which code it loads. Remove it, or move the app to a folder of its own.");
+                throw new IOException("A file named " + Path.GetFileName(exePath) + ".config sits next to HexShift.exe and could redirect which code it loads. Remove it, or move HexShift.exe to a folder of its own.");
             foreach (string name in EmbeddedAssemblies)
             {
                 foreach (string candidate in new[] { Path.Combine(folder, name + ".dll"), Path.Combine(folder, name + ".exe"), Path.Combine(folder, name, name + ".dll"), Path.Combine(folder, name, name + ".exe") })
                     if (File.Exists(candidate))
-                        throw new IOException("A file named " + name + " sits next to " + executableName + " and would replace a part Barhex carries inside itself. Remove it, or move the app to a folder of its own.");
+                        throw new IOException("A file named " + name + " sits next to HexShift.exe and would replace a part HexShift carries inside itself. Remove it, or move HexShift.exe to a folder of its own.");
             }
         }
 

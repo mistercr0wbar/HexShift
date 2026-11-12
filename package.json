@@ -1,6 +1,6 @@
 {
-  "name": "barhex",
-  "version": "3.16.1",
+  "name": "hexshift",
+  "version": "3.15.0",
   "private": true,
   "type": "module",
   "scripts": {
