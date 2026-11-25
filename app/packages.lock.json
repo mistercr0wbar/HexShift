@@ -19,9 +19,9 @@
       },
       "NetSparkleUpdater.Chaos.NaCl": {
         "type": "Direct",
-        "requested": "[0.9.4, 0.9.4]",
-        "resolved": "0.9.4",
-        "contentHash": "bGUdkGMW/CvKFm6AMsufYJB9XpoK0TlRfIJ5yANZKhFUTSJe2gf6EO32ZgF9rT+S4h2ETdWHN/33weOnVFjWDQ=="
+        "requested": "[0.9.5, 0.9.5]",
+        "resolved": "0.9.5",
+        "contentHash": "ABEKNEjZplMfrO1BppKLvTXTFnWwCOtVori8jmFABAI6vw/yqZZ+iVmDXrg9Z2TVwPiPKQBxKb4YVtGP/uaMQg=="
       },
       "Microsoft.NETFramework.ReferenceAssemblies.net48": {
         "type": "Transitive",
