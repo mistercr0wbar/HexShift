@@ -38,7 +38,7 @@
     <!-- lets the net48 build run on any machine with the .NET SDK, including the GitHub runner -->
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="[1.0.3]" PrivateAssets="all" />
     <!-- Ed25519 checks for update feeds and installers. No dependencies; embedded below like WebView2. -->
-    <PackageReference Include="NetSparkleUpdater.Chaos.NaCl" Version="[0.9.4]" GeneratePathProperty="true" ExcludeAssets="runtime" />
+    <PackageReference Include="NetSparkleUpdater.Chaos.NaCl" Version="[0.9.5]" GeneratePathProperty="true" ExcludeAssets="runtime" />
     <!-- JavaScriptSerializer reads the update feed. Part of the framework, so nothing extra ships. -->
     <Reference Include="System.Web.Extensions" />
   </ItemGroup>
